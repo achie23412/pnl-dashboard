@@ -77,7 +77,7 @@ export function RevenueByStoreChart({ data }: { data: RevenueRow[] }) {
     const day = byStore.get(r.date)!
     day.set(r.store, (day.get(r.store) || 0) + r.revenue)
   }
-  const stores = [...new Set(data.map((r) => r.store))]
+  const stores = Array.from(new Set(data.map((r) => r.store)))
   const chartData = Array.from(byStore.entries())
     .map(([date, storeMap]) => {
       const row: Record<string, number | string> = { date }
@@ -105,7 +105,7 @@ export function RevenueByStoreChart({ data }: { data: RevenueRow[] }) {
 }
 
 export function SpendByAccountChart({ data }: { data: SpendRow[] }) {
-  const accounts = [...new Set(data.map((r) => `${r.channel}: ${r.account}`))]
+  const accounts = Array.from(new Set(data.map((r) => `${r.channel}: ${r.account}`)))
   const byDate = new Map<string, Map<string, number>>()
   for (const r of data) {
     if (!byDate.has(r.date)) byDate.set(r.date, new Map())
