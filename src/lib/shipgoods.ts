@@ -25,9 +25,9 @@ export async function fetchCogs(dateFrom: string, dateTo: string) {
     })
     if (!res.ok) throw new Error(`Shipgoods: ${res.status} ${await res.text()}`)
     const json = await res.json()
-    const orders: ShipgoodsOrder[] = json.data || []
+    const orders: ShipgoodsOrder[] = Array.isArray(json.data) ? json.data : []
     if (orders.length === 0) break
-    allOrders.push(...orders)
+    for (const o of orders) allOrders.push(o)
     if (orders.length < 100) break
     page++
   }

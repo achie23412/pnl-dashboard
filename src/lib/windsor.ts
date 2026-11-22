@@ -19,7 +19,7 @@ async function fetchWindsor(connector: string, fields: string[], dateFrom: strin
   const res = await fetch(`${BASE}?${params}`)
   if (!res.ok) throw new Error(`Windsor ${connector}: ${res.status} ${await res.text()}`)
   const json = await res.json()
-  return json.data || []
+  return Array.isArray(json.data) ? json.data : []
 }
 
 export async function fetchShopifyRevenue(dateFrom: string, dateTo: string) {
