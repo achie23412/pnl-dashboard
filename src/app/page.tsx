@@ -79,7 +79,7 @@ export default function Dashboard() {
         supabase.from("daily_revenue").select("*").order("date"),
         supabase.from("daily_spend").select("*").order("date"),
         supabase.from("daily_cogs").select("*").order("date"),
-        supabase.from("refresh_log").select("completed_at").eq("status", "success").order("completed_at", { ascending: false }).limit(1),
+        supabase.from("refresh_log").select("completed_at").in("status", ["success", "partial"]).order("completed_at", { ascending: false }).limit(1),
       ])
       setRevenue((rev as RevenueRow[]) || [])
       setSpend((sp as SpendRow[]) || [])
