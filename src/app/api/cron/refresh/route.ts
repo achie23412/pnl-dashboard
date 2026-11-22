@@ -18,12 +18,19 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10)
     const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-    const [revenue, metaSpend, tiktokSpend, cogs] = await Promise.all([
+    const errors: string[] = []
+
+    const [revenueResult, metaResult, tiktokResult, cogsResult] = await Promise.allSettled([
       fetchShopifyRevenue(from, today),
       fetchMetaSpend(from, today),
       fetchTikTokSpend(from, today),
       fetchCogs(from, today),
     ])
+
+    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value : (errors.push(`Shopify: ${revenueResult.reason}`), [])
+    const metaSpend = metaResult.status === "fulfilled" ? metaResult.value : (errors.push(`Meta: ${metaResult.reason}`), [])
+    const tiktokSpend = tiktokResult.status === "fulfilled" ? tiktokResult.value : (errors.push(`TikTok: ${tiktokResult.reason}`), [])
+    const cogs = cogsResult.status === "fulfilled" ? cogsResult.value : (errors.push(`COGS: ${cogsResult.reason}`), [])
 
     const spend = [...metaSpend, ...tiktokSpend]
 
@@ -40,18 +47,20 @@ export async function GET(req: NextRequest) {
     if (logId) {
       await db.from("refresh_log").update({
         completed_at: new Date().toISOString(),
-        status: "success",
+        status: errors.length > 0 ? "partial" : "success",
         revenue_rows: revenue.length,
         spend_rows: spend.length,
         cogs_rows: cogs.length,
+        error: errors.length > 0 ? errors.join("; ") : null,
       }).eq("id", logId)
     }
 
     return NextResponse.json({
-      ok: true,
+      ok: errors.length === 0,
       revenue: revenue.length,
       spend: spend.length,
       cogs: cogs.length,
+      errors: errors.length > 0 ? errors : undefined,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
