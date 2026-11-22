@@ -23,7 +23,7 @@ async function fetchWindsor(connector: string, fields: string[], dateFrom: strin
 }
 
 export async function fetchShopifyRevenue(dateFrom: string, dateTo: string) {
-  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_net_sales"], dateFrom, dateTo)
+  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price"], dateFrom, dateTo)
 
   const byDateStore = new Map<string, { revenue: number; orderIds: Set<string> }>()
   for (const row of rows) {
@@ -37,7 +37,7 @@ export async function fetchShopifyRevenue(dateFrom: string, dateTo: string) {
     const oid = String(row.order_id)
     if (!entry.orderIds.has(oid)) {
       entry.orderIds.add(oid)
-      entry.revenue += Number(row.order_net_sales) || 0
+      entry.revenue += Number(row.order_total_price) || 0
     }
   }
 
