@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchShopifyRevenue, fetchMetaSpend, fetchTikTokSpend } from "@/lib/windsor"
+import { fetchShopifyRevenueDirect, hasAnyShopifyToken } from "@/lib/shopify-direct"
 import { fetchCogs } from "@/lib/shipgoods"
 
 export const maxDuration = 60
@@ -20,14 +21,17 @@ export async function GET(req: NextRequest) {
 
     const errors: string[] = []
 
+    const useDirectShopify = hasAnyShopifyToken()
+    const revenueFetcher = useDirectShopify ? fetchShopifyRevenueDirect : fetchShopifyRevenue
+
     const [revenueResult, metaResult, tiktokResult, cogsResult] = await Promise.allSettled([
-      fetchShopifyRevenue(from, today),
+      revenueFetcher(from, today),
       fetchMetaSpend(from, today),
       fetchTikTokSpend(from, today),
       fetchCogs(from, today),
     ])
 
-    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value : (errors.push(`Shopify: ${revenueResult.reason}`), [])
+    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value : (errors.push(`Shopify${useDirectShopify ? " Direct" : ""}: ${revenueResult.reason}`), [])
     const metaSpend = metaResult.status === "fulfilled" ? metaResult.value : (errors.push(`Meta: ${metaResult.reason}`), [])
     const tiktokSpend = tiktokResult.status === "fulfilled" ? tiktokResult.value : (errors.push(`TikTok: ${tiktokResult.reason}`), [])
     const cogs = cogsResult.status === "fulfilled" ? cogsResult.value : (errors.push(`COGS: ${cogsResult.reason}`), [])

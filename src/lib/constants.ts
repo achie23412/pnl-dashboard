@@ -38,6 +38,14 @@ export const SHOPIFY_ACCOUNT_MAP: Record<string, string> = {
   "k8zygw-y0.myshopify.com": "Susan & Allen",
 }
 
+export const SHOPIFY_STORES: Record<string, { domain: string; envKey: string }> = {
+  LUMEGLASSES: { domain: "xq9pn7-dw.myshopify.com", envKey: "SHOPIFY_TOKEN_LUMEGLASSES" },
+  Blinky: { domain: "ghvi5a-s0.myshopify.com", envKey: "SHOPIFY_TOKEN_BLINKY" },
+  "Walsh & Farley": { domain: "qqs4yc-x4.myshopify.com", envKey: "SHOPIFY_TOKEN_WALSH_FARLEY" },
+  "Carter & Collins": { domain: "96bchi-7v.myshopify.com", envKey: "SHOPIFY_TOKEN_CARTER_COLLINS" },
+  "Susan & Allen": { domain: "k8zygw-y0.myshopify.com", envKey: "SHOPIFY_TOKEN_SUSAN_ALLEN" },
+}
+
 export const SHIPGOODS_SHOP_MAP: Record<number, string> = {
   16918: "LUMEGLASSES",
   18132: "Blinky",
