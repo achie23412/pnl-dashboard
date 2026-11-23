@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { href: "/", label: "P&L Dashboard", icon: "📊" },
   { href: "/refunds", label: "Refunds", icon: "↩" },
   { href: "/research", label: "Research", icon: "🔍" },
+  { href: "/keywords", label: "Keywords", icon: "🔑" },
   { href: "/competitors", label: "Competitors", icon: "👁" },
   { href: "/import", label: "Import", icon: "📦" },
 ]
