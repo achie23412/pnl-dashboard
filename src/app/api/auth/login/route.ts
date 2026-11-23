@@ -7,8 +7,13 @@ export async function POST(req: NextRequest) {
 
   const validUser = process.env.DASHBOARD_USER || "admin"
   const validPass = process.env.DASHBOARD_PASS || "admin"
+  const coachUser = process.env.COACH_USER || ""
+  const coachPass = process.env.COACH_PASS || ""
 
-  if (username !== validUser || password !== validPass) {
+  const isOwner = username === validUser && password === validPass
+  const isCoach = coachUser && coachPass && username === coachUser && password === coachPass
+
+  if (!isOwner && !isCoach) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
   }
 
@@ -22,5 +27,5 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 60 * 24 * 30,
   })
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, role: isCoach ? "coach" : "owner" })
 }
