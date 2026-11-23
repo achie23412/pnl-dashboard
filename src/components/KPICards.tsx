@@ -38,15 +38,18 @@ function KPICard({
   )
 }
 
-export function KPICards({ data }: { data: KPIData }) {
+export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFees?: boolean }) {
   const profitColor = data.profit >= 0 ? "var(--green)" : "var(--red)"
   const estLabel =
     data.estCogs > 0
       ? ` · <span style="color:var(--orange)">~$${fmt(data.estCogs)} est.</span>`
       : ""
+  const txnLabel = includeTxnFees && data.txnFees > 0
+    ? ` · Fees -€${fmt(data.txnFees)}`
+    : ""
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className={`grid grid-cols-2 gap-4 ${includeTxnFees ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
       <KPICard
         title="Revenue"
         value={`€${fmt(data.revenue)}`}
@@ -65,10 +68,18 @@ export function KPICards({ data }: { data: KPIData }) {
         sub={`$${fmt(data.orders > 0 ? (data.cogs + data.estCogs) / data.orders : 0, 2)}/order${estLabel}`}
         color="var(--orange)"
       />
+      {includeTxnFees && (
+        <KPICard
+          title="Txn Fees (3.5%)"
+          value={`€${fmt(data.txnFees)}`}
+          sub={`€${fmt(data.orders > 0 ? data.txnFees / data.orders : 0, 2)}/order`}
+          color="#8B6BB0"
+        />
+      )}
       <KPICard
         title="Net Profit"
         value={`€${fmt(data.profit)}`}
-        sub={`${data.revenue > 0 ? ((data.profit / data.revenue) * 100).toFixed(1) : "0"}% margin`}
+        sub={`${data.revenue > 0 ? ((data.profit / data.revenue) * 100).toFixed(1) : "0"}% margin${txnLabel}`}
         color={profitColor}
       />
     </div>

@@ -58,6 +58,14 @@ export const AVG_COGS_PER_ORDER: Record<string, number> = {
   Blinky: 18.87,
 }
 
+export const TRANSACTION_FEE_RATE: Record<string, number> = {
+  LUMEGLASSES: 0.035,
+  Blinky: 0.035,
+  "Walsh & Farley": 0.035,
+  "Carter & Collins": 0.035,
+  "Susan & Allen": 0.035,
+}
+
 export const DATE_PRESETS = [
   { label: "Today", value: "today" },
   { label: "Yesterday", value: "yesterday" },

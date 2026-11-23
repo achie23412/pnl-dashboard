@@ -10,7 +10,7 @@ import {
   RevenueByStoreChart,
   SpendByAccountChart,
 } from "@/components/Charts"
-import { AVG_COGS_PER_ORDER } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
 import type { RevenueRow, SpendRow, CogsRow, DailyPnL, KPIData } from "@/lib/types"
 
@@ -71,6 +71,7 @@ export default function Dashboard() {
   const [cogs, setCogs] = useState<CogsRow[]>([])
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [includeTxnFees, setIncludeTxnFees] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -119,19 +120,29 @@ export default function Dashboard() {
 
     const totalCogs = actualCogs + estCogs
     const cogsEur = totalCogs * USD_TO_EUR
-    const profit = totalRevenue - totalSpend - cogsEur
+
+    let txnFees = 0
+    if (includeTxnFees) {
+      for (const r of filtered.revenue) {
+        const rate = TRANSACTION_FEE_RATE[r.store] || 0.035
+        txnFees += r.revenue * rate
+      }
+    }
+
+    const profit = totalRevenue - totalSpend - cogsEur - txnFees
 
     return {
       revenue: totalRevenue,
       spend: totalSpend,
       cogs: actualCogs,
       estCogs,
+      txnFees,
       profit,
       orders: totalOrders,
       roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
       cogsPercent: totalRevenue > 0 ? (cogsEur / totalRevenue) * 100 : 0,
     }
-  }, [filtered])
+  }, [filtered, includeTxnFees])
 
   const dailyPnL = useMemo((): DailyPnL[] => {
     const dates = new Set([
@@ -174,17 +185,23 @@ export default function Dashboard() {
         }
 
         const totalCog = (actualCog + est) * USD_TO_EUR
+        let dayTxn = 0
+        if (includeTxnFees) {
+          for (const r of filtered.revenue.filter((x) => x.date === date)) {
+            dayTxn += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
+          }
+        }
         return {
           date,
           revenue: Math.round(rev.revenue),
           spend: Math.round(sp),
           cogs: Math.round(totalCog),
           estCogs: Math.round(est * USD_TO_EUR),
-          profit: Math.round(rev.revenue - sp - totalCog),
+          profit: Math.round(rev.revenue - sp - totalCog - dayTxn),
           orders: rev.orders,
         }
       })
-  }, [filtered])
+  }, [filtered, includeTxnFees])
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
@@ -220,7 +237,20 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="mb-6">
-            <KPICards data={kpi} />
+            <div className="flex items-center justify-end gap-2 mb-3">
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Transaction fees (3.5%)</span>
+              <button
+                onClick={() => setIncludeTxnFees(!includeTxnFees)}
+                className="relative w-9 h-5 rounded-full transition-colors"
+                style={{ background: includeTxnFees ? "#4E6AA7" : "var(--border)" }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform"
+                  style={{ background: "#fff", transform: includeTxnFees ? "translateX(16px)" : "translateX(0)" }}
+                />
+              </button>
+            </div>
+            <KPICards data={kpi} includeTxnFees={includeTxnFees} />
           </div>
 
           <div className="mb-6">
