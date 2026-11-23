@@ -49,30 +49,34 @@ export async function fetchShopifyRevenue(dateFrom: string, dateTo: string) {
 
 export async function fetchMetaSpend(dateFrom: string, dateTo: string) {
   const rows = await fetchWindsor("facebook", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows.map((r) => {
-    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-    return {
+  return rows
+    .filter((r) => {
+      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+      return mapping?.channel === "Meta"
+    })
+    .map((r) => ({
       date: r.date,
       channel: "Meta",
       account: r.account_name,
-      store: mapping?.store || r.account_name,
+      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
       spend: Number(r.spend) || 0,
-    }
-  })
+    }))
 }
 
 export async function fetchTikTokSpend(dateFrom: string, dateTo: string) {
   const rows = await fetchWindsor("tiktok", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows.map((r) => {
-    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-    return {
+  return rows
+    .filter((r) => {
+      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+      return mapping?.channel === "TikTok"
+    })
+    .map((r) => ({
       date: r.date,
       channel: "TikTok",
       account: r.account_name,
-      store: mapping?.store || r.account_name,
+      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
       spend: Number(r.spend) || 0,
-    }
-  })
+    }))
 }
 
 export async function fetchGoogleAdsSpend(dateFrom: string, dateTo: string) {
