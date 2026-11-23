@@ -11,6 +11,7 @@ interface Keyword {
 }
 
 type SortCol = "k" | "c" | "uk" | "tu" | "us" | "ta"
+type LinkMode = "trends" | "shopping" | "ads"
 
 const GEOS = [
   { code: "IE", label: "Ireland" },
@@ -20,6 +21,17 @@ const GEOS = [
   { code: "GB", label: "UK" },
   { code: "US", label: "US" },
 ] as const
+
+const LINK_MODES: { mode: LinkMode; label: string; color: string }[] = [
+  { mode: "shopping", label: "Google Shopping", color: "#34A853" },
+  { mode: "ads", label: "Ads Library", color: "#D47B6A" },
+  { mode: "trends", label: "Google Trends", color: "#4E6AA7" },
+]
+
+const SHOPPING_TLDS: Record<string, string> = {
+  IE: "google.ie", NL: "google.nl", DE: "google.de",
+  DK: "google.dk", GB: "google.co.uk", US: "google.com",
+}
 
 const CATEGORIES = [
   "dresses", "shoes", "outerwear", "tops", "bottoms",
@@ -39,8 +51,26 @@ function trendsUrl(keyword: string, geo: string): string {
   return `https://trends.google.com/trends/explore?geo=${geo}&q=${encodeURIComponent(keyword)}&hl=en`
 }
 
-function compareUrl(keywords: string[], geo: string): string {
-  return `https://trends.google.com/trends/explore?geo=${geo}&q=${keywords.map(k => encodeURIComponent(k)).join(",")}&hl=en`
+function shoppingUrl(keyword: string, geo: string): string {
+  const tld = SHOPPING_TLDS[geo] || "google.com"
+  return `https://www.${tld}/search?q=${encodeURIComponent(keyword)}&tbm=shop`
+}
+
+function adsLibraryUrl(keyword: string, geo: string): string {
+  return `https://adstransparency.google.com/?region=${geo}&q=${encodeURIComponent(keyword)}`
+}
+
+function getKeywordUrl(keyword: string, geo: string, mode: LinkMode): string {
+  if (mode === "shopping") return shoppingUrl(keyword, geo)
+  if (mode === "ads") return adsLibraryUrl(keyword, geo)
+  return trendsUrl(keyword, geo)
+}
+
+function compareUrl(keywords: string[], geo: string, mode: LinkMode): string {
+  if (mode === "trends") {
+    return `https://trends.google.com/trends/explore?geo=${geo}&q=${keywords.map(k => encodeURIComponent(k)).join(",")}&hl=en`
+  }
+  return getKeywordUrl(keywords[0], geo, mode)
 }
 
 export default function KeywordsPage() {
@@ -54,6 +84,7 @@ export default function KeywordsPage() {
   const [sortDir, setSortDir] = useState<-1 | 1>(-1)
   const [page, setPage] = useState(0)
   const [activeGeo, setActiveGeo] = useState("IE")
+  const [linkMode, setLinkMode] = useState<LinkMode>("shopping")
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -118,9 +149,9 @@ export default function KeywordsPage() {
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-xl font-bold">Keyword Trends Explorer</h1>
+        <h1 className="text-xl font-bold">Keyword Research</h1>
         <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-          Fashion keywords from UK + US Google Keyword Planner — click any keyword to open Google Trends for your target markets
+          6,938 fashion keywords from UK + US Google Keyword Planner — search keywords on Google Shopping or Ads Library to find competitors
         </p>
       </div>
 
@@ -155,9 +186,28 @@ export default function KeywordsPage() {
         </select>
       </div>
 
+      {/* Link mode toggle */}
+      <div className="flex flex-wrap gap-1.5 items-center mb-3">
+        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Open in:</span>
+        {LINK_MODES.map((m) => (
+          <button
+            key={m.mode}
+            onClick={() => setLinkMode(m.mode)}
+            className="px-3 py-1 rounded-md text-xs font-semibold transition-colors"
+            style={{
+              border: "1px solid " + (linkMode === m.mode ? m.color : "var(--border)"),
+              background: linkMode === m.mode ? m.color : "var(--bg-card)",
+              color: linkMode === m.mode ? "#fff" : "var(--text)",
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       {/* Market bar */}
       <div className="flex flex-wrap gap-1.5 items-center mb-3">
-        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Trends market:</span>
+        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Market:</span>
         {GEOS.map((g) => (
           <button
             key={g.code}
@@ -192,13 +242,13 @@ export default function KeywordsPage() {
             </span>
           ))}
           <a
-            href={compareUrl(Array.from(selected), activeGeo)}
+            href={compareUrl(Array.from(selected), activeGeo, linkMode)}
             target="_blank"
             rel="noopener noreferrer"
             className="ml-auto px-4 py-1.5 rounded-md text-xs font-semibold"
-            style={{ background: "#4E6AA7", color: "#fff" }}
+            style={{ background: LINK_MODES.find(m => m.mode === linkMode)?.color || "#4E6AA7", color: "#fff" }}
           >
-            Open in Google Trends
+            {linkMode === "trends" ? "Compare in Google Trends" : linkMode === "shopping" ? "Search Google Shopping" : "Search Ads Library"}
           </a>
         </div>
       )}
@@ -252,7 +302,9 @@ export default function KeywordsPage() {
                 <SortTh col="tu" label="UK Trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh col="us" label="US Vol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh col="ta" label="US Trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
-                <th style={thStyle}>Google Trends</th>
+                <th style={thStyle}>
+                  {linkMode === "shopping" ? "Google Shopping" : linkMode === "ads" ? "Ads Library" : "Google Trends"}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -295,9 +347,9 @@ export default function KeywordsPage() {
                       <TrendCell value={d.ta} hasData={!!d.us} />
                       <td style={tdStyle}>
                         <div className="flex gap-1 flex-wrap">
-                          <TrendsLink keyword={d.k} geo={activeGeo} />
+                          <KeywordLink keyword={d.k} geo={activeGeo} mode={linkMode} />
                           {otherGeos.map((g) => (
-                            <TrendsLink key={g.code} keyword={d.k} geo={g.code} />
+                            <KeywordLink key={g.code} keyword={d.k} geo={g.code} mode={linkMode} />
                           ))}
                         </div>
                       </td>
@@ -386,17 +438,18 @@ function TrendCell({ value, hasData }: { value: number; hasData: boolean }) {
   )
 }
 
-function TrendsLink({ keyword, geo }: { keyword: string; geo: string }) {
+function KeywordLink({ keyword, geo, mode }: { keyword: string; geo: string; mode: LinkMode }) {
+  const hoverColor = LINK_MODES.find(m => m.mode === mode)?.color || "#4E6AA7"
   return (
     <a
-      href={trendsUrl(keyword, geo)}
+      href={getKeywordUrl(keyword, geo, mode)}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-block px-1.5 py-0.5 rounded text-[0.65rem] font-semibold transition-colors"
       style={{ border: "1px solid var(--border)", color: "var(--text-muted)", textDecoration: "none" }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "#4E6AA7"
-        e.currentTarget.style.color = "#4E6AA7"
+        e.currentTarget.style.borderColor = hoverColor
+        e.currentTarget.style.color = hoverColor
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderColor = "var(--border)"
