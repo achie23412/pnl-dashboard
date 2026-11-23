@@ -59,7 +59,11 @@ export default function CompetitorsPage() {
   const [form, setForm] = useState({ domain: "", store_name: "", niche: "", status: "watching" as Competitor["status"] })
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
+  const [countryFilter, setCountryFilter] = useState("all")
+  const [nicheFilter, setNicheFilter] = useState("all")
+  const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<string>("monthly_visits")
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
 
   useEffect(() => { load() }, [])
 
@@ -101,13 +105,21 @@ export default function CompetitorsPage() {
     setCompetitors((prev) => prev.filter((c) => c.id !== id))
   }
 
-  const filtered = statusFilter === "all" ? competitors : competitors.filter((c) => c.status === statusFilter)
+  const allCountries = Array.from(new Set(competitors.flatMap((c) => Array.isArray(c.markets) ? c.markets.map((m) => m.toUpperCase()) : []))).sort()
+  const allNiches = Array.from(new Set(competitors.map((c) => c.niche).filter(Boolean))).sort()
+
+  const filtered = competitors
+    .filter((c) => statusFilter === "all" || c.status === statusFilter)
+    .filter((c) => countryFilter === "all" || (Array.isArray(c.markets) && c.markets.some((m) => m.toUpperCase() === countryFilter)))
+    .filter((c) => nicheFilter === "all" || c.niche === nicheFilter)
+    .filter((c) => !search || c.domain.toLowerCase().includes(search.toLowerCase()) || (c.store_name || "").toLowerCase().includes(search.toLowerCase()) || (c.niche || "").toLowerCase().includes(search.toLowerCase()))
+
   const sorted = [...filtered].sort((a, b) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const av = (a as any)[sortBy] as number ?? -1
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bv = (b as any)[sortBy] as number ?? -1
-    return bv - av
+    return sortDir === "desc" ? bv - av : av - bv
   })
 
   const scalingCount = competitors.filter((c) => c.status === "scaling").length
@@ -125,20 +137,53 @@ export default function CompetitorsPage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
-            <option value="all">All</option>
-            <option value="new">New</option>
-            <option value="watching">Watching</option>
-            <option value="scaling">Scaling</option>
-            <option value="dead">Dead</option>
-          </select>
-          <button onClick={() => setShowForm(!showForm)}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium" style={{ background: "#4E6AA7", color: "#fff" }}>
-            + Add competitor
+        <button onClick={() => setShowForm(!showForm)}
+          className="px-4 py-1.5 rounded-lg text-xs font-medium shrink-0" style={{ background: "#4E6AA7", color: "#fff" }}>
+          + Add competitor
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <input type="text" placeholder="Search domain, name, niche..." value={search} onChange={(e) => setSearch(e.target.value)}
+          className="px-3 py-1.5 rounded-lg border text-xs w-48" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }} />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
+          <option value="all">All Status</option>
+          <option value="new">New</option>
+          <option value="watching">Watching</option>
+          <option value="scaling">Scaling</option>
+          <option value="dead">Dead</option>
+        </select>
+        <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}
+          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
+          <option value="all">All Countries</option>
+          {allCountries.map((c) => <option key={c} value={c}>{FLAG[c] || ""} {c}</option>)}
+        </select>
+        <select value={nicheFilter} onChange={(e) => setNicheFilter(e.target.value)}
+          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
+          <option value="all">All Niches</option>
+          {allNiches.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select value={`${sortBy}:${sortDir}`} onChange={(e) => { const [f, d] = e.target.value.split(":"); setSortBy(f); setSortDir(d as "asc" | "desc") }}
+          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
+          <option value="monthly_visits:desc">Visits: High → Low</option>
+          <option value="monthly_visits:asc">Visits: Low → High</option>
+          <option value="growth_30d:desc">Growth: High → Low</option>
+          <option value="growth_30d:asc">Growth: Low → High</option>
+          <option value="active_ads:desc">Ads: Most → Least</option>
+          <option value="active_ads:asc">Ads: Least → Most</option>
+          <option value="products_count:desc">Products: Most → Least</option>
+          <option value="products_count:asc">Products: Least → Most</option>
+          <option value="est_monthly_revenue:desc">Revenue: High → Low</option>
+          <option value="est_monthly_revenue:asc">Revenue: Low → High</option>
+        </select>
+        {(statusFilter !== "all" || countryFilter !== "all" || nicheFilter !== "all" || search) && (
+          <button onClick={() => { setStatusFilter("all"); setCountryFilter("all"); setNicheFilter("all"); setSearch("") }}
+            className="px-3 py-1.5 rounded-lg text-xs" style={{ color: "var(--text-muted)" }}>
+            Clear filters
           </button>
-        </div>
+        )}
+        <span className="ml-auto text-xs" style={{ color: "var(--text-muted)" }}>{filtered.length} of {competitors.length}</span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
@@ -192,11 +237,11 @@ export default function CompetitorsPage() {
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
                 <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Competitor</th>
-                <ThSort label="Monthly visits" field="monthly_visits" sortBy={sortBy} setSortBy={setSortBy} />
-                <ThSort label="30D Growth" field="growth_30d" sortBy={sortBy} setSortBy={setSortBy} />
+                <ThSort label="Monthly visits" field="monthly_visits" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="30D Growth" field="growth_30d" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className="text-center px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Markets</th>
-                <ThSort label="Active Ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} />
-                <ThSort label="Products" field="products_count" sortBy={sortBy} setSortBy={setSortBy} />
+                <ThSort label="Active Ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="Products" field="products_count" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Est. Revenue</th>
                 <th className="text-center px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Status</th>
                 <th className="px-2 py-3" />
@@ -258,16 +303,17 @@ export default function CompetitorsPage() {
   )
 }
 
-function ThSort({ label, field, sortBy, setSortBy }: {
+function ThSort({ label, field, sortBy, setSortBy, sortDir, setSortDir }: {
   label: string; field: string;
-  sortBy: string; setSortBy: (f: string) => void
+  sortBy: string; setSortBy: (f: string) => void;
+  sortDir: "desc" | "asc"; setSortDir: (d: "desc" | "asc") => void
 }) {
   const active = sortBy === field
   return (
     <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider cursor-pointer select-none"
       style={{ color: active ? "var(--text)" : "var(--text-muted)" }}
-      onClick={() => setSortBy(field)}>
-      {label}{active ? " ▼" : ""}
+      onClick={() => { if (active) { setSortDir(sortDir === "desc" ? "asc" : "desc") } else { setSortBy(field); setSortDir("desc") } }}>
+      {label}{active ? (sortDir === "desc" ? " ▼" : " ▲") : ""}
     </th>
   )
 }
