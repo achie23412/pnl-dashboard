@@ -7,8 +7,8 @@ export async function POST(req: NextRequest) {
 
   const validUser = process.env.DASHBOARD_USER || "admin"
   const validPass = process.env.DASHBOARD_PASS || "admin"
-  const coachUser = process.env.COACH_USER || ""
-  const coachPass = process.env.COACH_PASS || ""
+  const coachUser = process.env.COACH_USER || (process.env.coach ? "coach" : "")
+  const coachPass = process.env.COACH_PASS || process.env.coach || ""
 
   const isOwner = username === validUser && password === validPass
   const isCoach = coachUser && coachPass && username === coachUser && password === coachPass
