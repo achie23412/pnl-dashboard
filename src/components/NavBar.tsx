@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/refunds", label: "Refunds", icon: "↩" },
   { href: "/research", label: "Research", icon: "🔍" },
   { href: "/keywords", label: "Keywords", icon: "🔑" },
+  { href: "/keyword-maker", label: "Keyword Maker", icon: "✨" },
   { href: "/competitors", label: "Competitors", icon: "👁" },
   { href: "/import", label: "Import", icon: "📦" },
 ]
