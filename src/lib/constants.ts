@@ -56,6 +56,9 @@ export const SHIPGOODS_SHOP_MAP: Record<number, string> = {
 export const AVG_COGS_PER_ORDER: Record<string, number> = {
   LUMEGLASSES: 14.59,
   Blinky: 18.87,
+  "Walsh & Farley": 20.08,
+  "Carter & Collins": 15.48,
+  "Susan & Allen": 24.64,
 }
 
 export const TRANSACTION_FEE_RATE: Record<string, number> = {

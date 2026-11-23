@@ -270,7 +270,7 @@ export default function Dashboard() {
             className="text-center text-xs py-4"
             style={{ color: "var(--text-muted)" }}
           >
-            COGS in USD (€1 = ${(1 / USD_TO_EUR).toFixed(2)}) · Lumé avg $14.59/order · Blinky avg $18.87/order
+            COGS in USD (€1 = ${(1 / USD_TO_EUR).toFixed(2)}) · Lumé $14.59 · Blinky $18.87 · W&F $20.08 · C&C $15.48 · S&A $24.64 /order
             {kpi.estCogs > 0 && (
               <span style={{ color: "var(--orange)" }}> · Estimated COGS active for missing data</span>
             )}
