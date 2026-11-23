@@ -77,14 +77,16 @@ export async function fetchTikTokSpend(dateFrom: string, dateTo: string) {
 
 export async function fetchGoogleAdsSpend(dateFrom: string, dateTo: string) {
   const rows = await fetchWindsor("google_ads", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows.map((r) => {
-    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-    return {
+  return rows
+    .filter((r) => {
+      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+      return mapping?.channel === "Google"
+    })
+    .map((r) => ({
       date: r.date,
       channel: "Google",
       account: r.account_name,
-      store: mapping?.store || r.account_name,
+      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
       spend: Number(r.spend) || 0,
-    }
-  })
+    }))
 }
