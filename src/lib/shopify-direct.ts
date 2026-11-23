@@ -63,7 +63,7 @@ export async function fetchShopifyRevenueDirect(dateFrom: string, dateTo: string
         byDate.set(date, entry)
       }
 
-      for (const [date, data] of byDate) {
+      for (const [date, data] of Array.from(byDate.entries())) {
         results.push({
           date,
           store: storeName,
