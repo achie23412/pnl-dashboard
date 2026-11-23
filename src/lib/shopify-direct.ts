@@ -58,7 +58,7 @@ export async function fetchShopifyRevenueDirect(dateFrom: string, dateTo: string
 
         const date = order.created_at.slice(0, 10)
         const entry = byDate.get(date) || { revenue: 0, count: 0 }
-        entry.revenue += parseFloat(order.current_total_price) || 0
+        entry.revenue += parseFloat(order.total_price) || 0
         entry.count += 1
         byDate.set(date, entry)
       }
