@@ -103,8 +103,10 @@ export default function CompetitorsPage() {
 
   const filtered = statusFilter === "all" ? competitors : competitors.filter((c) => c.status === statusFilter)
   const sorted = [...filtered].sort((a, b) => {
-    const av = (a as Record<string, unknown>)[sortBy] as number ?? -1
-    const bv = (b as Record<string, unknown>)[sortBy] as number ?? -1
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const av = (a as any)[sortBy] as number ?? -1
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bv = (b as any)[sortBy] as number ?? -1
     return bv - av
   })
 
