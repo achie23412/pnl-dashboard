@@ -59,7 +59,7 @@ export default function CompetitorsPage() {
   const [form, setForm] = useState({ domain: "", store_name: "", niche: "", status: "watching" as Competitor["status"] })
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
-  const [sortBy, setSortBy] = useState<"growth_30d" | "monthly_visits" | "active_ads" | "products_count">("monthly_visits")
+  const [sortBy, setSortBy] = useState<string>("monthly_visits")
 
   useEffect(() => { load() }, [])
 
@@ -103,9 +103,9 @@ export default function CompetitorsPage() {
 
   const filtered = statusFilter === "all" ? competitors : competitors.filter((c) => c.status === statusFilter)
   const sorted = [...filtered].sort((a, b) => {
-    const av = a[sortBy] ?? -1
-    const bv = b[sortBy] ?? -1
-    return (bv as number) - (av as number)
+    const av = (a as Record<string, unknown>)[sortBy] as number ?? -1
+    const bv = (b as Record<string, unknown>)[sortBy] as number ?? -1
+    return bv - av
   })
 
   const scalingCount = competitors.filter((c) => c.status === "scaling").length
@@ -258,13 +258,13 @@ export default function CompetitorsPage() {
 
 function ThSort({ label, field, sortBy, setSortBy }: {
   label: string; field: string;
-  sortBy: string; setSortBy: (f: typeof sortBy) => void
+  sortBy: string; setSortBy: (f: string) => void
 }) {
   const active = sortBy === field
   return (
     <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider cursor-pointer select-none"
       style={{ color: active ? "var(--text)" : "var(--text-muted)" }}
-      onClick={() => setSortBy(field as typeof sortBy)}>
+      onClick={() => setSortBy(field)}>
       {label}{active ? " ▼" : ""}
     </th>
   )
