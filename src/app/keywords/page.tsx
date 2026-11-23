@@ -80,6 +80,7 @@ export default function KeywordsPage() {
   const [category, setCategory] = useState("")
   const [trendFilter, setTrendFilter] = useState("")
   const [minVol, setMinVol] = useState(0)
+  const [minWords, setMinWords] = useState(2)
   const [sortCol, setSortCol] = useState<SortCol>("uk")
   const [sortDir, setSortDir] = useState<-1 | 1>(-1)
   const [page, setPage] = useState(0)
@@ -100,6 +101,7 @@ export default function KeywordsPage() {
       if (q && !d.k.includes(q)) return false
       if (category && d.c !== category) return false
       if (minVol && d.uk < minVol && d.us < minVol) return false
+      if (minWords > 1 && d.k.trim().split(/\s+/).length < minWords) return false
       if (trendFilter === "rising" && d.tu <= 10 && d.ta <= 10) return false
       if (trendFilter === "falling" && d.tu >= -10 && d.ta >= -10) return false
       return true
@@ -111,7 +113,7 @@ export default function KeywordsPage() {
       return sortDir * ((av as number) - (bv as number))
     })
     return result
-  }, [data, search, category, trendFilter, minVol, sortCol, sortDir])
+  }, [data, search, category, trendFilter, minVol, minWords, sortCol, sortDir])
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE)
   const pageData = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
@@ -137,7 +139,7 @@ export default function KeywordsPage() {
     setSelected((prev) => { const next = new Set(prev); next.delete(kw); return next })
   }, [])
 
-  useEffect(() => { setPage(0) }, [search, category, trendFilter, minVol])
+  useEffect(() => { setPage(0) }, [search, category, trendFilter, minVol, minWords])
 
   const otherGeos = GEOS.filter((g) => g.code !== activeGeo).slice(0, 3)
 
@@ -183,6 +185,12 @@ export default function KeywordsPage() {
           <option value={25000}>25K+</option>
           <option value={50000}>50K+</option>
           <option value={100000}>100K+</option>
+        </select>
+        <select value={minWords} onChange={(e) => setMinWords(Number(e.target.value))} style={selectStyle}>
+          <option value={1}>All keywords</option>
+          <option value={2}>2+ words</option>
+          <option value={3}>3+ words</option>
+          <option value={4}>4+ words</option>
         </select>
       </div>
 
