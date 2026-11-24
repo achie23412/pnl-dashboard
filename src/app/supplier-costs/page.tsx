@@ -8,10 +8,10 @@ export default function SupplierCostsPage() {
       breadcrumb="Finance → Supplier Costs"
       description="Track and compare supplier pricing across products. See cost trends and identify savings opportunities."
       stats={[
-        { label: "Active suppliers", value: "4" },
-        { label: "Avg COGS/unit", value: "$8.50" },
-        { label: "Cost change (30d)", value: "-2.1%", color: "var(--green)" },
-        { label: "Products tracked", value: "48" },
+        { label: "Active suppliers", value: "—" },
+        { label: "Avg COGS/unit", value: "—" },
+        { label: "Cost change (30d)", value: "—" },
+        { label: "Products tracked", value: "—" },
       ]}
     >
       <div className="glass rounded-xl p-6">

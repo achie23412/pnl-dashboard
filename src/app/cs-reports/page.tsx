@@ -8,10 +8,10 @@ export default function CSReportsPage() {
       breadcrumb="Customer Service → Reports"
       description="Refund rate per store, per reason breakdown, funnel acceptance rate, store credit report, refund by collection."
       stats={[
-        { label: "Avg acceptance rate", value: "78%", color: "var(--green)" },
-        { label: "Top reason", value: "Wrong size" },
-        { label: "Highest refund store", value: "SA (5.1%)" },
-        { label: "Store credits used", value: "€210" },
+        { label: "Avg acceptance rate", value: "—" },
+        { label: "Top reason", value: "—" },
+        { label: "Highest refund store", value: "—" },
+        { label: "Store credits used", value: "—" },
       ]}
       tabs={[
         { label: "By store", active: true },

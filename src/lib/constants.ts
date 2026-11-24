@@ -71,6 +71,22 @@ export const STORE_SHEET_TAB: Record<string, string> = {
   Blinky: "Launch Sheet - EUROPE",
 }
 
+export const STORE_TIMEZONE: Record<string, string> = {
+  LUMEGLASSES: "America/New_York",
+  Blinky: "Europe/Amsterdam",
+  "Walsh & Farley": "Europe/Dublin",
+  "Carter & Collins": "Europe/London",
+  "Susan & Allen": "America/New_York",
+}
+
+export const STORE_MARKET: Record<string, string> = {
+  LUMEGLASSES: "US",
+  Blinky: "NL/EU",
+  "Walsh & Farley": "IE",
+  "Carter & Collins": "UK",
+  "Susan & Allen": "US",
+}
+
 export const TRANSACTION_FEE_RATE: Record<string, number> = {
   LUMEGLASSES: 0.035,
   Blinky: 0.035,

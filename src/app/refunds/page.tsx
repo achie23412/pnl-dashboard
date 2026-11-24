@@ -8,10 +8,10 @@ export default function RefundsPage() {
       breadcrumb="Customer Service → Refunds"
       description="Owner review queue for refunds over €100. Add refund form, Shopify refund check, and refund history."
       stats={[
-        { label: "Pending approval", value: "2", color: "var(--orange)" },
-        { label: "Processed today", value: "3" },
-        { label: "Total refunded (30d)", value: "€2,890" },
-        { label: "Avg refund value", value: "€67" },
+        { label: "Pending approval", value: "—" },
+        { label: "Processed today", value: "—" },
+        { label: "Total refunded (30d)", value: "—" },
+        { label: "Avg refund value", value: "—" },
       ]}
       tabs={[
         { label: "Needs approval", count: 2, active: true },

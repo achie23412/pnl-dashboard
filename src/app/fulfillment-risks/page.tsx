@@ -8,10 +8,10 @@ export default function FulfillmentRisksPage() {
       breadcrumb="Supply Chain → Fulfillment Risks"
       description="Identify products and suppliers at risk of fulfillment failures: low stock, shipping delays, supplier reliability issues."
       stats={[
-        { label: "High risk", value: "1", color: "var(--red)" },
-        { label: "Medium risk", value: "3", color: "var(--orange)" },
-        { label: "Low risk", value: "44", color: "var(--green)" },
-        { label: "Risk score avg", value: "2.1/10" },
+        { label: "High risk", value: "—" },
+        { label: "Medium risk", value: "—" },
+        { label: "Low risk", value: "—" },
+        { label: "Risk score avg", value: "—" },
       ]}
     >
       <div className="space-y-2">

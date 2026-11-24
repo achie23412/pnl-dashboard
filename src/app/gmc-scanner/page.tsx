@@ -8,10 +8,10 @@ export default function GMCScannerPage() {
       breadcrumb="Front End → GMC Pre-Launch Scanner"
       description="Scan products before listing to catch Google Merchant Center policy issues, missing fields, and feed errors."
       stats={[
-        { label: "Products scanned", value: "34" },
-        { label: "Issues found", value: "7", color: "var(--orange)" },
-        { label: "Critical", value: "2", color: "var(--red)" },
-        { label: "Ready to list", value: "27", color: "var(--green)" },
+        { label: "Products scanned", value: "—" },
+        { label: "Issues found", value: "—" },
+        { label: "Critical", value: "—" },
+        { label: "Ready to list", value: "—" },
       ]}
     >
       <div className="glass rounded-xl p-4 mb-4">

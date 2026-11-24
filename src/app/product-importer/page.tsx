@@ -8,10 +8,10 @@ export default function ProductImporterPage() {
       breadcrumb="Front End → Product Importer"
       description="Import products from your saved list. Single or batch import with keyword advice and competitor pricing."
       stats={[
-        { label: "Saved products", value: "24" },
-        { label: "Imported this week", value: "6" },
-        { label: "Pending review", value: "3", color: "var(--orange)" },
-        { label: "Success rate", value: "92%" },
+        { label: "Saved products", value: "—" },
+        { label: "Imported this week", value: "—" },
+        { label: "Pending review", value: "—" },
+        { label: "Success rate", value: "—" },
       ]}
     >
       <div className="glass rounded-xl p-4 mb-4">

@@ -8,10 +8,10 @@ export default function ShipmentsPage() {
       breadcrumb="Supply Chain → Shipments"
       description="Track all shipments from suppliers. Monitor delivery times, delays, and fulfillment status across stores."
       stats={[
-        { label: "In transit", value: "12" },
-        { label: "Delivered (7d)", value: "34" },
-        { label: "Delayed", value: "2", color: "var(--red)" },
-        { label: "Avg delivery", value: "8.5 days" },
+        { label: "In transit", value: "—" },
+        { label: "Delivered (7d)", value: "—" },
+        { label: "Delayed", value: "—" },
+        { label: "Avg delivery", value: "—" },
       ]}
     >
       <div className="glass rounded-xl p-6">

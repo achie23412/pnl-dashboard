@@ -8,10 +8,10 @@ export default function RiskyProductsPage() {
       breadcrumb="Customer Service → Risky Products"
       description="Early warning: products with 2+ complaints in 7 days. Triggers supplier notification."
       stats={[
-        { label: "Risky now", value: "1", color: "var(--red)" },
-        { label: "Supplier notified", value: "1", color: "var(--orange)" },
-        { label: "Cleared (30d)", value: "4", color: "var(--green)" },
-        { label: "Threshold", value: "2 in 7d" },
+        { label: "Risky now", value: "—" },
+        { label: "Supplier notified", value: "—" },
+        { label: "Cleared (30d)", value: "—" },
+        { label: "Threshold", value: "—" },
       ]}
     >
       <div className="space-y-2">

@@ -8,10 +8,10 @@ export default function TeamHubPage() {
       breadcrumb="Team Hub"
       description="Team members, roles, and task assignments. Manage who has access to what."
       stats={[
-        { label: "Team members", value: "3" },
-        { label: "Active tasks", value: "7" },
-        { label: "Completed today", value: "4" },
-        { label: "Pending review", value: "2" },
+        { label: "Team members", value: "—" },
+        { label: "Active tasks", value: "—" },
+        { label: "Completed today", value: "—" },
+        { label: "Pending review", value: "—" },
       ]}
     >
       <div className="space-y-2">

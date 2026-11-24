@@ -8,10 +8,10 @@ export default function WorkflowsPage() {
       breadcrumb="Workflows"
       description="Automated workflows and task sequences. Set up triggers for refund processing, quality alerts, supplier notifications, and more."
       stats={[
-        { label: "Active workflows", value: "4" },
-        { label: "Runs today", value: "12" },
-        { label: "Failed", value: "0", color: "var(--green)" },
-        { label: "Last run", value: "2h ago" },
+        { label: "Active workflows", value: "—" },
+        { label: "Runs today", value: "—" },
+        { label: "Failed", value: "—" },
+        { label: "Last run", value: "—" },
       ]}
     >
       <div className="space-y-2">

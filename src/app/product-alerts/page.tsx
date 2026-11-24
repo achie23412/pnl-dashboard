@@ -8,10 +8,10 @@ export default function ProductAlertsPage() {
       breadcrumb="Front End → Product Alerts"
       description="Automated alerts when a product crosses a threshold: refund rate spike, stock warning, margin drop, or competitor price change."
       stats={[
-        { label: "Active alerts", value: "5", color: "var(--orange)" },
-        { label: "Resolved today", value: "2" },
-        { label: "Critical", value: "1", color: "var(--red)" },
-        { label: "Products monitored", value: "48" },
+        { label: "Active alerts", value: "—" },
+        { label: "Resolved today", value: "—" },
+        { label: "Critical", value: "—" },
+        { label: "Products monitored", value: "—" },
       ]}
     >
       <div className="space-y-2">

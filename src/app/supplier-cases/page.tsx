@@ -8,10 +8,10 @@ export default function SupplierCasesPage() {
       breadcrumb="Supply Chain → Supplier Cases"
       description="Escalated supplier issues: quality disputes, missing shipments, pricing disagreements. Track case progress and resolution."
       stats={[
-        { label: "Open cases", value: "1", color: "var(--orange)" },
-        { label: "Resolved (30d)", value: "3", color: "var(--green)" },
-        { label: "Avg resolution", value: "5 days" },
-        { label: "Active suppliers", value: "4" },
+        { label: "Open cases", value: "—" },
+        { label: "Resolved (30d)", value: "—" },
+        { label: "Avg resolution", value: "—" },
+        { label: "Active suppliers", value: "—" },
       ]}
     >
       <div className="space-y-2">

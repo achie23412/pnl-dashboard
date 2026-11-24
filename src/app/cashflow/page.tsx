@@ -8,10 +8,10 @@ export default function CashflowPage() {
       breadcrumb="Finance → Cashflow & Balance"
       description="Incoming vs outgoing cash across all stores and payment processors. Track Whale Checkout, Shopify Payments, and PayPal balances."
       stats={[
-        { label: "Total balance", value: "€18,420", color: "var(--green)" },
-        { label: "Incoming (7d)", value: "€8,300" },
-        { label: "Outgoing (7d)", value: "€5,100" },
-        { label: "Net flow (7d)", value: "+€3,200", color: "var(--green)" },
+        { label: "Total balance", value: "—" },
+        { label: "Incoming (7d)", value: "—" },
+        { label: "Outgoing (7d)", value: "—" },
+        { label: "Net flow (7d)", value: "—" },
       ]}
     >
       <div className="glass rounded-xl p-6">
