@@ -35,6 +35,12 @@ export interface DailyPnL {
   orders: number
 }
 
+export interface RefundRow {
+  date: string
+  store: string
+  amount: number
+}
+
 export interface KPIData {
   revenue: number
   spend: number
@@ -46,5 +52,31 @@ export interface KPIData {
   roas: number
   cogsPercent: number
   sessions: number
-  cvr: number | null // % of sessions that ordered; null when no session data in range
+  cvr: number | null
+  refundAmount: number
+  refundRate: number
+}
+
+export interface StoreKPI {
+  store: string
+  revenue: number
+  orders: number
+  spend: number
+  roas: number
+  refundAmount: number
+  refundRate: number
+  profit: number
+}
+
+export interface DailyBriefingRow {
+  date: string
+  revenue: number
+  orders: number
+  spend: number
+  roas: number
+  refundAmount: number
+  refundRate: number
+  cogs: number
+  profit: number
+  isToday: boolean
 }

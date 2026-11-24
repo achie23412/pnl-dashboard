@@ -4,15 +4,20 @@ import { createClient } from "@supabase/supabase-js"
 import { StoreTabs } from "@/components/StoreTabs"
 import { DatePicker } from "@/components/DatePicker"
 import { KPICards } from "@/components/KPICards"
+import { StoreComparison } from "@/components/StoreComparison"
+import { DailyTable } from "@/components/DailyTable"
 import {
   DailyTrendChart,
   SpendByChannelChart,
   RevenueByStoreChart,
   SpendByAccountChart,
 } from "@/components/Charts"
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
-import type { RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData } from "@/lib/types"
+import type {
+  RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData,
+  RefundRow, StoreKPI, DailyBriefingRow,
+} from "@/lib/types"
 import { STORE_CURRENCY, COGS_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
 
@@ -61,6 +66,15 @@ function getDateRange(preset: string, customFrom: string, customTo: string): [st
   }
 }
 
+function getPreviousRange(from: string, to: string): [string, string] {
+  const f = new Date(from + "T12:00:00")
+  const t = new Date(to + "T12:00:00")
+  const days = Math.round((t.getTime() - f.getTime()) / 86400000) + 1
+  const prevTo = new Date(f.getTime() - 86400000)
+  const prevFrom = new Date(prevTo.getTime() - (days - 1) * 86400000)
+  return [prevFrom.toISOString().slice(0, 10), prevTo.toISOString().slice(0, 10)]
+}
+
 export default function Dashboard() {
   const [store, setStore] = useState<StoreName>("Overall")
   const [preset, setPreset] = useState("last_30d")
@@ -69,21 +83,24 @@ export default function Dashboard() {
   const [revenue, setRevenue] = useState<RevenueRow[]>([])
   const [spend, setSpend] = useState<SpendRow[]>([])
   const [cogs, setCogs] = useState<CogsRow[]>([])
+  const [refunds, setRefunds] = useState<RefundRow[]>([])
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [includeTxnFees, setIncludeTxnFees] = useState(false)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [sessions, setSessions] = useState<SessionsRow[]>([])
+  const [view, setView] = useState<"briefing" | "details">("briefing")
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [{ data: rev }, { data: sp }, { data: cg }, { data: log }, { data: ses }] = await Promise.all([
+      const [{ data: rev }, { data: sp }, { data: cg }, { data: log }, { data: ses }, { data: ref }] = await Promise.all([
         supabase.from("daily_revenue").select("*").order("date"),
         supabase.from("daily_spend").select("*").order("date"),
         supabase.from("daily_cogs").select("*").order("date"),
         supabase.from("refresh_log").select("completed_at").in("status", ["success", "partial"]).order("completed_at", { ascending: false }).limit(1),
         supabase.from("daily_sessions").select("*").order("date"),
+        supabase.from("refunds").select("date,store,amount").order("date"),
       ])
       setSessions((ses as SessionsRow[]) || [])
       const revRows = (rev as RevenueRow[]) || []
@@ -94,14 +111,13 @@ export default function Dashboard() {
       setRevenue(revRows)
       setSpend((sp as SpendRow[]) || [])
       setCogs(cogsRows)
+      setRefunds((ref as RefundRow[]) || [])
       if (log && log.length > 0) setLastRefresh(log[0].completed_at)
       setLoading(false)
     }
     load()
   }, [])
 
-  // Everything in EUR: revenue converted from each shop's currency, COGS from USD.
-  // Ad spend is already EUR in all ad accounts.
   const revenueEur = useMemo(
     () => revenue.map((r) => ({ ...r, revenue: toEur(r.revenue, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
     [revenue, rates],
@@ -114,50 +130,62 @@ export default function Dashboard() {
     toEur(AVG_COGS_PER_ORDER[storeName] || 0, COGS_CURRENCY, date, rates)
 
   const [dateFrom, dateTo] = getDateRange(preset, customFrom, customTo)
+  const [prevFrom, prevTo] = getPreviousRange(dateFrom, dateTo)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const showComparison = dateTo < todayStr || preset === "yesterday" || preset === "last_month"
 
   const filtered = useMemo(() => {
     const inRange = (d: string) => d >= dateFrom && d <= dateTo
+    const inPrevRange = (d: string) => d >= prevFrom && d <= prevTo
     const inStore = (s: string) => store === "Overall" || s === store
 
-    const fr = revenueEur.filter((r) => inRange(r.date) && inStore(r.store))
-    const fs = spend.filter((r) => inRange(r.date) && inStore(r.store))
-    const fc = cogsEur.filter((r) => inRange(r.date) && inStore(r.store))
-    const fses = sessions.filter((r) => inRange(r.date) && inStore(r.store))
+    return {
+      revenue: revenueEur.filter((r) => inRange(r.date) && inStore(r.store)),
+      spend: spend.filter((r) => inRange(r.date) && inStore(r.store)),
+      cogs: cogsEur.filter((r) => inRange(r.date) && inStore(r.store)),
+      sessions: sessions.filter((r) => inRange(r.date) && inStore(r.store)),
+      refunds: refunds.filter((r) => inRange(r.date) && inStore(r.store)),
+      prevRevenue: revenueEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+      prevSpend: spend.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+      prevCogs: cogsEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+      prevRefunds: refunds.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+    }
+  }, [revenueEur, spend, cogsEur, sessions, refunds, dateFrom, dateTo, prevFrom, prevTo, store])
 
-    return { revenue: fr, spend: fs, cogs: fc, sessions: fses }
-  }, [revenueEur, spend, cogsEur, sessions, dateFrom, dateTo, store])
+  function computeKPI(
+    rev: typeof filtered.revenue,
+    sp: typeof filtered.spend,
+    cg: typeof filtered.cogs,
+    ses: typeof filtered.sessions,
+    ref: typeof filtered.refunds,
+  ): KPIData {
+    const totalRevenue = rev.reduce((s, r) => s + r.revenue, 0)
+    const totalOrders = rev.reduce((s, r) => s + r.orders, 0)
+    const totalSpend = sp.reduce((s, r) => s + r.spend, 0)
+    const actualCogs = cg.reduce((s, r) => s + r.cogs, 0)
+    const totalRefundAmount = ref.reduce((s, r) => s + r.amount, 0)
 
-  const kpi = useMemo((): KPIData => {
-    const totalRevenue = filtered.revenue.reduce((s, r) => s + r.revenue, 0)
-    const totalOrders = filtered.revenue.reduce((s, r) => s + r.orders, 0)
-    const totalSpend = filtered.spend.reduce((s, r) => s + r.spend, 0)
-    const actualCogs = filtered.cogs.reduce((s, r) => s + r.cogs, 0)
-
-    const cogsDates = new Set(filtered.cogs.map((r) => `${r.date}|${r.store}`))
+    const cogsDates = new Set(cg.map((r) => `${r.date}|${r.store}`))
     let estCogs = 0
-    for (const r of filtered.revenue) {
+    for (const r of rev) {
       if (!cogsDates.has(`${r.date}|${r.store}`) && AVG_COGS_PER_ORDER[r.store]) {
         estCogs += r.orders * estCogsPerOrderEur(r.store, r.date)
       }
     }
-
     const totalCogs = actualCogs + estCogs
 
     let txnFees = 0
     if (includeTxnFees) {
-      for (const r of filtered.revenue) {
-        const rate = TRANSACTION_FEE_RATE[r.store] || 0.035
-        txnFees += r.revenue * rate
+      for (const r of rev) {
+        txnFees += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
       }
     }
 
     const profit = totalRevenue - totalSpend - totalCogs - txnFees
 
-    // Store CVR: only count orders on store-days that have session data,
-    // so a store without a Shopify token doesn't inflate the rate.
-    const sessionDays = new Set(filtered.sessions.map((r) => `${r.date}|${r.store}`))
-    const totalSessions = filtered.sessions.reduce((s, r) => s + r.sessions, 0)
-    const ordersWithSessions = filtered.revenue
+    const sessionDays = new Set(ses.map((r) => `${r.date}|${r.store}`))
+    const totalSessions = ses.reduce((s, r) => s + r.sessions, 0)
+    const ordersWithSessions = rev
       .filter((r) => sessionDays.has(`${r.date}|${r.store}`))
       .reduce((s, r) => s + r.orders, 0)
 
@@ -173,22 +201,74 @@ export default function Dashboard() {
       cogsPercent: totalRevenue > 0 ? (totalCogs / totalRevenue) * 100 : 0,
       sessions: totalSessions,
       cvr: totalSessions > 0 ? (ordersWithSessions / totalSessions) * 100 : null,
+      refundAmount: totalRefundAmount,
+      refundRate: totalRevenue > 0 ? (totalRefundAmount / totalRevenue) * 100 : 0,
     }
-  }, [filtered, includeTxnFees, rates])
+  }
 
-  const dailyPnL = useMemo((): DailyPnL[] => {
+  const kpi = useMemo(
+    () => computeKPI(filtered.revenue, filtered.spend, filtered.cogs, filtered.sessions, filtered.refunds),
+    [filtered, includeTxnFees, rates],
+  )
+
+  const prevKpi = useMemo((): KPIData | null => {
+    if (!showComparison) return null
+    return computeKPI(filtered.prevRevenue, filtered.prevSpend, filtered.prevCogs, [], filtered.prevRefunds)
+  }, [filtered, showComparison, includeTxnFees, rates])
+
+  const storeKPIs = useMemo((): StoreKPI[] => {
+    if (store !== "Overall") return []
+    const storeNames = STORES.filter((s) => s !== "Overall")
+    return storeNames.map((s) => {
+      const rev = filtered.revenue.filter((r) => r.store === s)
+      const sp = filtered.spend.filter((r) => r.store === s)
+      const cg = filtered.cogs.filter((r) => r.store === s)
+      const ref = filtered.refunds.filter((r) => r.store === s)
+
+      const totalRevenue = rev.reduce((sum, r) => sum + r.revenue, 0)
+      const totalSpend = sp.reduce((sum, r) => sum + r.spend, 0)
+      const totalRefund = ref.reduce((sum, r) => sum + r.amount, 0)
+      const actualCog = cg.reduce((sum, r) => sum + r.cogs, 0)
+
+      const cogsDates = new Set(cg.map((r) => r.date))
+      let est = 0
+      for (const r of rev) {
+        if (!cogsDates.has(r.date) && AVG_COGS_PER_ORDER[s]) {
+          est += r.orders * estCogsPerOrderEur(s, r.date)
+        }
+      }
+      const totalCog = actualCog + est
+
+      let txn = 0
+      if (includeTxnFees) {
+        for (const r of rev) txn += r.revenue * (TRANSACTION_FEE_RATE[s] || 0.035)
+      }
+
+      return {
+        store: s,
+        revenue: totalRevenue,
+        orders: rev.reduce((sum, r) => sum + r.orders, 0),
+        spend: totalSpend,
+        roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
+        refundAmount: totalRefund,
+        refundRate: totalRevenue > 0 ? (totalRefund / totalRevenue) * 100 : 0,
+        profit: totalRevenue - totalSpend - totalCog - txn,
+      }
+    }).filter((s) => s.revenue > 0 || s.spend > 0)
+  }, [filtered, store, includeTxnFees, rates])
+
+  const dailyBriefing = useMemo((): DailyBriefingRow[] => {
     const dates = new Set([
       ...filtered.revenue.map((r) => r.date),
       ...filtered.spend.map((r) => r.date),
       ...filtered.cogs.map((r) => r.date),
     ])
 
-    const revByDate = new Map<string, { revenue: number; orders: number; stores: Set<string> }>()
+    const revByDate = new Map<string, { revenue: number; orders: number }>()
     for (const r of filtered.revenue) {
-      const entry = revByDate.get(r.date) || { revenue: 0, orders: 0, stores: new Set() }
+      const entry = revByDate.get(r.date) || { revenue: 0, orders: 0 }
       entry.revenue += r.revenue
       entry.orders += r.orders
-      entry.stores.add(r.store)
       revByDate.set(r.date, entry)
     }
 
@@ -202,12 +282,16 @@ export default function Dashboard() {
       cogsDateStores.add(`${r.date}|${r.store}`)
     }
 
+    const refundByDate = new Map<string, number>()
+    for (const r of filtered.refunds) refundByDate.set(r.date, (refundByDate.get(r.date) || 0) + r.amount)
+
     return Array.from(dates)
       .sort()
       .map((date) => {
-        const rev = revByDate.get(date) || { revenue: 0, orders: 0, stores: new Set<string>() }
+        const rev = revByDate.get(date) || { revenue: 0, orders: 0 }
         const sp = spendByDate.get(date) || 0
         const actualCog = cogsByDate.get(date) || 0
+        const refAmt = refundByDate.get(date) || 0
 
         let est = 0
         for (const r of filtered.revenue.filter((x) => x.date === date)) {
@@ -215,47 +299,87 @@ export default function Dashboard() {
             est += r.orders * estCogsPerOrderEur(r.store, r.date)
           }
         }
-
         const totalCog = actualCog + est
+
         let dayTxn = 0
         if (includeTxnFees) {
           for (const r of filtered.revenue.filter((x) => x.date === date)) {
             dayTxn += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
           }
         }
+
         return {
           date,
           revenue: Math.round(rev.revenue),
-          spend: Math.round(sp),
-          cogs: Math.round(totalCog),
-          estCogs: Math.round(est),
-          profit: Math.round(rev.revenue - sp - totalCog - dayTxn),
           orders: rev.orders,
+          spend: Math.round(sp),
+          roas: sp > 0 ? rev.revenue / sp : 0,
+          refundAmount: Math.round(refAmt),
+          refundRate: rev.revenue > 0 ? (refAmt / rev.revenue) * 100 : 0,
+          cogs: Math.round(totalCog),
+          profit: Math.round(rev.revenue - sp - totalCog - dayTxn),
+          isToday: date === todayStr,
         }
       })
-  }, [filtered, includeTxnFees, rates])
+  }, [filtered, includeTxnFees, rates, todayStr])
+
+  const dailyPnL = useMemo((): DailyPnL[] => {
+    return dailyBriefing.map((row) => ({
+      date: row.date,
+      revenue: row.revenue,
+      spend: row.spend,
+      cogs: row.cogs,
+      estCogs: 0,
+      profit: row.profit,
+      orders: row.orders,
+    }))
+  }, [dailyBriefing])
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold">P&L Dashboard</h1>
-          {lastRefresh && (
-            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              Last refresh: {new Date(lastRefresh).toLocaleString()}
-            </div>
-          )}
+          <h1 className="text-xl font-bold">Daily Briefing</h1>
+          <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+            {lastRefresh
+              ? `Last refresh: ${new Date(lastRefresh).toLocaleString()}`
+              : "Start every day here."}
+          </div>
         </div>
-        <DatePicker
-          preset={preset}
-          customFrom={customFrom}
-          customTo={customTo}
-          onChange={(p, f, t) => {
-            setPreset(p)
-            if (f) setCustomFrom(f)
-            if (t) setCustomTo(t)
-          }}
-        />
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+            <button
+              onClick={() => setView("briefing")}
+              className="px-3 py-1.5 text-xs font-medium"
+              style={{
+                background: view === "briefing" ? "#4E6AA7" : "var(--bg-card)",
+                color: view === "briefing" ? "#fff" : "var(--text-muted)",
+              }}
+            >
+              Briefing
+            </button>
+            <button
+              onClick={() => setView("details")}
+              className="px-3 py-1.5 text-xs font-medium"
+              style={{
+                background: view === "details" ? "#4E6AA7" : "var(--bg-card)",
+                color: view === "details" ? "#fff" : "var(--text-muted)",
+              }}
+            >
+              Details
+            </button>
+          </div>
+          <DatePicker
+            preset={preset}
+            customFrom={customFrom}
+            customTo={customTo}
+            onChange={(p, f, t) => {
+              setPreset(p)
+              if (f) setCustomFrom(f)
+              if (t) setCustomTo(t)
+            }}
+          />
+        </div>
       </div>
 
       <div className="mb-6">
@@ -282,21 +406,48 @@ export default function Dashboard() {
                 />
               </button>
             </div>
-            <KPICards data={kpi} includeTxnFees={includeTxnFees} />
+            <KPICards data={kpi} prevData={showComparison ? prevKpi : null} includeTxnFees={includeTxnFees} />
           </div>
 
-          <div className="mb-6">
-            <DailyTrendChart data={dailyPnL} />
-          </div>
+          {store === "Overall" && storeKPIs.length > 0 && (
+            <div className="mb-6">
+              <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+                Compare stores
+              </div>
+              <StoreComparison stores={storeKPIs} />
+            </div>
+          )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-            <SpendByChannelChart data={filtered.spend} />
-            {store === "Overall" ? (
-              <RevenueByStoreChart data={filtered.revenue} />
-            ) : (
-              <SpendByAccountChart data={filtered.spend} />
-            )}
-          </div>
+          {view === "briefing" ? (
+            <div className="mb-6">
+              <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+                Per-day breakdown
+              </div>
+              <DailyTable data={dailyBriefing} />
+            </div>
+          ) : (
+            <>
+              <div className="mb-6">
+                <DailyTrendChart data={dailyPnL} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                <SpendByChannelChart data={filtered.spend} />
+                {store === "Overall" ? (
+                  <RevenueByStoreChart data={filtered.revenue} />
+                ) : (
+                  <SpendByAccountChart data={filtered.spend} />
+                )}
+              </div>
+
+              <div className="mb-6">
+                <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+                  Per-day breakdown
+                </div>
+                <DailyTable data={dailyBriefing} />
+              </div>
+            </>
+          )}
 
           <div
             className="text-center text-xs py-4"

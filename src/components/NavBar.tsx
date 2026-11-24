@@ -3,7 +3,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 const NAV_ITEMS = [
-  { href: "/", label: "P&L Dashboard", icon: "📊" },
+  { href: "/", label: "Daily Briefing", icon: "📊" },
   { href: "/refunds", label: "Refunds", icon: "↩" },
   { href: "/research", label: "Research", icon: "🔍" },
   { href: "/keywords", label: "Keywords", icon: "🔑" },
