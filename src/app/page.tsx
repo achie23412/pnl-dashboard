@@ -337,33 +337,33 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen p-6 md:p-8 lg:p-10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Command Center</h1>
-          <div className="text-[12px] mt-1" style={{ color: "var(--text-dim)" }}>
+          <h1 className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text)" }}>Command Center</h1>
+          <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
             {lastRefresh
               ? `Last refresh: ${new Date(lastRefresh).toLocaleString()}`
               : "Start every day here."}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="glass flex rounded-lg overflow-hidden">
+        <div className="flex items-center gap-2">
+          <div className="glass rounded-lg p-0.5 inline-flex gap-0.5">
             <button
               onClick={() => setView("briefing")}
-              className="px-4 py-1.5 text-[12px] font-medium transition-colors"
+              className="px-3 py-1 rounded-md text-[10px] font-semibold transition-all"
               style={{
-                background: view === "briefing" ? "rgba(59,130,246,0.2)" : "transparent",
-                color: view === "briefing" ? "#fff" : "var(--text-muted)",
+                background: view === "briefing" ? "rgba(255,255,255,0.08)" : "transparent",
+                color: view === "briefing" ? "#fff" : "var(--text-dim)",
               }}
             >
               Briefing
             </button>
             <button
               onClick={() => setView("details")}
-              className="px-4 py-1.5 text-[12px] font-medium transition-colors"
+              className="px-3 py-1 rounded-md text-[10px] font-semibold transition-all"
               style={{
-                background: view === "details" ? "rgba(59,130,246,0.2)" : "transparent",
-                color: view === "details" ? "#fff" : "var(--text-muted)",
+                background: view === "details" ? "rgba(255,255,255,0.08)" : "transparent",
+                color: view === "details" ? "#fff" : "var(--text-dim)",
               }}
             >
               Details
@@ -382,7 +382,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-4">
         <StoreTabs active={store} onChange={setStore} />
       </div>
 
@@ -393,9 +393,9 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="mb-6">
-            <div className="flex items-center justify-end gap-2 mb-3">
-              <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>Transaction fees (3.5%)</span>
+          <div className="mb-5">
+            <div className="flex items-center justify-end gap-1.5 mb-2.5">
+              <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }}>Transaction fees (3.5%)</span>
               <button
                 onClick={() => setIncludeTxnFees(!includeTxnFees)}
                 className="relative w-9 h-5 rounded-full transition-colors"
@@ -411,8 +411,8 @@ export default function Dashboard() {
           </div>
 
           {store === "Overall" && storeKPIs.length > 0 && (
-            <div className="mb-6">
-              <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-dim)" }}>
+            <div className="mb-5">
+              <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
                 Compare stores
               </div>
               <StoreComparison stores={storeKPIs} />
@@ -420,19 +420,19 @@ export default function Dashboard() {
           )}
 
           {view === "briefing" ? (
-            <div className="mb-6">
-              <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-dim)" }}>
+            <div className="mb-5">
+              <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
                 Per-day breakdown
               </div>
               <DailyTable data={dailyBriefing} />
             </div>
           ) : (
             <>
-              <div className="mb-6">
+              <div className="mb-5">
                 <DailyTrendChart data={dailyPnL} />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
                 <SpendByChannelChart data={filtered.spend} />
                 {store === "Overall" ? (
                   <RevenueByStoreChart data={filtered.revenue} />
@@ -441,8 +441,8 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="mb-6">
-                <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+              <div className="mb-5">
+                <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
                   Per-day breakdown
                 </div>
                 <DailyTable data={dailyBriefing} />
@@ -451,8 +451,8 @@ export default function Dashboard() {
           )}
 
           <div
-            className="text-center text-xs py-4"
-            style={{ color: "var(--text-muted)" }}
+            className="text-center text-[9px] py-3"
+            style={{ color: "var(--text-dim)" }}
           >
             All amounts in EUR · Lumé &amp; S&amp;A revenue converted from USD, C&amp;C from GBP, COGS from USD at the daily ECB rate
             {rates.fallback

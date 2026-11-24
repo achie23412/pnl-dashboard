@@ -119,17 +119,17 @@ export function DatePicker({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="glass px-4 py-2 rounded-lg text-[13px] flex items-center gap-2 transition-colors hover:bg-[rgba(255,255,255,0.06)]"
-        style={{ color: "var(--text)" }}
+        className="glass px-3 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1.5 transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+        style={{ color: "var(--text-muted)" }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
         {label}
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
