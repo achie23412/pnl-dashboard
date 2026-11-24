@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
-import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
+import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID, SHOPIFY_STORES } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
 
 const supabase = createClient(
@@ -17,6 +17,16 @@ interface CogsProduct {
   retail_price: string
   cog_pct: string
   category: string
+}
+
+interface CatalogProduct {
+  product_name: string
+  cogs_usd: number
+  retail_price: string
+  cog_pct: string
+  category: string
+  units_sold: number
+  sales_revenue: number
 }
 
 interface KillResult {
@@ -204,6 +214,10 @@ export function ProductTesting() {
   const [cogsProducts, setCogsProducts] = useState<CogsProduct[]>([])
   const [cogsLoading, setCogsLoading] = useState(false)
   const hasSheetTab = !!STORE_SHEET_TAB[form.store]
+  const [catalogStore, setCatalogStore] = useState<string>(STORES_NO_OVERALL.filter((s) => !!STORE_SHEET_TAB[s])[0] || STORES_NO_OVERALL[0])
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogMeta, setCatalogMeta] = useState<{ total: number; withSales: number; period: string }>({ total: 0, withSales: 0, period: "" })
 
   async function loadCogsProducts(store: string) {
     if (!STORE_SHEET_TAB[store]) {
@@ -219,6 +233,24 @@ export function ProductTesting() {
       setCogsProducts([])
     }
     setCogsLoading(false)
+  }
+
+  async function loadCatalog(store: string) {
+    if (!STORE_SHEET_TAB[store]) {
+      setCatalog([])
+      setCatalogMeta({ total: 0, withSales: 0, period: "" })
+      return
+    }
+    setCatalogLoading(true)
+    try {
+      const res = await fetch(`/api/product-catalog?store=${encodeURIComponent(store)}`)
+      const data = await res.json()
+      setCatalog(data.products || [])
+      setCatalogMeta({ total: data.total_products || 0, withSales: data.products_with_sales || 0, period: data.period || "" })
+    } catch {
+      setCatalog([])
+    }
+    setCatalogLoading(false)
   }
 
   async function loadTests() {
@@ -241,6 +273,7 @@ export function ProductTesting() {
 
   useEffect(() => {
     loadTests()
+    loadCatalog(catalogStore)
   }, [])
 
   async function createTable() {
@@ -859,6 +892,127 @@ export function ProductTesting() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Product Catalog — COGS + Sales */}
+      <div className="flex items-center justify-between mt-6">
+        <div className="flex items-center gap-3">
+          <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
+            PRODUCT CATALOG
+          </div>
+          {catalogMeta.total > 0 && (
+            <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>
+              {catalogMeta.withSales}/{catalogMeta.total} with sales (30d)
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={catalogStore}
+            onChange={(e) => {
+              setCatalogStore(e.target.value)
+              loadCatalog(e.target.value)
+            }}
+            className="px-2 py-1 rounded-lg text-[10px] font-medium"
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+          >
+            {STORES_NO_OVERALL.filter((s) => !!STORE_SHEET_TAB[s]).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <a
+            href={`https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="glass px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+            style={{ color: "var(--accent)", textDecoration: "none" }}
+          >
+            ↗ Sheet
+          </a>
+        </div>
+      </div>
+
+      {catalogLoading ? (
+        <div className="glass rounded-xl p-6 flex items-center justify-center">
+          <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+          <span className="ml-2 text-[10px]" style={{ color: "var(--text-dim)" }}>Loading products &amp; sales...</span>
+        </div>
+      ) : catalog.length === 0 ? (
+        <div className="glass rounded-xl p-6 text-center">
+          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+            {STORE_SHEET_TAB[catalogStore] ? "No products found in COGS sheet." : "No COGS sheet tab for this store."}
+          </div>
+        </div>
+      ) : (
+        <div className="glass rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  {["Product", "Category", "COGS (USD)", "Retail", "COG %", "Sold (30d)", "Revenue (30d)"].map((h) => (
+                    <th
+                      key={h}
+                      className="text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap"
+                      style={{ color: "var(--text-dim)" }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {catalog.map((p, i) => (
+                  <tr
+                    key={i}
+                    className="transition-colors hover:bg-[rgba(255,255,255,0.02)]"
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                  >
+                    <td className="px-3 py-2 max-w-[260px]">
+                      <div className="text-[11px] font-medium truncate" style={{ color: "var(--text)" }}>
+                        {p.product_name}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[9px] font-medium"
+                        style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}
+                      >
+                        {p.category || "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-[11px] font-mono font-medium" style={{ color: "var(--text)" }}>
+                      ${p.cogs_usd.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                      {p.retail_price || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
+                      {p.cog_pct || "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {p.units_sold > 0 ? (
+                        <span className="text-[11px] font-mono font-semibold" style={{ color: "var(--green)" }}>
+                          {p.units_sold}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>0</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {p.sales_revenue > 0 ? (
+                        <span className="text-[11px] font-mono font-medium" style={{ color: "var(--green)" }}>
+                          ${p.sales_revenue.toFixed(0)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

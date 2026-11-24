@@ -89,15 +89,15 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Research",
     items: [
-      { href: "/research", label: "Products", icon: <ResearchIcon /> },
+      { href: "/keywords", label: "Keywords", icon: <KeyIcon /> },
+      { href: "/keyword-maker", label: "Keyword Maker", icon: <SparkleIcon /> },
       { href: "/competitors", label: "Competitors", icon: <EyeIcon /> },
     ],
   },
   {
     label: "Tools",
     items: [
-      { href: "/keywords", label: "Keywords", icon: <KeyIcon /> },
-      { href: "/keyword-maker", label: "Keyword Maker", icon: <SparkleIcon /> },
+      { href: "/research", label: "Product ROAS Sheet", icon: <ResearchIcon /> },
       { href: "/import", label: "Import", icon: <ImportIcon /> },
     ],
   },

@@ -98,7 +98,7 @@ export default function ResearchPage() {
     <main className="min-h-screen p-4 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-        <h1 className="text-[18px] font-bold" style={{ color: "var(--text)" }}>Products</h1>
+        <h1 className="text-[18px] font-bold" style={{ color: "var(--text)" }}>Product ROAS Sheet</h1>
 
         {/* Tab Toggle */}
         <div className="glass rounded-lg p-0.5 inline-flex">
