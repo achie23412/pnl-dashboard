@@ -13,13 +13,13 @@ function Delta({ current, previous, invert }: { current: number; previous: numbe
   const good = invert ? !up : up
   return (
     <span
-      className="inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-md"
+      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
       style={{
         color: good ? "var(--green)" : "var(--red)",
         background: good ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
       }}
     >
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         {up ? <polyline points="18 15 12 9 6 15" /> : <polyline points="6 9 12 15 18 9" />}
       </svg>
       {Math.abs(pct).toFixed(1)}%
@@ -29,33 +29,33 @@ function Delta({ current, previous, invert }: { current: number; previous: numbe
 
 const ICONS: Record<string, React.ReactNode> = {
   revenue: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </svg>
   ),
   spend: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
     </svg>
   ),
   roas: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   ),
   refund: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
     </svg>
   ),
   cogs: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
       <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
     </svg>
   ),
   profit: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
     </svg>
   ),
@@ -80,30 +80,30 @@ function KPICard({
 }) {
   return (
     <div
-      className="glass rounded-2xl p-5 transition-colors hover:bg-[rgba(255,255,255,0.06)] relative overflow-hidden"
+      className="glass rounded-xl p-3.5 transition-colors hover:bg-[rgba(255,255,255,0.06)] relative overflow-hidden"
     >
       <div
         className="absolute top-0 left-0 w-full h-[2px]"
         style={{ background: `linear-gradient(90deg, ${accentColor}, transparent)` }}
       />
 
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
           <div style={{ color: accentColor, opacity: 0.7 }}>{icon}</div>
-          <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
             {title}
           </div>
         </div>
         {delta}
       </div>
 
-      <div className="text-[28px] font-bold tracking-tight leading-none" style={{ color: valueColor }}>
+      <div className="text-[20px] font-bold tracking-tight leading-none" style={{ color: valueColor }}>
         {value}
       </div>
 
       {sub && (
         <div
-          className="text-[12px] mt-2"
+          className="text-[10px] mt-1.5"
           style={{ color: "var(--text-dim)" }}
           dangerouslySetInnerHTML={{ __html: sub }}
         />
@@ -133,7 +133,7 @@ export function KPICards({
     : ""
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
       <KPICard
         title="Revenue"
         icon={ICONS.revenue}
