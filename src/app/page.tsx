@@ -339,7 +339,7 @@ export default function Dashboard() {
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold">Daily Briefing</h1>
+          <h1 className="text-xl font-bold">Command Center</h1>
           <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
             {lastRefresh
               ? `Last refresh: ${new Date(lastRefresh).toLocaleString()}`
