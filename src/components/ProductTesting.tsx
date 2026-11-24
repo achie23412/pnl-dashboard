@@ -21,12 +21,26 @@ interface CogsProduct {
 
 interface CatalogProduct {
   product_name: string
-  cogs_usd: number
+  store: string
+  cogs_usd: number | null
   retail_price: string
   cog_pct: string
   category: string
   units_sold: number
   sales_revenue: number
+  cogs_source: "shipgoods" | "sheet" | "none"
+}
+
+interface CatalogMeta {
+  total: number
+  withSales: number
+  withCogs: number
+  sgCount: number
+  sheetCount: number
+  totalUnits: number
+  totalRevenue: number
+  mostSold: { name: string; store: string; units: number } | null
+  period: string
 }
 
 interface KillResult {
@@ -214,10 +228,12 @@ export function ProductTesting() {
   const [cogsProducts, setCogsProducts] = useState<CogsProduct[]>([])
   const [cogsLoading, setCogsLoading] = useState(false)
   const hasSheetTab = !!STORE_SHEET_TAB[form.store]
-  const [catalogStore, setCatalogStore] = useState<string>(STORES_NO_OVERALL.filter((s) => !!STORE_SHEET_TAB[s])[0] || STORES_NO_OVERALL[0])
+  const [catalogFilter, setCatalogFilter] = useState<string>("all")
+  const [catalogSearch, setCatalogSearch] = useState("")
+  const [catalogSort, setCatalogSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "units_sold", dir: "desc" })
   const [catalog, setCatalog] = useState<CatalogProduct[]>([])
   const [catalogLoading, setCatalogLoading] = useState(false)
-  const [catalogMeta, setCatalogMeta] = useState<{ total: number; withSales: number; period: string }>({ total: 0, withSales: 0, period: "" })
+  const [catalogMeta, setCatalogMeta] = useState<CatalogMeta>({ total: 0, withSales: 0, withCogs: 0, sgCount: 0, sheetCount: 0, totalUnits: 0, totalRevenue: 0, mostSold: null, period: "" })
 
   async function loadCogsProducts(store: string) {
     if (!STORE_SHEET_TAB[store]) {
@@ -235,18 +251,23 @@ export function ProductTesting() {
     setCogsLoading(false)
   }
 
-  async function loadCatalog(store: string) {
-    if (!STORE_SHEET_TAB[store]) {
-      setCatalog([])
-      setCatalogMeta({ total: 0, withSales: 0, period: "" })
-      return
-    }
+  async function loadCatalog() {
     setCatalogLoading(true)
     try {
-      const res = await fetch(`/api/product-catalog?store=${encodeURIComponent(store)}`)
+      const res = await fetch("/api/product-catalog?store=all")
       const data = await res.json()
       setCatalog(data.products || [])
-      setCatalogMeta({ total: data.total_products || 0, withSales: data.products_with_sales || 0, period: data.period || "" })
+      setCatalogMeta({
+        total: data.total_products || 0,
+        withSales: data.products_with_sales || 0,
+        withCogs: data.products_with_cogs || 0,
+        sgCount: data.cogs_from_shipgoods || 0,
+        sheetCount: data.cogs_from_sheet || 0,
+        totalUnits: data.total_units_sold || 0,
+        totalRevenue: data.total_revenue || 0,
+        mostSold: data.most_sold || null,
+        period: data.period || "",
+      })
     } catch {
       setCatalog([])
     }
@@ -273,7 +294,7 @@ export function ProductTesting() {
 
   useEffect(() => {
     loadTests()
-    loadCatalog(catalogStore)
+    loadCatalog()
   }, [])
 
   async function createTable() {
@@ -899,125 +920,192 @@ export function ProductTesting() {
       )}
 
       {/* Product Catalog — COGS + Sales */}
-      <div className="flex items-center justify-between mt-6">
-        <div className="flex items-center gap-3">
-          <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
-            PRODUCT CATALOG
-          </div>
-          {catalogMeta.total > 0 && (
-            <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>
-              {catalogMeta.withSales}/{catalogMeta.total} with sales (30d)
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={catalogStore}
-            onChange={(e) => {
-              setCatalogStore(e.target.value)
-              loadCatalog(e.target.value)
-            }}
-            className="px-2 py-1 rounded-lg text-[10px] font-medium"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-          >
-            {STORES_NO_OVERALL.filter((s) => !!STORE_SHEET_TAB[s]).map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <a
-            href={`https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glass px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors hover:bg-[rgba(255,255,255,0.06)]"
-            style={{ color: "var(--accent)", textDecoration: "none" }}
-          >
-            ↗ Sheet
-          </a>
-        </div>
-      </div>
+      {(() => {
+        const filtered = catalog
+          .filter((p) => catalogFilter === "all" || p.store === catalogFilter)
+          .filter((p) => !catalogSearch || p.product_name.toLowerCase().includes(catalogSearch.toLowerCase()))
+        const sorted = [...filtered].sort((a, b) => {
+          const dir = catalogSort.dir === "asc" ? 1 : -1
+          if (catalogSort.key === "product_name") return dir * a.product_name.localeCompare(b.product_name)
+          if (catalogSort.key === "store") return dir * a.store.localeCompare(b.store)
+          if (catalogSort.key === "cogs_usd") return dir * ((a.cogs_usd ?? 0) - (b.cogs_usd ?? 0))
+          if (catalogSort.key === "units_sold") return dir * (a.units_sold - b.units_sold)
+          if (catalogSort.key === "sales_revenue") return dir * (a.sales_revenue - b.sales_revenue)
+          return 0
+        })
+        const toggleSort = (key: string) => {
+          setCatalogSort((prev) => prev.key === key ? { key, dir: prev.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" })
+        }
+        const sortArrow = (key: string) => catalogSort.key === key ? (catalogSort.dir === "desc" ? " ↓" : " ↑") : ""
 
-      {catalogLoading ? (
-        <div className="glass rounded-xl p-6 flex items-center justify-center">
-          <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
-          <span className="ml-2 text-[10px]" style={{ color: "var(--text-dim)" }}>Loading products &amp; sales...</span>
-        </div>
-      ) : catalog.length === 0 ? (
-        <div className="glass rounded-xl p-6 text-center">
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-            {STORE_SHEET_TAB[catalogStore] ? "No products found in COGS sheet." : "No COGS sheet tab for this store."}
-          </div>
-        </div>
-      ) : (
-        <div className="glass rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Product", "Category", "COGS (USD)", "Retail", "COG %", "Sold (30d)", "Revenue (30d)"].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap"
-                      style={{ color: "var(--text-dim)" }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {catalog.map((p, i) => (
-                  <tr
-                    key={i}
-                    className="transition-colors hover:bg-[rgba(255,255,255,0.02)]"
-                    style={{ borderBottom: "1px solid var(--border)" }}
-                  >
-                    <td className="px-3 py-2 max-w-[260px]">
-                      <div className="text-[11px] font-medium truncate" style={{ color: "var(--text)" }}>
-                        {p.product_name}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className="px-1.5 py-0.5 rounded text-[9px] font-medium"
-                        style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}
-                      >
-                        {p.category || "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-[11px] font-mono font-medium" style={{ color: "var(--text)" }}>
-                      ${p.cogs_usd.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2 text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
-                      {p.retail_price || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
-                      {p.cog_pct || "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {p.units_sold > 0 ? (
-                        <span className="text-[11px] font-mono font-semibold" style={{ color: "var(--green)" }}>
-                          {p.units_sold}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>0</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {p.sales_revenue > 0 ? (
-                        <span className="text-[11px] font-mono font-medium" style={{ color: "var(--green)" }}>
-                          ${p.sales_revenue.toFixed(0)}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>—</span>
-                      )}
-                    </td>
-                  </tr>
+        return (
+          <>
+            <div className="flex items-center justify-between mt-6 mb-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
+                PRODUCT CATALOG
+              </div>
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="glass px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+                style={{ color: "var(--accent)", textDecoration: "none" }}
+              >
+                ↗ COGS Sheet
+              </a>
+            </div>
+
+            {/* Stats row */}
+            {!catalogLoading && catalogMeta.total > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                {[
+                  { label: "Most Sold", value: catalogMeta.mostSold ? catalogMeta.mostSold.name : "—", sub: catalogMeta.mostSold ? `${catalogMeta.mostSold.units} units · ${catalogMeta.mostSold.store}` : "", color: "var(--green)" },
+                  { label: "Total Units (30d)", value: catalogMeta.totalUnits.toLocaleString(), sub: `${catalogMeta.withSales} products sold`, color: "var(--blue)" },
+                  { label: "Total Products", value: catalogMeta.total.toLocaleString(), sub: `${catalogMeta.withCogs} with COGS`, color: "var(--text)" },
+                  { label: "COGS Source", value: `${catalogMeta.sgCount} ShipGoods`, sub: `${catalogMeta.sheetCount} from Sheet`, color: "var(--orange)" },
+                ].map((s) => (
+                  <div key={s.label} className="glass rounded-lg px-3 py-2">
+                    <div className="text-[8px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--text-dim)" }}>{s.label}</div>
+                    <div className="text-[13px] font-bold truncate" style={{ color: s.color }}>{s.value}</div>
+                    {s.sub && <div className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>{s.sub}</div>}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+              </div>
+            )}
+
+            {/* Filter chips + search */}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {["all", ...STORES_NO_OVERALL].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setCatalogFilter(s)}
+                  className="px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all"
+                  style={{
+                    background: catalogFilter === s ? "var(--accent)" : "rgba(255,255,255,0.05)",
+                    color: catalogFilter === s ? "#fff" : "var(--text-muted)",
+                    border: `1px solid ${catalogFilter === s ? "var(--accent)" : "rgba(255,255,255,0.08)"}`,
+                  }}
+                >
+                  {s === "all" ? "All Stores" : s}
+                </button>
+              ))}
+              <div className="ml-auto relative">
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  className="pl-7 pr-2 py-1 rounded-lg text-[10px] w-48"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+                />
+                <svg className="absolute left-2 top-1/2 -translate-y-1/2" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+            </div>
+
+            {catalogLoading ? (
+              <div className="glass rounded-xl p-6 flex items-center justify-center">
+                <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+                <span className="ml-2 text-[10px]" style={{ color: "var(--text-dim)" }}>Loading all products &amp; sales...</span>
+              </div>
+            ) : sorted.length === 0 ? (
+              <div className="glass rounded-xl p-6 text-center">
+                <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+                  {catalogSearch ? "No products match your search." : "No products found."}
+                </div>
+              </div>
+            ) : (
+              <div className="glass rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        {[
+                          { key: "product_name", label: "Product" },
+                          { key: "store", label: "Store" },
+                          { key: "cogs_usd", label: "COGS (USD)" },
+                          { key: "", label: "Source" },
+                          { key: "units_sold", label: "Sold (30d)" },
+                          { key: "sales_revenue", label: "Revenue" },
+                        ].map((h) => (
+                          <th
+                            key={h.label}
+                            className={`text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider whitespace-nowrap ${h.key ? "cursor-pointer hover:text-white select-none" : ""}`}
+                            style={{ color: "var(--text-dim)" }}
+                            onClick={() => h.key && toggleSort(h.key)}
+                          >
+                            {h.label}{h.key ? sortArrow(h.key) : ""}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((p, i) => (
+                        <tr
+                          key={`${p.store}-${p.product_name}-${i}`}
+                          className="transition-colors hover:bg-[rgba(255,255,255,0.02)]"
+                          style={{ borderBottom: "1px solid var(--border)" }}
+                        >
+                          <td className="px-3 py-2 max-w-[240px]">
+                            <div className="text-[11px] font-medium truncate" style={{ color: "var(--text)" }}>
+                              {p.product_name}
+                            </div>
+                            {p.category && (
+                              <div className="text-[8px] mt-0.5" style={{ color: "var(--text-dim)" }}>{p.category}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
+                              style={{ background: `${STORE_COLORS[p.store] || "var(--accent)"}22`, color: STORE_COLORS[p.store] || "var(--accent)" }}
+                            >
+                              {p.store}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-[11px] font-mono font-medium" style={{ color: p.cogs_usd !== null ? "var(--text)" : "var(--text-dim)" }}>
+                            {p.cogs_usd !== null ? `$${p.cogs_usd.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[8px] font-semibold uppercase"
+                              style={{
+                                background: p.cogs_source === "shipgoods" ? "rgba(99,102,241,0.15)" : p.cogs_source === "sheet" ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.03)",
+                                color: p.cogs_source === "shipgoods" ? "var(--accent)" : p.cogs_source === "sheet" ? "var(--orange)" : "var(--text-dim)",
+                              }}
+                            >
+                              {p.cogs_source === "shipgoods" ? "SG" : p.cogs_source === "sheet" ? "Sheet" : "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {p.units_sold > 0 ? (
+                              <span className="text-[11px] font-mono font-semibold" style={{ color: "var(--green)" }}>
+                                {p.units_sold}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>0</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {p.sales_revenue > 0 ? (
+                              <span className="text-[11px] font-mono font-medium" style={{ color: "var(--green)" }}>
+                                ${p.sales_revenue.toFixed(0)}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono" style={{ color: "var(--text-dim)" }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-3 py-2 text-[9px] font-mono" style={{ color: "var(--text-dim)", borderTop: "1px solid var(--border)" }}>
+                  {sorted.length} products shown · COGS priority: ShipGoods → Sheet
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
     </div>
   )
 }
