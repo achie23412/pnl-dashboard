@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES } from "@/lib/constants"
 
+export const maxDuration = 60
+
 interface ShopifyLineItem {
   title: string
   quantity: number
@@ -115,7 +117,7 @@ async function fetchShipgoodsCogs(): Promise<Map<string, { avgCogs: number; tota
   const today = new Date().toISOString().slice(0, 10)
 
   let page = 1
-  const maxPages = 10
+  const maxPages = 3
 
   while (page <= maxPages) {
     const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
@@ -164,10 +166,13 @@ async function fetchShopifySales(domain: string, token: string): Promise<Map<str
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
   let url: string | null = `https://${domain}/admin/api/2024-10/orders.json?status=any&created_at_min=${thirtyDaysAgo}T00:00:00Z&limit=250&fields=id,created_at,line_items,cancelled_at,financial_status`
+  let pages = 0
 
-  while (url) {
+  while (url && pages < 5) {
+    pages++
     const res: Response = await fetch(url, {
       headers: { "X-Shopify-Access-Token": token },
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!res.ok) break
@@ -390,8 +395,12 @@ export async function GET(req: Request) {
 
   if (store === "all") {
     const storesWithData = Object.keys(SHOPIFY_STORES)
-    const results = await Promise.all(storesWithData.map((s) => buildStoreProducts(s, sgCogs)))
-    allProducts = results.flat()
+    const results = await Promise.allSettled(storesWithData.map((s) => buildStoreProducts(s, sgCogs)))
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === "fulfilled") {
+        allProducts = allProducts.concat((results[i] as PromiseFulfilledResult<CatalogProduct[]>).value)
+      }
+    }
   } else {
     allProducts = await buildStoreProducts(store, sgCogs)
   }
