@@ -339,7 +339,7 @@ export default function Dashboard() {
     <main className="min-h-screen p-6 md:p-8 lg:p-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text)" }}>Command Center</h1>
+          <h1 className="text-[18px] font-bold tracking-tight" style={{ color: "var(--text)" }}>Main Hub</h1>
           <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
             {lastRefresh
               ? `Last refresh: ${new Date(lastRefresh).toLocaleString()}`

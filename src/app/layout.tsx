@@ -3,7 +3,7 @@ import "./globals.css"
 import { NavBar } from "@/components/NavBar"
 
 export const metadata: Metadata = {
-  title: "PNL — Command Center",
+  title: "PNL — Main Hub",
   description: "E-commerce Profit & Loss Dashboard",
 }
 

@@ -231,7 +231,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "HOME",
     items: [
-      { href: "/", label: "Daily Briefing", icon: <BriefingIcon /> },
+      { href: "/", label: "Main Hub", icon: <BriefingIcon /> },
       { href: "/daily-report", label: "Daily Report", icon: <ReportIcon /> },
       { href: "/calendar", label: "Calendar", icon: <CalendarIcon /> },
     ],
