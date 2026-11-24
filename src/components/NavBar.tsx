@@ -1,8 +1,20 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 
-function DashboardIcon() {
+function Icon({ d, size = 14 }: { d: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  )
+}
+
+function HomeIcon() {
+  return <Icon d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" />
+}
+function BriefingIcon() {
   return (
     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="7" height="9" rx="1" />
@@ -12,52 +24,37 @@ function DashboardIcon() {
     </svg>
   )
 }
-
-function RefundIcon() {
+function ReportIcon() {
+  return <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" />
+}
+function CalendarIcon() {
   return (
     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="1 4 1 10 7 10" />
-      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   )
 }
-
-function ResearchIcon() {
+function RulesIcon() {
+  return <Icon d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z" />
+}
+function PerfIcon() {
+  return <Icon d="M22 12h-4l-3 9L9 3l-3 9H2" />
+}
+function ProductsIcon() {
   return (
     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
     </svg>
   )
 }
-
-function KeyIcon() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 7V4h16v3" />
-      <path d="M9 20h6" />
-      <path d="M12 4v16" />
-    </svg>
-  )
+function PriceIcon() {
+  return <Icon d="M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
 }
-
-function SparkleIcon() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
-    </svg>
-  )
-}
-
-function EyeIcon() {
-  return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-}
-
 function ImportIcon() {
   return (
     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -67,45 +64,271 @@ function ImportIcon() {
     </svg>
   )
 }
+function ListIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  )
+}
+function AlertIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  )
+}
+function ScannerIcon() {
+  return <Icon d="M2 7l4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7 M4 12V7h16v5 M12 22V7 M2 12h20" />
+}
+function SeasonIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  )
+}
+function CompetitorIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+function PLIcon() {
+  return <Icon d="M12 20V10 M18 20V4 M6 20v-4" />
+}
+function RefundReportIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  )
+}
+function CashflowIcon() {
+  return <Icon d="M2 17l10 5 10-5 M2 12l10 5 10-5 M12 2L2 7l10 5 10-5-10-5z" />
+}
+function InvoiceIcon() {
+  return <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M12 18v-6 M9 15h6" />
+}
+function SupplierCostIcon() {
+  return <Icon d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01" />
+}
+function InboxIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  )
+}
+function RefundCSIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  )
+}
+function StoreCreditIcon() {
+  return <Icon d="M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M1 10h22" />
+}
+function ReportsIcon() {
+  return <Icon d="M18 20V10 M12 20V4 M6 20v-4" />
+}
+function QualityIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  )
+}
+function RiskyIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+function PriceDeductionIcon() {
+  return <Icon d="M7 20l4-16m2 16l4-16 M3 8h18 M3 16h18" />
+}
+function OrderIssueIcon() {
+  return <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+}
+function SupplierCaseIcon() {
+  return <Icon d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+}
+function ShipmentIcon() {
+  return <Icon d="M1 3h15v13H1z M16 8h4l3 3v5h-7V8z M5.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z M18.5 21a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" />
+}
+function FulfillmentRiskIcon() {
+  return <Icon d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01" />
+}
+function DisputeIcon() {
+  return <Icon d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M12 2a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2 2 2 0 0 0 2-2v0a2 2 0 0 0-2-2z" />
+}
+function TeamIcon() {
+  return <Icon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" />
+}
+function WorkflowIcon() {
+  return <Icon d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 6v6l4 2" />
+}
+function KeywordIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7V4h16v3" />
+      <path d="M9 20h6" />
+      <path d="M12 4v16" />
+    </svg>
+  )
+}
+function SparkleIcon() {
+  return <Icon d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
+}
+function ResearchIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  )
+}
+
+interface NavItem {
+  href: string
+  label: string
+  icon: React.ReactNode
+  badge?: number
+}
 
 interface NavSection {
   label: string
-  items: { href: string; label: string; icon: React.ReactNode }[]
+  items: NavItem[]
+  collapsible?: boolean
 }
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Overview",
+    label: "HOME",
     items: [
-      { href: "/", label: "Command Center", icon: <DashboardIcon /> },
+      { href: "/", label: "Daily Briefing", icon: <BriefingIcon /> },
+      { href: "/daily-report", label: "Daily Report", icon: <ReportIcon /> },
+      { href: "/calendar", label: "Calendar", icon: <CalendarIcon /> },
     ],
   },
   {
-    label: "Finance",
+    label: "FRONT END",
     items: [
-      { href: "/refunds", label: "Refunds", icon: <RefundIcon /> },
+      { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
+      { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
+      { href: "/products", label: "Products", icon: <ProductsIcon /> },
+      { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
+      { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
+      { href: "/listings", label: "Listings", icon: <ListIcon /> },
+      { href: "/product-alerts", label: "Product Alerts", icon: <AlertIcon /> },
+      { href: "/gmc-scanner", label: "GMC Pre-Launch Scanner", icon: <ScannerIcon /> },
+      { href: "/season-board", label: "Season Board", icon: <SeasonIcon /> },
+      { href: "/competitors", label: "Competitor Tracker", icon: <CompetitorIcon /> },
     ],
   },
   {
-    label: "Research",
+    label: "FINANCE",
     items: [
-      { href: "/keywords", label: "Keywords", icon: <KeyIcon /> },
-      { href: "/keyword-maker", label: "Keyword Maker", icon: <SparkleIcon /> },
-      { href: "/competitors", label: "Competitors", icon: <EyeIcon /> },
+      { href: "/profit-loss", label: "Profit & Loss", icon: <PLIcon /> },
+      { href: "/refund-report", label: "Refund Report", icon: <RefundReportIcon /> },
+      { href: "/cashflow", label: "Cashflow & Balance", icon: <CashflowIcon /> },
+      { href: "/cogs-invoices", label: "COGS Invoices", icon: <InvoiceIcon /> },
+      { href: "/supplier-costs", label: "Supplier Costs", icon: <SupplierCostIcon /> },
     ],
   },
   {
-    label: "Tools",
+    label: "CUSTOMER SERVICE",
     items: [
-      { href: "/research", label: "Product ROAS Sheet", icon: <ResearchIcon /> },
-      { href: "/import", label: "Import", icon: <ImportIcon /> },
+      { href: "/inbox-queue", label: "Inbox Queue", icon: <InboxIcon /> },
+      { href: "/refunds", label: "Refunds", icon: <RefundCSIcon /> },
+      { href: "/store-credit", label: "Store Credit", icon: <StoreCreditIcon /> },
+      { href: "/cs-reports", label: "Reports", icon: <ReportsIcon /> },
+      { href: "/quality-checks", label: "Quality Checks", icon: <QualityIcon /> },
+      { href: "/risky-products", label: "Risky Products", icon: <RiskyIcon /> },
+      { href: "/price-deductions", label: "Price Deductions", icon: <PriceDeductionIcon /> },
+    ],
+  },
+  {
+    label: "SUPPLY CHAIN",
+    items: [
+      { href: "/order-issues", label: "Order Issues", icon: <OrderIssueIcon /> },
+      { href: "/supplier-cases", label: "Supplier Cases", icon: <SupplierCaseIcon /> },
+      { href: "/shipments", label: "Shipments", icon: <ShipmentIcon /> },
+      { href: "/fulfillment-risks", label: "Fulfillment Risks", icon: <FulfillmentRiskIcon /> },
+    ],
+  },
+  {
+    label: "DISPUTES & CHARGEBACKS",
+    items: [
+      { href: "/disputes", label: "Disputes / Chargebacks", icon: <DisputeIcon /> },
+    ],
+  },
+  {
+    label: "",
+    items: [
+      { href: "/team-hub", label: "Team Hub", icon: <TeamIcon /> },
+      { href: "/workflows", label: "Workflows", icon: <WorkflowIcon /> },
     ],
   },
 ]
 
+function StoreSelector() {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 mx-2.5 rounded-lg cursor-pointer"
+      style={{
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <div
+        className="w-5 h-5 rounded flex items-center justify-center text-[8px] font-bold"
+        style={{ background: "var(--accent)", color: "#fff" }}
+      >
+        All
+      </div>
+      <div>
+        <div className="text-[10px] font-medium" style={{ color: "var(--text)" }}>All stores</div>
+        <div className="text-[8px]" style={{ color: "var(--text-dim)" }}>5 stores · 48 products · 3 live</div>
+      </div>
+    </div>
+  )
+}
+
 export function NavBar() {
   const pathname = usePathname()
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
   if (pathname === "/login") return null
+
+  const toggleSection = (label: string) => {
+    setCollapsed((prev) => ({ ...prev, [label]: !prev[label] }))
+  }
 
   return (
     <aside
@@ -123,49 +346,84 @@ export function NavBar() {
           className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold"
           style={{ background: "linear-gradient(135deg, #4E6AA7, #6366f1)", color: "#fff" }}
         >
-          P
+          D
         </div>
         <div>
-          <div className="text-[12px] font-bold tracking-tight" style={{ color: "var(--text)" }}>PNL</div>
-          <div className="text-[8px] uppercase tracking-widest" style={{ color: "var(--text-dim)" }}>Dashboard</div>
+          <div className="text-[12px] font-bold tracking-tight" style={{ color: "var(--text)" }}>Dashboard</div>
+          <div className="text-[8px] uppercase tracking-widest" style={{ color: "var(--text-dim)" }}>Operations</div>
         </div>
       </div>
 
       <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
+      {/* Store selector */}
+      <div className="py-2">
+        <StoreSelector />
+      </div>
+
+      <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+
       {/* Nav sections */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+      <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}>
         {NAV_SECTIONS.map((section) => (
-          <div key={section.label} className="mb-3">
-            <div
-              className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-1"
-              style={{ color: "var(--text-dim)" }}
-            >
-              {section.label}
-            </div>
-            {section.items.map((item) => {
-              const active = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all mb-px relative overflow-hidden"
-                  style={{
-                    background: active ? "rgba(255,255,255,0.07)" : "transparent",
-                    color: active ? "#fff" : "var(--text-muted)",
-                  }}
-                >
-                  {active && (
-                    <div
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-3 rounded-full"
-                      style={{ background: "#6366f1" }}
-                    />
-                  )}
-                  <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
-                  {item.label}
-                </Link>
-              )
-            })}
+          <div key={section.label || "bottom"}>
+            {section.label && (
+              <div
+                className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-0.5 mt-2 cursor-pointer select-none flex items-center justify-between"
+                style={{ color: "var(--text-dim)" }}
+                onClick={() => section.label && toggleSection(section.label)}
+              >
+                {section.label}
+                {section.items.length > 3 && (
+                  <svg
+                    width={8}
+                    height={8}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    style={{
+                      transform: collapsed[section.label] ? "rotate(-90deg)" : "rotate(0deg)",
+                      transition: "transform 0.15s",
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
+              </div>
+            )}
+            {!collapsed[section.label] &&
+              section.items.map((item) => {
+                const active = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all mb-px relative overflow-hidden"
+                    style={{
+                      background: active ? "rgba(255,255,255,0.07)" : "transparent",
+                      color: active ? "#fff" : "var(--text-muted)",
+                    }}
+                  >
+                    {active && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-3 rounded-full"
+                        style={{ background: "#6366f1" }}
+                      />
+                    )}
+                    <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span
+                        className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                        style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
           </div>
         ))}
       </nav>
