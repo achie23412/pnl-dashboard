@@ -140,7 +140,9 @@ export async function GET(req: Request) {
     let matchedSales = sales.get(p.product_name)
 
     if (!matchedSales) {
-      for (const [title, s] of sales.entries()) {
+      const entries = Array.from(sales.entries())
+      for (let i = 0; i < entries.length; i++) {
+        const [title, s] = entries[i]
         if (title.toLowerCase().trim() === normalizedName) {
           matchedSales = s
           break
