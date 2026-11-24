@@ -387,9 +387,14 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3" style={{ color: "var(--text-dim)" }}>
-          <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.2" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
-          Loading dashboard data...
+        <div className="flex flex-col items-center justify-center py-24 gap-3">
+          <div className="relative w-8 h-8">
+            <div
+              className="absolute inset-0 rounded-full animate-spin"
+              style={{ border: "2px solid rgba(255,255,255,0.06)", borderTopColor: "var(--accent)" }}
+            />
+          </div>
+          <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Loading</span>
         </div>
       ) : (
         <>
@@ -398,12 +403,15 @@ export default function Dashboard() {
               <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }}>Transaction fees (3.5%)</span>
               <button
                 onClick={() => setIncludeTxnFees(!includeTxnFees)}
-                className="relative w-9 h-5 rounded-full transition-colors"
-                style={{ background: includeTxnFees ? "rgba(59,130,246,0.5)" : "rgba(255,255,255,0.1)" }}
+                className="relative w-7 h-4 rounded-full transition-all"
+                style={{ background: includeTxnFees ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.08)" }}
               >
                 <span
-                  className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform"
-                  style={{ background: "#fff", transform: includeTxnFees ? "translateX(16px)" : "translateX(0)" }}
+                  className="absolute top-[2px] left-[2px] w-3 h-3 rounded-full transition-transform"
+                  style={{
+                    background: includeTxnFees ? "#c7d2fe" : "rgba(255,255,255,0.3)",
+                    transform: includeTxnFees ? "translateX(12px)" : "translateX(0)",
+                  }}
                 />
               </button>
             </div>
