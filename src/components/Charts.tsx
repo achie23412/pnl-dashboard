@@ -7,8 +7,15 @@ import type { DailyPnL, SpendRow, RevenueRow } from "@/lib/types"
 import { STORE_COLORS, CHANNEL_COLORS } from "@/lib/constants"
 
 const tooltipStyle = {
-  contentStyle: { background: "#1a1d27", border: "1px solid #2a2e3a", borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: "#8b8fa3" },
+  contentStyle: {
+    background: "rgba(13,18,36,0.95)",
+    backdropFilter: "blur(20px)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 10,
+    fontSize: 12,
+    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+  },
+  labelStyle: { color: "#6b7394" },
 }
 
 function fmtDate(d: string) {
@@ -143,11 +150,8 @@ export function SpendByAccountChart({ data }: { data: SpendRow[] }) {
 
 function ChartBox({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-xl p-5 border"
-      style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
-    >
-      <div className="text-sm font-medium mb-4" style={{ color: "var(--text-muted)" }}>
+    <div className="glass rounded-xl p-5">
+      <div className="text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ color: "var(--text-dim)" }}>
         {title}
       </div>
       {children}

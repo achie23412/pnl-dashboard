@@ -10,19 +10,19 @@ export function StoreTabs({
   onChange: (s: StoreName) => void
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto pb-1">
+    <div className="flex gap-1.5 overflow-x-auto pb-1">
       {STORES.map((s) => {
         const isActive = s === active
-        const color = s === "Overall" ? "#4E6AA7" : STORE_COLORS[s] || "#666"
+        const color = s === "Overall" ? "#3b82f6" : STORE_COLORS[s] || "#666"
         return (
           <button
             key={s}
             onClick={() => onChange(s)}
-            className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all"
+            className="px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all"
             style={{
-              background: isActive ? color : "var(--bg-card)",
+              background: isActive ? `${color}20` : "transparent",
               color: isActive ? "#fff" : "var(--text-muted)",
-              border: `1px solid ${isActive ? color : "var(--border)"}`,
+              border: `1px solid ${isActive ? `${color}40` : "var(--border)"}`,
             }}
           >
             {s}

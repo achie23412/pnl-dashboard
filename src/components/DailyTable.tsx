@@ -25,21 +25,19 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
   if (data.length === 0) return null
 
   return (
-    <div
-      className="rounded-xl border overflow-x-auto"
-      style={{ background: "var(--bg-card)", borderColor: "var(--border)" }}
-    >
-      <table className="w-full text-sm">
+    <div className="glass rounded-xl overflow-x-auto">
+      <table className="w-full text-[13px]">
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border)" }}>
-            <th className="text-left px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Date</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Revenue</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Orders</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Ad Spend</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>ROAS</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Refund Rate</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>COGS</th>
-            <th className="text-right px-4 py-3 text-xs font-medium" style={{ color: "var(--text-muted)" }}>Net Profit</th>
+            {["Date", "Revenue", "Orders", "Ad Spend", "ROAS", "Refund Rate", "COGS", "Net Profit"].map((h, i) => (
+              <th
+                key={h}
+                className={`${i === 0 ? "text-left" : "text-right"} px-4 py-3 text-[10px] font-semibold uppercase tracking-wider`}
+                style={{ color: "var(--text-dim)" }}
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -48,24 +46,25 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
             return (
               <tr
                 key={row.date}
+                className="transition-colors hover:bg-[rgba(255,255,255,0.03)]"
                 style={{
                   borderBottom: "1px solid var(--border)",
-                  opacity: row.isToday ? 0.6 : 1,
+                  opacity: row.isToday ? 0.5 : 1,
                 }}
               >
                 <td className="px-4 py-2.5">
                   <span style={{ color: "var(--text)" }}>{fmtDate(row.date)}</span>
                   {row.isToday && (
                     <span
-                      className="ml-2 px-1.5 py-0.5 rounded text-[10px]"
-                      style={{ background: "var(--orange)22", color: "var(--orange)" }}
+                      className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-medium uppercase"
+                      style={{ background: "rgba(212,144,58,0.15)", color: "var(--orange)" }}
                     >
-                      Provisional
+                      Live
                     </span>
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>€{fmt(row.revenue)}</td>
-                <td className="px-4 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{row.orders}</td>
+                <td className="px-4 py-2.5 text-right font-mono" style={{ color: "var(--text-muted)" }}>{row.orders}</td>
                 <td className="px-4 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>€{fmt(row.spend)}</td>
                 <td className="px-4 py-2.5 text-right font-mono"><RoasCell roas={row.roas} /></td>
                 <td className="px-4 py-2.5 text-right font-mono"><RefundCell rate={row.refundRate} /></td>

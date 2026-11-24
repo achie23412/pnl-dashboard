@@ -336,23 +336,23 @@ export default function Dashboard() {
   }, [dailyBriefing])
 
   return (
-    <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
+    <main className="min-h-screen p-6 md:p-8 lg:p-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-xl font-bold">Command Center</h1>
-          <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+          <h1 className="text-2xl font-semibold tracking-tight">Command Center</h1>
+          <div className="text-[12px] mt-1" style={{ color: "var(--text-dim)" }}>
             {lastRefresh
               ? `Last refresh: ${new Date(lastRefresh).toLocaleString()}`
               : "Start every day here."}
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+          <div className="glass flex rounded-lg overflow-hidden">
             <button
               onClick={() => setView("briefing")}
-              className="px-3 py-1.5 text-xs font-medium"
+              className="px-4 py-1.5 text-[12px] font-medium transition-colors"
               style={{
-                background: view === "briefing" ? "#4E6AA7" : "var(--bg-card)",
+                background: view === "briefing" ? "rgba(59,130,246,0.2)" : "transparent",
                 color: view === "briefing" ? "#fff" : "var(--text-muted)",
               }}
             >
@@ -360,9 +360,9 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setView("details")}
-              className="px-3 py-1.5 text-xs font-medium"
+              className="px-4 py-1.5 text-[12px] font-medium transition-colors"
               style={{
-                background: view === "details" ? "#4E6AA7" : "var(--bg-card)",
+                background: view === "details" ? "rgba(59,130,246,0.2)" : "transparent",
                 color: view === "details" ? "#fff" : "var(--text-muted)",
               }}
             >
@@ -387,18 +387,19 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>
+        <div className="flex items-center justify-center py-20 gap-3" style={{ color: "var(--text-dim)" }}>
+          <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.2" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
           Loading dashboard data...
         </div>
       ) : (
         <>
           <div className="mb-6">
             <div className="flex items-center justify-end gap-2 mb-3">
-              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Transaction fees (3.5%)</span>
+              <span className="text-[11px]" style={{ color: "var(--text-dim)" }}>Transaction fees (3.5%)</span>
               <button
                 onClick={() => setIncludeTxnFees(!includeTxnFees)}
                 className="relative w-9 h-5 rounded-full transition-colors"
-                style={{ background: includeTxnFees ? "#4E6AA7" : "var(--border)" }}
+                style={{ background: includeTxnFees ? "rgba(59,130,246,0.5)" : "rgba(255,255,255,0.1)" }}
               >
                 <span
                   className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform"
@@ -411,7 +412,7 @@ export default function Dashboard() {
 
           {store === "Overall" && storeKPIs.length > 0 && (
             <div className="mb-6">
-              <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+              <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-dim)" }}>
                 Compare stores
               </div>
               <StoreComparison stores={storeKPIs} />
@@ -420,7 +421,7 @@ export default function Dashboard() {
 
           {view === "briefing" ? (
             <div className="mb-6">
-              <div className="text-sm font-medium mb-3" style={{ color: "var(--text-muted)" }}>
+              <div className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-dim)" }}>
                 Per-day breakdown
               </div>
               <DailyTable data={dailyBriefing} />
