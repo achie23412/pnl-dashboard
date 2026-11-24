@@ -21,6 +21,7 @@ interface Competitor {
   products_count: number | null
   est_monthly_revenue: number | null
   est_units_sold: number | null
+  tp_reviews: number | null
   status: "watching" | "scaling" | "dead" | "new"
   notes: string
   last_checked: string
@@ -176,6 +177,8 @@ export default function CompetitorsPage() {
           <option value="products_count:asc">Products: Least → Most</option>
           <option value="est_monthly_revenue:desc">Revenue: High → Low</option>
           <option value="est_monthly_revenue:asc">Revenue: Low → High</option>
+          <option value="tp_reviews:desc">TP Reviews: Most → Least</option>
+          <option value="tp_reviews:asc">TP Reviews: Least → Most</option>
         </select>
         {(statusFilter !== "all" || countryFilter !== "all" || nicheFilter !== "all" || search) && (
           <button onClick={() => { setStatusFilter("all"); setCountryFilter("all"); setNicheFilter("all"); setSearch("") }}
@@ -242,6 +245,7 @@ export default function CompetitorsPage() {
                 <th className="text-center px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Markets</th>
                 <ThSort label="Active Ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="Products" field="products_count" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="TP Reviews" field="tp_reviews" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className="text-right px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Est. Revenue</th>
                 <th className="text-center px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Status</th>
                 <th className="px-2 py-3" />
@@ -272,6 +276,19 @@ export default function CompetitorsPage() {
                   </td>
                   <td className="px-4 py-3 text-right font-mono">{c.active_ads != null ? fmt(c.active_ads) : "—"}</td>
                   <td className="px-4 py-3 text-right font-mono">{fmt(c.products_count)}</td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {c.tp_reviews != null ? (
+                      <a
+                        href={`https://www.trustpilot.com/review/${c.domain}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline"
+                        style={{ color: "#00b67a" }}
+                      >
+                        {fmt(c.tp_reviews)}
+                      </a>
+                    ) : "—"}
+                  </td>
                   <td className="px-4 py-3 text-right font-mono">{fmtRev(c.est_monthly_revenue)}</td>
                   <td className="px-4 py-3 text-center">
                     <select value={c.status} onChange={(e) => c.id && updateStatus(c.id, e.target.value as Competitor["status"])}
