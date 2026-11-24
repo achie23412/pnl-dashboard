@@ -180,7 +180,7 @@ const emptyTest: ProductTest = {
   yesterday_spend: 0,
   yesterday_revenue: 0,
   yesterday_orders: 0,
-  cogs_per_order: 0,
+  cogs_per_order: AVG_COGS_PER_ORDER[STORES_NO_OVERALL[0]] || 0,
   notes: "",
   kill_reason: null,
 }
