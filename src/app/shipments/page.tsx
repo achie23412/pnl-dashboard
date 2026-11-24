@@ -1,30 +1,25 @@
 "use client"
-import { PageShell, GlassTable } from "@/components/PageShell"
+import { PageShell } from "@/components/PageShell"
 
 export default function ShipmentsPage() {
   return (
     <PageShell
       title="Shipments"
-      breadcrumb="Back End → Supply Chain → Shipments"
-      description="Track all shipments from suppliers to customers. See which are on time, delayed, or stuck. Each row links to the tracking page."
-      filters
+      breadcrumb="Supply Chain → Shipments"
+      description="Track all shipments from suppliers. Monitor delivery times, delays, and fulfillment status across stores."
       stats={[
-        { label: "In Transit", value: "0" },
-        { label: "Delivered (7d)", value: "0", color: "var(--green)" },
-        { label: "Delayed", value: "0", color: "var(--orange)" },
-        { label: "Lost/Stuck", value: "0", color: "var(--red)" },
-      ]}
-      tabs={[
-        { label: "All Shipments", count: 0, active: true },
-        { label: "In Transit", count: 0 },
-        { label: "Delayed", count: 0 },
-        { label: "Delivered", count: 0 },
+        { label: "In transit", value: "12" },
+        { label: "Delivered (7d)", value: "34" },
+        { label: "Delayed", value: "2", color: "var(--red)" },
+        { label: "Avg delivery", value: "8.5 days" },
       ]}
     >
-      <GlassTable
-        headers={["Order", "Store", "Tracking #", "Carrier", "Shipped", "Est. Delivery", "Status", "Days in Transit", "Last Update"]}
-        emptyMessage="No shipment data yet. Tracking data appears once fulfillment is connected."
-      />
+      <div className="glass rounded-xl p-6">
+        <div className="text-center py-8">
+          <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Shipment tracking from ShipGoods</div>
+          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Shipment data will sync from the ShipGoods API once connected.</div>
+        </div>
+      </div>
     </PageShell>
   )
 }

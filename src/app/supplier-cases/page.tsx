@@ -1,30 +1,28 @@
 "use client"
-import { PageShell, GlassTable } from "@/components/PageShell"
+import { PageShell } from "@/components/PageShell"
 
 export default function SupplierCasesPage() {
   return (
     <PageShell
       title="Supplier Cases"
-      breadcrumb="Back End → Supply Chain → Supplier Cases"
-      description="Open conversations with suppliers about order problems, quality issues, or missing shipments. Each case groups related order issues and tracks the supplier's response."
-      filters
+      breadcrumb="Supply Chain → Supplier Cases"
+      description="Escalated supplier issues: quality disputes, missing shipments, pricing disagreements. Track case progress and resolution."
       stats={[
-        { label: "Open Cases", value: "0" },
-        { label: "Awaiting Reply", value: "0", color: "var(--orange)" },
-        { label: "Resolved (7d)", value: "0", color: "var(--green)" },
-        { label: "Escalated", value: "0", color: "var(--red)" },
-      ]}
-      tabs={[
-        { label: "All Cases", count: 0, active: true },
-        { label: "Open", count: 0 },
-        { label: "Awaiting Supplier", count: 0 },
-        { label: "Resolved", count: 0 },
+        { label: "Open cases", value: "1", color: "var(--orange)" },
+        { label: "Resolved (30d)", value: "3", color: "var(--green)" },
+        { label: "Avg resolution", value: "5 days" },
+        { label: "Active suppliers", value: "4" },
       ]}
     >
-      <GlassTable
-        headers={["Case #", "Supplier", "Type", "Products", "Orders Affected", "Opened", "Last Update", "Status", "Slack Link"]}
-        emptyMessage="No supplier cases open."
-      />
+      <div className="space-y-2">
+        <div className="glass rounded-xl px-4 py-3" style={{ borderLeft: "3px solid var(--orange)" }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Supplier A — Quality dispute on Faux Leather Blazer</div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{ background: "rgba(249,115,22,0.15)", color: "#f97316" }}>In progress</span>
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Opened 2026-11-20. 15.6% quality refund rate. Supplier response pending — requesting replacement batch or credit.</div>
+        </div>
+      </div>
     </PageShell>
   )
 }

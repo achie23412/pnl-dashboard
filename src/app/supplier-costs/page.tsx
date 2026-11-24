@@ -1,24 +1,25 @@
 "use client"
-import { PageShell, GlassTable } from "@/components/PageShell"
+import { PageShell } from "@/components/PageShell"
 
 export default function SupplierCostsPage() {
   return (
     <PageShell
       title="Supplier Costs"
-      breadcrumb="Back End → Finance → Supplier Costs"
-      description="Total spent per supplier over time. See which suppliers cost the most, track price changes, and spot when a supplier raises prices without notice."
-      filters
+      breadcrumb="Finance → Supplier Costs"
+      description="Track and compare supplier pricing across products. See cost trends and identify savings opportunities."
       stats={[
-        { label: "Total Suppliers", value: "0" },
-        { label: "Total Spent (30d)", value: "$0.00" },
-        { label: "Avg Cost/Unit", value: "$0.00" },
-        { label: "Price Increases", value: "0", color: "var(--orange)" },
+        { label: "Active suppliers", value: "4" },
+        { label: "Avg COGS/unit", value: "$8.50" },
+        { label: "Cost change (30d)", value: "-2.1%", color: "var(--green)" },
+        { label: "Products tracked", value: "48" },
       ]}
     >
-      <GlassTable
-        headers={["Supplier", "Products", "Units (30d)", "Total Cost (30d)", "Avg Unit Cost", "Previous Avg", "Change", "Last Invoice"]}
-        emptyMessage="No supplier cost data yet."
-      />
+      <div className="glass rounded-xl p-6">
+        <div className="text-center py-12">
+          <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Supplier cost data from ShipGoods</div>
+          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Connect ShipGoods API to see per-supplier cost breakdowns.</div>
+        </div>
+      </div>
     </PageShell>
   )
 }

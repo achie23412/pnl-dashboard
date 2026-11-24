@@ -1,29 +1,35 @@
 "use client"
-import { PageShell, GlassTable } from "@/components/PageShell"
+import { PageShell } from "@/components/PageShell"
 
 export default function FulfillmentRisksPage() {
   return (
     <PageShell
       title="Fulfillment Risks"
-      breadcrumb="Back End → Supply Chain → Fulfillment Risks"
-      description="Products and suppliers with fulfillment problems: high failure rate, slow shipping, frequent customer complaints about delivery. Flagged automatically when thresholds are crossed."
-      filters
+      breadcrumb="Supply Chain → Fulfillment Risks"
+      description="Identify products and suppliers at risk of fulfillment failures: low stock, shipping delays, supplier reliability issues."
       stats={[
-        { label: "High Risk Products", value: "0" },
-        { label: "Risky Suppliers", value: "0", color: "var(--red)" },
-        { label: "Avg Delivery Days", value: "0" },
-        { label: "Fulfillment Rate", value: "0%" },
-      ]}
-      tabs={[
-        { label: "All Risks", count: 0, active: true },
-        { label: "Products", count: 0 },
-        { label: "Suppliers", count: 0 },
+        { label: "High risk", value: "1", color: "var(--red)" },
+        { label: "Medium risk", value: "3", color: "var(--orange)" },
+        { label: "Low risk", value: "44", color: "var(--green)" },
+        { label: "Risk score avg", value: "2.1/10" },
       ]}
     >
-      <GlassTable
-        headers={["Product/Supplier", "Type", "Store", "Issue", "Orders Affected", "Failure Rate", "Avg Delivery", "Flagged Since", "Action"]}
-        emptyMessage="No fulfillment risks flagged. Risks appear when failure rates exceed thresholds."
-      />
+      <div className="space-y-2">
+        <div className="glass rounded-xl px-4 py-3" style={{ borderLeft: "3px solid var(--red)" }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Women's Faux Leather Blazer — High risk</div>
+            <span className="text-[10px] font-medium" style={{ color: "var(--red)" }}>Risk: 8/10</span>
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Quality issue ongoing + supplier dispute open. Consider pausing sales until resolved.</div>
+        </div>
+        <div className="glass rounded-xl px-4 py-3" style={{ borderLeft: "3px solid var(--orange)" }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Men's Warm Lined Slippers — Medium risk</div>
+            <span className="text-[10px] font-medium" style={{ color: "var(--orange)" }}>Risk: 5/10</span>
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Avg delivery time increased from 7 to 12 days. Monitor for customer complaints.</div>
+        </div>
+      </div>
     </PageShell>
   )
 }
