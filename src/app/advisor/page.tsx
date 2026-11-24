@@ -17,36 +17,25 @@ interface Suggestion {
 
 const SUGGESTIONS: Suggestion[] = [
   {
-    id: "google-sheets-connector",
-    title: "Connect Google Sheets on claude.ai",
+    id: "shipgoods-vercel-token",
+    title: "Verify SHIPGOODS_TOKEN is set in Vercel env vars",
     description:
-      "The daily Profit Sheet auto-fill routine is live but cannot write to the sheet because Google Sheets is not connected as an MCP connector. The routine posts data in chat instead.",
+      "The ShipGoods COGS fetch was fixed (API response parsing bug). It now works correctly, but the Vercel cron needs SHIPGOODS_TOKEN in its environment to call the ShipGoods API. Without it, the cron will log 'SHIPGOODS_TOKEN not set'.",
     priority: "high",
-    category: "automation",
-    action: "Go to claude.ai/customize/connectors and connect Google Sheets.",
-    impact: "Enables fully automatic daily Profit Sheet filling — no manual entry.",
+    category: "data",
+    action: "Go to Vercel → pnl-dashboard → Settings → Environment Variables. Check SHIPGOODS_TOKEN is set. If not, add it.",
+    impact: "Without the token, COGS stays at 0 on the live dashboard even though the code is now correct.",
     addedDate: "2026-11-25",
   },
   {
-    id: "cogs-data-empty",
-    title: "Wire ShipGoods COGS into Supabase",
+    id: "shipgoods-google-stores",
+    title: "Google stores have no ShipGoods COGS",
     description:
-      "The daily_cogs table in Supabase is empty. The dashboard and the auto-fill routine both fall back to a 30% revenue estimate for COGS. Real ShipGoods order-cost data would make profit numbers accurate.",
+      "ShipGoods only tracks LUMEGLASSES (shop 16918) and Blinky (shop 18132). Walsh & Farley, Carter & Collins, and Susan & Allen are not on ShipGoods — their COGS will remain at 0 or fall back to the per-order estimate.",
     priority: "high",
     category: "data",
-    action: "Add a ShipGoods API call to the daily cron job that pulls order costs and inserts them into daily_cogs.",
-    impact: "Accurate per-order COGS instead of a flat 30% estimate.",
-    addedDate: "2026-11-25",
-  },
-  {
-    id: "refund-tracking",
-    title: "Set up refund tracking in Supabase",
-    description:
-      "The refunds table has no recent data. Refund amounts are missing from the Profit Sheet auto-fill (column C) and from the dashboard's daily report.",
-    priority: "high",
-    category: "data",
-    action: "Poll Shopify refunds daily in the cron job, or set up a Shopify webhook for refund events.",
-    impact: "Profit numbers include actual refund deductions instead of showing zero.",
+    action: "Either add the Google stores to ShipGoods, or use the COGS launch sheet (per-product costs) as the fallback source for those 3 stores.",
+    impact: "Without this, profit for the 3 Google stores is estimated, not actual.",
     addedDate: "2026-11-25",
   },
   {
