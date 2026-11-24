@@ -62,6 +62,15 @@ export const AVG_COGS_PER_ORDER: Record<string, number> = {
   "Susan & Allen": 24.64,
 }
 
+export const COGS_SHEET_ID = "1AIROoLY9Is6y4YI-c3I9kFkd4Clm5PymCy4leGR1fYQ"
+
+export const STORE_SHEET_TAB: Record<string, string> = {
+  "Carter & Collins": "Launch Sheet - UK",
+  "Susan & Allen": "Launch Sheet - US",
+  "Walsh & Farley": "Launch Sheet - Irland",
+  Blinky: "Launch Sheet - EUROPE",
+}
+
 export const TRANSACTION_FEE_RATE: Record<string, number> = {
   LUMEGLASSES: 0.035,
   Blinky: 0.035,

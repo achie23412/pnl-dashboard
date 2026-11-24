@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
-import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER } from "@/lib/constants"
+import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
 
 const supabase = createClient(
@@ -10,6 +10,14 @@ const supabase = createClient(
 )
 
 const STORES_NO_OVERALL = STORES.filter((s) => s !== "Overall")
+
+interface CogsProduct {
+  product_name: string
+  cogs_usd: number
+  retail_price: string
+  cog_pct: string
+  category: string
+}
 
 interface KillResult {
   shouldKill: boolean
@@ -193,6 +201,25 @@ export function ProductTesting() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<ProductTest>({ ...emptyTest })
   const [editForm, setEditForm] = useState<Partial<ProductTest>>({})
+  const [cogsProducts, setCogsProducts] = useState<CogsProduct[]>([])
+  const [cogsLoading, setCogsLoading] = useState(false)
+  const hasSheetTab = !!STORE_SHEET_TAB[form.store]
+
+  async function loadCogsProducts(store: string) {
+    if (!STORE_SHEET_TAB[store]) {
+      setCogsProducts([])
+      return
+    }
+    setCogsLoading(true)
+    try {
+      const res = await fetch(`/api/cogs-lookup?store=${encodeURIComponent(store)}`)
+      const data = await res.json()
+      setCogsProducts(data.products || [])
+    } catch {
+      setCogsProducts([])
+    }
+    setCogsLoading(false)
+  }
 
   async function loadTests() {
     setLoading(true)
@@ -389,7 +416,11 @@ export function ProductTesting() {
           PRODUCT TESTS
         </div>
         <button
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={() => {
+            const next = !showAddForm
+            setShowAddForm(next)
+            if (next) loadCogsProducts(form.store)
+          }}
           className="glass px-3 py-1 rounded-lg text-[10px] font-semibold transition-colors hover:bg-[rgba(255,255,255,0.06)]"
           style={{ color: showAddForm ? "var(--red)" : "var(--accent)" }}
         >
@@ -400,17 +431,6 @@ export function ProductTesting() {
       {showAddForm && (
         <form onSubmit={handleAdd} className="glass rounded-xl p-4 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Product name</label>
-              <input
-                type="text"
-                required
-                value={form.product_name}
-                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
-                className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-              />
-            </div>
             <div>
               <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Store</label>
               <select
@@ -418,7 +438,8 @@ export function ProductTesting() {
                 onChange={(e) => {
                   const store = e.target.value
                   const cogs = AVG_COGS_PER_ORDER[store] || 0
-                  setForm({ ...form, store, cogs_per_order: cogs })
+                  setForm({ ...form, store, cogs_per_order: cogs, product_name: "" })
+                  loadCogsProducts(store)
                 }}
                 className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
@@ -427,6 +448,63 @@ export function ProductTesting() {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>
+                Product name
+                {hasSheetTab && (
+                  <a
+                    href={`https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1.5 font-normal"
+                    style={{ color: "var(--accent)", textDecoration: "none" }}
+                  >
+                    ↗ COGS Sheet
+                  </a>
+                )}
+              </label>
+              {hasSheetTab && cogsProducts.length > 0 ? (
+                <select
+                  required
+                  value={form.product_name}
+                  onChange={(e) => {
+                    const name = e.target.value
+                    if (name === "__manual__") {
+                      setForm({ ...form, product_name: "" })
+                      return
+                    }
+                    const p = cogsProducts.find((c) => c.product_name === name)
+                    setForm({
+                      ...form,
+                      product_name: name,
+                      cogs_per_order: p ? p.cogs_usd : form.cogs_per_order,
+                    })
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+                >
+                  <option value="">
+                    {cogsLoading ? "Loading products..." : `Select from sheet (${cogsProducts.length})`}
+                  </option>
+                  {cogsProducts.map((p) => (
+                    <option key={p.product_name} value={p.product_name}>
+                      {p.product_name} — ${p.cogs_usd.toFixed(2)} COGS
+                    </option>
+                  ))}
+                  <option value="__manual__">— Type manually —</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  required
+                  value={form.product_name}
+                  onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
+                  placeholder={cogsLoading ? "Loading products..." : "Enter product name"}
+                />
+              )}
             </div>
             <div>
               <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Launch date</label>
