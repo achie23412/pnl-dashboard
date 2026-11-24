@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
-import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID, SHOPIFY_STORES } from "@/lib/constants"
+import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
 
 const supabase = createClient(
