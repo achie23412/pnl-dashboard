@@ -80,3 +80,29 @@ export interface DailyBriefingRow {
   profit: number
   isToday: boolean
 }
+
+export interface ProductTest {
+  id?: number
+  created_at?: string
+  product_name: string
+  store: string
+  launch_date: string
+  status: "testing" | "killed" | "scaling" | "winner" | "paused"
+  daily_budget: number
+  total_spend: number
+  total_revenue: number
+  total_orders: number
+  total_atc: number
+  total_clicks: number
+  avg_cpc: number
+  today_spend: number
+  today_revenue: number
+  today_orders: number
+  yesterday_spend: number
+  yesterday_revenue: number
+  yesterday_orders: number
+  cogs_per_order: number
+  notes: string
+  kill_reason: string | null
+  updated_at?: string
+}
