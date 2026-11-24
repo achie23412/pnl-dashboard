@@ -227,6 +227,8 @@ interface NavSection {
   collapsible?: boolean
 }
 
+const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors"])
+
 const NAV_SECTIONS: NavSection[] = [
   {
     label: "HOME",
@@ -413,6 +415,11 @@ export function NavBar() {
                     )}
                     <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
                     <span className="truncate">{item.label}</span>
+                    {!DONE_PAGES.has(item.href) && (
+                      <span className="shrink-0 text-[7px] opacity-50" style={{ color: "var(--text-dim)" }}>
+                        (not done yet)
+                      </span>
+                    )}
                     {item.badge !== undefined && item.badge > 0 && (
                       <span
                         className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full"
