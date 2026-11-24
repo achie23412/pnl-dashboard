@@ -10,22 +10,38 @@ export function StoreTabs({
   onChange: (s: StoreName) => void
 }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1">
+    <div className="glass rounded-xl p-1.5 inline-flex gap-1 overflow-x-auto">
       {STORES.map((s) => {
         const isActive = s === active
-        const color = s === "Overall" ? "#3b82f6" : STORE_COLORS[s] || "#666"
+        const color = s === "Overall" ? "#6366f1" : STORE_COLORS[s] || "#666"
         return (
           <button
             key={s}
             onClick={() => onChange(s)}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all"
+            className="relative px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all"
             style={{
-              background: isActive ? `${color}20` : "transparent",
-              color: isActive ? "#fff" : "var(--text-muted)",
-              border: `1px solid ${isActive ? `${color}40` : "var(--border)"}`,
+              background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
+              color: isActive ? "#fff" : "var(--text-dim)",
             }}
           >
-            {s}
+            {isActive && (
+              <div
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-[2px] rounded-full"
+                style={{ background: color }}
+              />
+            )}
+            <div className="flex items-center gap-1.5">
+              {s !== "Overall" && (
+                <div
+                  className="w-1.5 h-1.5 rounded-full transition-opacity"
+                  style={{
+                    background: color,
+                    opacity: isActive ? 1 : 0.4,
+                  }}
+                />
+              )}
+              {s}
+            </div>
           </button>
         )
       })}
