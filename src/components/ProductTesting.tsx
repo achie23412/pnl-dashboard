@@ -414,56 +414,6 @@ export function ProductTesting() {
         ))}
       </div>
 
-      {/* Kill & Scale Rules Reference */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="glass rounded-xl px-3 py-2.5">
-          <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
-            KILL RULES (Simo)
-          </div>
-          <div className="space-y-1.5">
-            {[
-              { spend: "$10", rule: "CPC > $1 + 0 ATC" },
-              { spend: "$20", rule: "0 ATC" },
-              { spend: "$30", rule: "0 sales" },
-              { spend: "$60", rule: "< 2 sales" },
-            ].map((r) => (
-              <div key={r.spend} className="flex items-center gap-2">
-                <span className="text-[10px] font-mono font-semibold w-8" style={{ color: "var(--red)" }}>
-                  {r.spend}
-                </span>
-                <div className="w-1 h-1 rounded-full" style={{ background: "var(--red)", opacity: 0.5 }} />
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                  {r.rule}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="glass rounded-xl px-3 py-2.5">
-          <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
-            SCALE GATES (all 4 must pass)
-          </div>
-          <div className="space-y-1.5">
-            {[
-              "Spend > $60",
-              "Total net profit > 20%",
-              "Today net profit > 20%",
-              "Yesterday net profit > 20%",
-            ].map((g) => (
-              <div key={g} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: "rgba(52,211,153,0.3)" }} />
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                  {g}
-                </span>
-              </div>
-            ))}
-            <div className="text-[9px] mt-1" style={{ color: "var(--text-dim)" }}>
-              Pass all 4 → double budget at midnight, compare 72h
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Add Product Test */}
       <div className="flex items-center justify-between">
         <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
