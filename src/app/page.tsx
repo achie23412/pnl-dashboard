@@ -89,7 +89,7 @@ export default function Dashboard() {
   const [includeTxnFees, setIncludeTxnFees] = useState(false)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [sessions, setSessions] = useState<SessionsRow[]>([])
-  const [view, setView] = useState<"briefing" | "details">("briefing")
+  // Details always visible — no toggle needed
 
   useEffect(() => {
     async function load() {
@@ -347,28 +347,6 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="glass rounded-lg p-0.5 inline-flex gap-0.5">
-            <button
-              onClick={() => setView("briefing")}
-              className="px-3 py-1 rounded-md text-[10px] font-semibold transition-all"
-              style={{
-                background: view === "briefing" ? "rgba(255,255,255,0.08)" : "transparent",
-                color: view === "briefing" ? "#fff" : "var(--text-dim)",
-              }}
-            >
-              Briefing
-            </button>
-            <button
-              onClick={() => setView("details")}
-              className="px-3 py-1 rounded-md text-[10px] font-semibold transition-all"
-              style={{
-                background: view === "details" ? "rgba(255,255,255,0.08)" : "transparent",
-                color: view === "details" ? "#fff" : "var(--text-dim)",
-              }}
-            >
-              Details
-            </button>
-          </div>
           <DatePicker
             preset={preset}
             customFrom={customFrom}
@@ -427,36 +405,25 @@ export default function Dashboard() {
             </div>
           )}
 
-          {view === "briefing" ? (
-            <div className="mb-5">
-              <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
-                Per-day breakdown
-              </div>
-              <DailyTable data={dailyBriefing} />
+          <div className="mb-5">
+            <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
+              Per-day breakdown
             </div>
-          ) : (
-            <>
-              <div className="mb-5">
-                <DailyTrendChart data={dailyPnL} />
-              </div>
+            <DailyTable data={dailyBriefing} />
+          </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
-                <SpendByChannelChart data={filtered.spend} />
-                {store === "Overall" ? (
-                  <RevenueByStoreChart data={filtered.revenue} />
-                ) : (
-                  <SpendByAccountChart data={filtered.spend} />
-                )}
-              </div>
+          <div className="mb-5">
+            <DailyTrendChart data={dailyPnL} />
+          </div>
 
-              <div className="mb-5">
-                <div className="text-[9px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-dim)" }}>
-                  Per-day breakdown
-                </div>
-                <DailyTable data={dailyBriefing} />
-              </div>
-            </>
-          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
+            <SpendByChannelChart data={filtered.spend} />
+            {store === "Overall" ? (
+              <RevenueByStoreChart data={filtered.revenue} />
+            ) : (
+              <SpendByAccountChart data={filtered.spend} />
+            )}
+          </div>
 
           <div
             className="text-center text-[9px] py-3"
