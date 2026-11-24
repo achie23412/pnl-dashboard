@@ -30,6 +30,7 @@ export const WINDSOR_ACCOUNT_MAP: Record<string, { channel: string; store: strin
   "Blinky ad acc": { channel: "TikTok", store: "Blinky" },
   "Carter & Collins": { channel: "Google", store: "Carter & Collins" },
   "Susan & Allen": { channel: "Google", store: "Susan & Allen" },
+  "Walsh & Farley": { channel: "Google", store: "Walsh & Farley" },
 }
 
 export const SHOPIFY_ACCOUNT_MAP: Record<string, string> = {
