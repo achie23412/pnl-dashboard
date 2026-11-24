@@ -53,7 +53,8 @@ export async function fetchShopifySessions(dateFrom: string, dateTo: string): Pr
       const token = await getToken(config.domain, config.envKey)
       if (!token) continue
 
-      const shopifyql = `FROM sessions SHOW sessions TIMESERIES day SINCE ${dateFrom} UNTIL ${dateTo} ORDER BY day ASC`
+      // Human sessions only (bots excluded): CVR = orders / human sessions
+      const shopifyql = `FROM sessions SHOW sessions WHERE human_or_bot_session = 'human' TIMESERIES day SINCE ${dateFrom} UNTIL ${dateTo} ORDER BY day ASC`
       const res = await fetch(`https://${config.domain}/admin/api/${API_VERSION}/graphql.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },

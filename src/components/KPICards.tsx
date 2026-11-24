@@ -79,7 +79,7 @@ export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFe
       <KPICard
         title="CVR"
         value={data.cvr != null ? `${data.cvr.toFixed(2)}%` : "—"}
-        sub={data.cvr != null ? `${fmt(data.sessions)} sessions` : "No Shopify session data yet"}
+        sub={data.cvr != null ? `orders / ${fmt(data.sessions)} human sessions` : "Needs Shopify tokens in Vercel"}
         color="#4CA082"
       />
       <KPICard
