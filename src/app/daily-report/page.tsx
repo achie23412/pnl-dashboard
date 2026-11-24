@@ -1,5 +1,5 @@
 "use client"
-import { PageShell } from "@/components/PageShell"
+import { useState } from "react"
 
 const DEMO_STORES = [
   { name: "Walsh & Farley", revenue: "€4,210", orders: 47, roas: "2.8", spend: "€1,503", refunds: 2, profit: "€891" },
@@ -9,10 +9,74 @@ const DEMO_STORES = [
   { name: "LUMEGLASSES", revenue: "$980", orders: 11, roas: "1.9", spend: "$516", refunds: 0, profit: "$142" },
 ]
 
+function toInputDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00")
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+}
+
 export default function DailyReportPage() {
-  const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+  const [date, setDate] = useState(toInputDate(new Date()))
+
   return (
-    <PageShell title="Daily Report" breadcrumb="Home → Daily Report" description={`Report for ${today}. Fill in every evening before closing.`}>
+    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
+      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Home → Daily Report</div>
+
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>Daily Report</h1>
+      </div>
+
+      {/* Date picker row */}
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={() => {
+            const d = new Date(date + "T00:00:00")
+            d.setDate(d.getDate() - 1)
+            setDate(toInputDate(d))
+          }}
+          className="px-2 py-1 rounded-lg text-[11px] font-medium"
+          style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          ←
+        </button>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-medium"
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "var(--text)",
+            colorScheme: "dark",
+          }}
+        />
+        <button
+          onClick={() => {
+            const d = new Date(date + "T00:00:00")
+            d.setDate(d.getDate() + 1)
+            setDate(toInputDate(d))
+          }}
+          className="px-2 py-1 rounded-lg text-[11px] font-medium"
+          style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          →
+        </button>
+        <button
+          onClick={() => setDate(toInputDate(new Date()))}
+          className="px-2.5 py-1 rounded-lg text-[10px] font-medium"
+          style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}
+        >
+          Today
+        </button>
+        <div className="text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>
+          {formatDate(date)}. Fill in every evening before closing.
+        </div>
+      </div>
+
       <div className="space-y-4">
         <div className="glass rounded-xl overflow-hidden">
           <table className="w-full text-[11px]">
@@ -51,6 +115,6 @@ export default function DailyReportPage() {
           />
         </div>
       </div>
-    </PageShell>
+    </div>
   )
 }
