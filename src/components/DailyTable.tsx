@@ -26,24 +26,24 @@ function ProfitBar({ profit, maxProfit }: { profit: number; maxProfit: number })
   const pct = Math.min(Math.abs(profit) / maxProfit * 100, 100)
   const isPositive = profit >= 0
   return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className="text-[11px] font-semibold tabular-nums"
-        style={{ color: isPositive ? "var(--green)" : "var(--red)", minWidth: 52, textAlign: "right" }}
-      >
-        {profit < 0 ? "−" : ""}€{fmt(Math.abs(profit))}
-      </span>
-      <div className="flex-1 h-[3px] rounded-full" style={{ background: "rgba(255,255,255,0.04)", minWidth: 32 }}>
+    <div className="flex items-center gap-2">
+      <div className="w-[40px] h-[5px] rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
         <div
           className="h-full rounded-full"
           style={{
             width: `${pct}%`,
             background: isPositive
-              ? "linear-gradient(90deg, rgba(52,211,153,0.6), rgba(52,211,153,0.2))"
-              : "linear-gradient(90deg, rgba(248,113,113,0.6), rgba(248,113,113,0.2))",
+              ? "rgba(52,211,153,0.7)"
+              : "rgba(248,113,113,0.7)",
           }}
         />
       </div>
+      <span
+        className="text-[11px] font-semibold tabular-nums"
+        style={{ color: isPositive ? "var(--green)" : "var(--red)" }}
+      >
+        {profit < 0 ? "−" : ""}€{fmt(Math.abs(profit))}
+      </span>
     </div>
   )
 }
@@ -114,7 +114,7 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RoasCell roas={row.roas} /></td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RefundCell rate={row.refundRate} /></td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--orange)" }}>€{fmt(row.cogs)}</td>
-                  <td className="px-3 py-2" style={{ minWidth: 120 }}>
+                  <td className="px-3 py-2 text-right">
                     <ProfitBar profit={row.profit} maxProfit={maxProfit} />
                   </td>
                 </tr>
