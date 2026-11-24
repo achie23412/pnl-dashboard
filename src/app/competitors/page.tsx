@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
+import { fetchLatestEurRates } from "@/lib/currency"
 import { createClient } from "@supabase/supabase-js"
 
 const supabase = createClient(
@@ -46,11 +47,13 @@ function fmt(n: number | null): string {
   return n.toLocaleString()
 }
 
-function fmtRev(n: number | null): string {
-  if (n == null) return "—"
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return `$${n.toFixed(0)}`
+// TrendTrack revenue estimates are USD; shown in EUR at today's ECB rate
+function fmtRev(usd: number | null, usdPerEur: number): string {
+  if (usd == null) return "—"
+  const n = usd / usdPerEur
+  if (n >= 1_000_000) return `€${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `€${(n / 1_000).toFixed(0)}K`
+  return `€${n.toFixed(0)}`
 }
 
 export default function CompetitorsPage() {
@@ -67,6 +70,8 @@ export default function CompetitorsPage() {
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
 
   useEffect(() => { load() }, [])
+  const [usdPerEur, setUsdPerEur] = useState(1.11)
+  useEffect(() => { fetchLatestEurRates().then((r) => setUsdPerEur(r.USD)) }, [])
 
   async function load() {
     setLoading(true)
@@ -289,7 +294,7 @@ export default function CompetitorsPage() {
                       </a>
                     ) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono">{fmtRev(c.est_monthly_revenue)}</td>
+                  <td className="px-4 py-3 text-right font-mono">{fmtRev(c.est_monthly_revenue, usdPerEur)}</td>
                   <td className="px-4 py-3 text-center">
                     <select value={c.status} onChange={(e) => c.id && updateStatus(c.id, e.target.value as Competitor["status"])}
                       className="px-2 py-0.5 rounded text-xs border-0 cursor-pointer"

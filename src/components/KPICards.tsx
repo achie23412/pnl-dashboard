@@ -42,7 +42,7 @@ export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFe
   const profitColor = data.profit >= 0 ? "var(--green)" : "var(--red)"
   const estLabel =
     data.estCogs > 0
-      ? ` · <span style="color:var(--orange)">~$${fmt(data.estCogs)} est.</span>`
+      ? ` · <span style="color:var(--orange)">~€${fmt(data.estCogs)} est.</span>`
       : ""
   const txnLabel = includeTxnFees && data.txnFees > 0
     ? ` · Fees -€${fmt(data.txnFees)}`
@@ -63,9 +63,9 @@ export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFe
         color="#E8456B"
       />
       <KPICard
-        title="COGS (USD)"
-        value={`$${fmt(data.cogs + data.estCogs)}`}
-        sub={`$${fmt(data.orders > 0 ? (data.cogs + data.estCogs) / data.orders : 0, 2)}/order${estLabel}`}
+        title="COGS"
+        value={`€${fmt(data.cogs + data.estCogs)}`}
+        sub={`€${fmt(data.orders > 0 ? (data.cogs + data.estCogs) / data.orders : 0, 2)}/order · ${data.cogsPercent.toFixed(1)}% of rev${estLabel}`}
         color="var(--orange)"
       />
       {includeTxnFees && (

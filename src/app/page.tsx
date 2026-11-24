@@ -13,13 +13,13 @@ import {
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
 import type { RevenueRow, SpendRow, CogsRow, DailyPnL, KPIData } from "@/lib/types"
+import { STORE_CURRENCY, COGS_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
+import type { EurRates } from "@/lib/currency"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 )
-
-const USD_TO_EUR = 0.92
 
 function getDateRange(preset: string, customFrom: string, customTo: string): [string, string] {
   const today = new Date()
@@ -72,6 +72,7 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [includeTxnFees, setIncludeTxnFees] = useState(false)
+  const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
 
   useEffect(() => {
     async function load() {
@@ -82,14 +83,32 @@ export default function Dashboard() {
         supabase.from("daily_cogs").select("*").order("date"),
         supabase.from("refresh_log").select("completed_at").in("status", ["success", "partial"]).order("completed_at", { ascending: false }).limit(1),
       ])
-      setRevenue((rev as RevenueRow[]) || [])
+      const revRows = (rev as RevenueRow[]) || []
+      const cogsRows = (cg as CogsRow[]) || []
+      const firstDate = [revRows[0]?.date, cogsRows[0]?.date].filter(Boolean).sort()[0]
+      const today = new Date().toISOString().slice(0, 10)
+      setRates(await fetchEurRates(firstDate || today, today))
+      setRevenue(revRows)
       setSpend((sp as SpendRow[]) || [])
-      setCogs((cg as CogsRow[]) || [])
+      setCogs(cogsRows)
       if (log && log.length > 0) setLastRefresh(log[0].completed_at)
       setLoading(false)
     }
     load()
   }, [])
+
+  // Everything in EUR: revenue converted from each shop's currency, COGS from USD.
+  // Ad spend is already EUR in all ad accounts.
+  const revenueEur = useMemo(
+    () => revenue.map((r) => ({ ...r, revenue: toEur(r.revenue, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
+    [revenue, rates],
+  )
+  const cogsEur = useMemo(
+    () => cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) })),
+    [cogs, rates],
+  )
+  const estCogsPerOrderEur = (storeName: string, date: string) =>
+    toEur(AVG_COGS_PER_ORDER[storeName] || 0, COGS_CURRENCY, date, rates)
 
   const [dateFrom, dateTo] = getDateRange(preset, customFrom, customTo)
 
@@ -97,12 +116,12 @@ export default function Dashboard() {
     const inRange = (d: string) => d >= dateFrom && d <= dateTo
     const inStore = (s: string) => store === "Overall" || s === store
 
-    const fr = revenue.filter((r) => inRange(r.date) && inStore(r.store))
+    const fr = revenueEur.filter((r) => inRange(r.date) && inStore(r.store))
     const fs = spend.filter((r) => inRange(r.date) && inStore(r.store))
-    const fc = cogs.filter((r) => inRange(r.date) && inStore(r.store))
+    const fc = cogsEur.filter((r) => inRange(r.date) && inStore(r.store))
 
     return { revenue: fr, spend: fs, cogs: fc }
-  }, [revenue, spend, cogs, dateFrom, dateTo, store])
+  }, [revenueEur, spend, cogsEur, dateFrom, dateTo, store])
 
   const kpi = useMemo((): KPIData => {
     const totalRevenue = filtered.revenue.reduce((s, r) => s + r.revenue, 0)
@@ -114,12 +133,11 @@ export default function Dashboard() {
     let estCogs = 0
     for (const r of filtered.revenue) {
       if (!cogsDates.has(`${r.date}|${r.store}`) && AVG_COGS_PER_ORDER[r.store]) {
-        estCogs += r.orders * AVG_COGS_PER_ORDER[r.store]
+        estCogs += r.orders * estCogsPerOrderEur(r.store, r.date)
       }
     }
 
     const totalCogs = actualCogs + estCogs
-    const cogsEur = totalCogs * USD_TO_EUR
 
     let txnFees = 0
     if (includeTxnFees) {
@@ -129,7 +147,7 @@ export default function Dashboard() {
       }
     }
 
-    const profit = totalRevenue - totalSpend - cogsEur - txnFees
+    const profit = totalRevenue - totalSpend - totalCogs - txnFees
 
     return {
       revenue: totalRevenue,
@@ -140,9 +158,9 @@ export default function Dashboard() {
       profit,
       orders: totalOrders,
       roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-      cogsPercent: totalRevenue > 0 ? (cogsEur / totalRevenue) * 100 : 0,
+      cogsPercent: totalRevenue > 0 ? (totalCogs / totalRevenue) * 100 : 0,
     }
-  }, [filtered, includeTxnFees])
+  }, [filtered, includeTxnFees, rates])
 
   const dailyPnL = useMemo((): DailyPnL[] => {
     const dates = new Set([
@@ -180,11 +198,11 @@ export default function Dashboard() {
         let est = 0
         for (const r of filtered.revenue.filter((x) => x.date === date)) {
           if (!cogsDateStores.has(`${r.date}|${r.store}`) && AVG_COGS_PER_ORDER[r.store]) {
-            est += r.orders * AVG_COGS_PER_ORDER[r.store]
+            est += r.orders * estCogsPerOrderEur(r.store, r.date)
           }
         }
 
-        const totalCog = (actualCog + est) * USD_TO_EUR
+        const totalCog = actualCog + est
         let dayTxn = 0
         if (includeTxnFees) {
           for (const r of filtered.revenue.filter((x) => x.date === date)) {
@@ -196,12 +214,12 @@ export default function Dashboard() {
           revenue: Math.round(rev.revenue),
           spend: Math.round(sp),
           cogs: Math.round(totalCog),
-          estCogs: Math.round(est * USD_TO_EUR),
+          estCogs: Math.round(est),
           profit: Math.round(rev.revenue - sp - totalCog - dayTxn),
           orders: rev.orders,
         }
       })
-  }, [filtered, includeTxnFees])
+  }, [filtered, includeTxnFees, rates])
 
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
@@ -270,7 +288,10 @@ export default function Dashboard() {
             className="text-center text-xs py-4"
             style={{ color: "var(--text-muted)" }}
           >
-            COGS in USD (€1 = ${(1 / USD_TO_EUR).toFixed(2)}) · Lumé $14.59 · Blinky $18.87 · W&F $20.08 · C&C $15.48 · S&A $24.64 /order
+            All amounts in EUR · Lumé &amp; S&amp;A revenue converted from USD, C&amp;C from GBP, COGS from USD at the daily ECB rate
+            {rates.fallback
+              ? " (rate service unreachable: using €1 = $1.11 / £0.835)"
+              : ` (latest €1 = $${rates.byDate[rates.dates[rates.dates.length - 1]].USD.toFixed(4)} / £${rates.byDate[rates.dates[rates.dates.length - 1]].GBP.toFixed(4)})`}
             {kpi.estCogs > 0 && (
               <span style={{ color: "var(--orange)" }}> · Estimated COGS active for missing data</span>
             )}
