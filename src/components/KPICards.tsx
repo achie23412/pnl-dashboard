@@ -49,7 +49,7 @@ export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFe
     : ""
 
   return (
-    <div className={`grid grid-cols-2 gap-4 ${includeTxnFees ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+    <div className={`grid grid-cols-2 gap-4 ${includeTxnFees ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
       <KPICard
         title="Revenue"
         value={`€${fmt(data.revenue)}`}
@@ -76,6 +76,12 @@ export function KPICards({ data, includeTxnFees }: { data: KPIData; includeTxnFe
           color="#8B6BB0"
         />
       )}
+      <KPICard
+        title="CVR"
+        value={data.cvr != null ? `${data.cvr.toFixed(2)}%` : "—"}
+        sub={data.cvr != null ? `${fmt(data.sessions)} sessions` : "No Shopify session data yet"}
+        color="#4CA082"
+      />
       <KPICard
         title="Net Profit"
         value={`€${fmt(data.profit)}`}

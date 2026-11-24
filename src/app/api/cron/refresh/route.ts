@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchShopifyRevenue, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSpend } from "@/lib/windsor"
-import { fetchShopifyRevenueDirect, hasAnyShopifyToken } from "@/lib/shopify-direct"
+import { fetchShopifyRevenueDirect } from "@/lib/shopify-direct"
+import { fetchShopifySessions, hasAnySessionsCredentials } from "@/lib/shopify-sessions"
 import { fetchCogs } from "@/lib/shipgoods"
 
 export const maxDuration = 60
@@ -21,15 +22,18 @@ export async function GET(req: NextRequest) {
 
     const errors: string[] = []
 
-    const useDirectShopify = hasAnyShopifyToken()
+    // Revenue stays on Windsor; Shopify tokens are only used for sessions (CVR)
+    // unless direct revenue is switched on explicitly.
+    const useDirectShopify = process.env.USE_SHOPIFY_DIRECT_REVENUE === "1"
     const revenueFetcher = useDirectShopify ? fetchShopifyRevenueDirect : fetchShopifyRevenue
 
-    const [revenueResult, metaResult, tiktokResult, googleResult, cogsResult] = await Promise.allSettled([
+    const [revenueResult, metaResult, tiktokResult, googleResult, cogsResult, sessionsResult] = await Promise.allSettled([
       revenueFetcher(from, today),
       fetchMetaSpend(from, today),
       fetchTikTokSpend(from, today),
       fetchGoogleAdsSpend(from, today),
       fetchCogs(from, today),
+      hasAnySessionsCredentials() ? fetchShopifySessions(from, today) : Promise.resolve({ rows: [], errors: [] }),
     ])
 
     const revenue = revenueResult.status === "fulfilled" ? revenueResult.value : (errors.push(`Shopify${useDirectShopify ? " Direct" : ""}: ${revenueResult.reason}`), [])
@@ -50,6 +54,18 @@ export async function GET(req: NextRequest) {
       await db.from("daily_cogs").upsert(cogs, { onConflict: "date,store" })
     }
 
+    let sessionRows = 0
+    if (sessionsResult.status === "fulfilled") {
+      for (const e of sessionsResult.value.errors) errors.push(`Sessions ${e}`)
+      if (sessionsResult.value.rows.length > 0) {
+        const { error } = await db.from("daily_sessions").upsert(sessionsResult.value.rows, { onConflict: "date,store" })
+        if (error) errors.push(`Sessions save: ${error.message}`)
+        else sessionRows = sessionsResult.value.rows.length
+      }
+    } else {
+      errors.push(`Sessions: ${sessionsResult.reason}`)
+    }
+
     if (logId) {
       await db.from("refresh_log").update({
         completed_at: new Date().toISOString(),
@@ -66,6 +82,7 @@ export async function GET(req: NextRequest) {
       revenue: revenue.length,
       spend: spend.length,
       cogs: cogs.length,
+      sessions: sessionRows,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (err: unknown) {

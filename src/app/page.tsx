@@ -12,7 +12,7 @@ import {
 } from "@/components/Charts"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
-import type { RevenueRow, SpendRow, CogsRow, DailyPnL, KPIData } from "@/lib/types"
+import type { RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData } from "@/lib/types"
 import { STORE_CURRENCY, COGS_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
 
@@ -73,16 +73,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [includeTxnFees, setIncludeTxnFees] = useState(false)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
+  const [sessions, setSessions] = useState<SessionsRow[]>([])
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [{ data: rev }, { data: sp }, { data: cg }, { data: log }] = await Promise.all([
+      const [{ data: rev }, { data: sp }, { data: cg }, { data: log }, { data: ses }] = await Promise.all([
         supabase.from("daily_revenue").select("*").order("date"),
         supabase.from("daily_spend").select("*").order("date"),
         supabase.from("daily_cogs").select("*").order("date"),
         supabase.from("refresh_log").select("completed_at").in("status", ["success", "partial"]).order("completed_at", { ascending: false }).limit(1),
+        supabase.from("daily_sessions").select("*").order("date"),
       ])
+      setSessions((ses as SessionsRow[]) || [])
       const revRows = (rev as RevenueRow[]) || []
       const cogsRows = (cg as CogsRow[]) || []
       const firstDate = [revRows[0]?.date, cogsRows[0]?.date].filter(Boolean).sort()[0]
@@ -119,9 +122,10 @@ export default function Dashboard() {
     const fr = revenueEur.filter((r) => inRange(r.date) && inStore(r.store))
     const fs = spend.filter((r) => inRange(r.date) && inStore(r.store))
     const fc = cogsEur.filter((r) => inRange(r.date) && inStore(r.store))
+    const fses = sessions.filter((r) => inRange(r.date) && inStore(r.store))
 
-    return { revenue: fr, spend: fs, cogs: fc }
-  }, [revenueEur, spend, cogsEur, dateFrom, dateTo, store])
+    return { revenue: fr, spend: fs, cogs: fc, sessions: fses }
+  }, [revenueEur, spend, cogsEur, sessions, dateFrom, dateTo, store])
 
   const kpi = useMemo((): KPIData => {
     const totalRevenue = filtered.revenue.reduce((s, r) => s + r.revenue, 0)
@@ -149,6 +153,14 @@ export default function Dashboard() {
 
     const profit = totalRevenue - totalSpend - totalCogs - txnFees
 
+    // Store CVR: only count orders on store-days that have session data,
+    // so a store without a Shopify token doesn't inflate the rate.
+    const sessionDays = new Set(filtered.sessions.map((r) => `${r.date}|${r.store}`))
+    const totalSessions = filtered.sessions.reduce((s, r) => s + r.sessions, 0)
+    const ordersWithSessions = filtered.revenue
+      .filter((r) => sessionDays.has(`${r.date}|${r.store}`))
+      .reduce((s, r) => s + r.orders, 0)
+
     return {
       revenue: totalRevenue,
       spend: totalSpend,
@@ -159,6 +171,8 @@ export default function Dashboard() {
       orders: totalOrders,
       roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
       cogsPercent: totalRevenue > 0 ? (totalCogs / totalRevenue) * 100 : 0,
+      sessions: totalSessions,
+      cvr: totalSessions > 0 ? (ordersWithSessions / totalSessions) * 100 : null,
     }
   }, [filtered, includeTxnFees, rates])
 

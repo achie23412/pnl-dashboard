@@ -19,6 +19,12 @@ export interface CogsRow {
   cogs: number
 }
 
+export interface SessionsRow {
+  date: string
+  store: string
+  sessions: number
+}
+
 export interface DailyPnL {
   date: string
   revenue: number
@@ -39,4 +45,6 @@ export interface KPIData {
   orders: number
   roas: number
   cogsPercent: number
+  sessions: number
+  cvr: number | null // % of sessions that ordered; null when no session data in range
 }
