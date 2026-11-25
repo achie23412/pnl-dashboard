@@ -81,9 +81,12 @@ export function analyseRoasDrop(p: Props) {
     const rev = p.revenue.filter((x) => x.date === date)
     const revenue = rev.reduce((a, x) => a + x.revenue, 0)
     const orders = rev.reduce((a, x) => a + x.orders, 0)
-    const spend = p.spend.filter((x) => x.date === date).reduce((a, x) => a + x.spend, 0)
-    return { date, revenue, orders, spend, roas: spend > 0 ? revenue / spend : null, recent: inRecent(date) }
+    const spendRows = p.spend.filter((x) => x.date === date)
+    const spend = spendRows.reduce((a, x) => a + x.spend, 0)
+    const noData = rev.length === 0 && spendRows.length === 0
+    return { date, revenue, orders, spend, noData, roas: spend > 0 ? revenue / spend : null, recent: inRecent(date) }
   })
+  const missingRecent = days.filter((d) => d.recent && d.noData).map((d) => d.date.slice(5))
 
   // ── Why: ROAS = AOV ÷ cost per order. Which side moved more?
   const why: string[] = []
@@ -107,16 +110,15 @@ export function analyseRoasDrop(p: Props) {
     } else {
       why.push(`Cost per order went ${eur(B.cpa)} → ${eur(R.cpa)} and average order value ${eur(B.aov)} → ${eur(R.aov)}.`)
     }
-    // ROAS = AOV ÷ cost per order, so the log change splits exactly into those two parts.
-    const cpaPart = Math.log(cpaChange)
-    const aovPart = -Math.log(aovChange)
-    const total = Math.abs(cpaPart) + Math.abs(aovPart)
-    if (total > 0) {
-      why.push(
-        `Split of the change: ${((Math.abs(cpaPart) / total) * 100).toFixed(0)}% from cost per order ${cpaChange > 1 ? "rising" : "falling"}, ` +
-          `${((Math.abs(aovPart) / total) * 100).toFixed(0)}% from order value ${aovChange < 1 ? "falling" : "rising"} (ROAS = order value ÷ cost per order).`,
-      )
-    }
+    // ROAS = order value ÷ cost per order, so the ROAS change = (order value change) × (1 ÷ cost per order change).
+    const fromCpa = (1 / cpaChange - 1) * 100
+    const fromAov = (aovChange - 1) * 100
+    const net = ((aovChange / cpaChange) - 1) * 100
+    const part = (v: number, what: string) =>
+      `${what} ${v < 0 ? "pulled ROAS down" : "pushed ROAS up"} ${Math.abs(v).toFixed(0)}%`
+    why.push(
+      `The maths (ROAS = order value ÷ cost per order): ${part(fromCpa, "cost per order")}, ${part(fromAov, "order value")}, net ${fmtPct(net)}.`,
+    )
   }
 
   const spendCh = pct(B.spend, R.spend)
@@ -151,6 +153,12 @@ export function analyseRoasDrop(p: Props) {
     )
   }
 
+  if (missingRecent.length > 0) {
+    why.push(
+      `No revenue or spend rows at all for ${missingRecent.join(", ")}: either ads were off with no sales, or that day hasn't synced yet. Those days still count in the per-day averages.`,
+    )
+  }
+
   if (r.orders > 0 && r.orders < 6) {
     why.push(`Careful: only ${r.orders} order${r.orders === 1 ? "" : "s"} in the last ${p.recentDays} days. With so few orders, one sale more or less moves ROAS a lot.`)
   }
@@ -178,9 +186,10 @@ export function RoasAlertDetail(props: Props & { color: string }) {
   const { B, R, accountRows, days, why, status, rule } = analyseRoasDrop(props)
   const be = props.breakevenRoas
 
-  const metric = (label: string, before: string, recent: string, change: number | null, goodWhenUp: boolean) => {
-    const bad = change !== null && Number.isFinite(change) && (goodWhenUp ? change < -5 : change > 5)
-    const good = change !== null && Number.isFinite(change) && (goodWhenUp ? change > 5 : change < -5)
+  const metric = (label: string, before: string, recent: string, change: number | null, good: "up" | "down" | "neutral") => {
+    const moved = change !== null && Number.isFinite(change) && good !== "neutral"
+    const isBad = moved && (good === "up" ? change! < -5 : change! > 5)
+    const isGood = moved && (good === "up" ? change! > 5 : change! < -5)
     return (
       <tr key={label} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
         <td className="py-1.5 pr-3" style={{ color: "var(--text-dim)" }}>{label}</td>
@@ -188,7 +197,7 @@ export function RoasAlertDetail(props: Props & { color: string }) {
         <td className="py-1.5 px-3 text-right tabular-nums">{recent}</td>
         <td
           className="py-1.5 pl-3 text-right tabular-nums font-medium"
-          style={{ color: bad ? "var(--red)" : good ? "var(--green)" : "var(--text-dim)" }}
+          style={{ color: isBad ? "var(--red)" : isGood ? "var(--green)" : "var(--text-dim)" }}
         >
           {change === null ? "—" : fmtPct(change)}
         </td>
@@ -224,20 +233,20 @@ export function RoasAlertDetail(props: Props & { color: string }) {
               </tr>
             </thead>
             <tbody>
-              {metric("ROAS", `${B.roas.toFixed(2)}x`, `${R.roas.toFixed(2)}x`, pct(B.roas, R.roas), true)}
-              {metric("Spend / day", eur(B.spend), eur(R.spend), pct(B.spend, R.spend), false)}
-              {metric("Revenue / day", eur(B.revenue), eur(R.revenue), pct(B.revenue, R.revenue), true)}
-              {metric("Orders / day", B.orders.toFixed(1), R.orders.toFixed(1), pct(B.orders, R.orders), true)}
-              {metric("Avg order value", B.aov ? eur(B.aov) : "—", R.aov ? eur(R.aov) : "—", B.aov && R.aov ? pct(B.aov, R.aov) : null, true)}
+              {metric("ROAS", `${B.roas.toFixed(2)}x`, `${R.roas.toFixed(2)}x`, pct(B.roas, R.roas), "up")}
+              {metric("Spend / day", eur(B.spend), eur(R.spend), pct(B.spend, R.spend), "neutral")}
+              {metric("Revenue / day", eur(B.revenue), eur(R.revenue), pct(B.revenue, R.revenue), "up")}
+              {metric("Orders / day", B.orders.toFixed(1), R.orders.toFixed(1), pct(B.orders, R.orders), "up")}
+              {metric("Avg order value", B.aov ? eur(B.aov) : "—", R.aov ? eur(R.aov) : "—", B.aov && R.aov ? pct(B.aov, R.aov) : null, "up")}
               {metric(
                 "Cost per order",
                 Number.isFinite(B.cpa) ? eur(B.cpa) : "no orders",
                 Number.isFinite(R.cpa) ? eur(R.cpa) : "no orders",
                 Number.isFinite(B.cpa) && Number.isFinite(R.cpa) ? pct(B.cpa, R.cpa) : null,
-                false,
+                "down",
               )}
               {B.cvr !== null && R.cvr !== null &&
-                metric("Conversion rate", `${B.cvr.toFixed(2)}%`, `${R.cvr.toFixed(2)}%`, pct(B.cvr, R.cvr), true)}
+                metric("Conversion rate", `${B.cvr.toFixed(2)}%`, `${R.cvr.toFixed(2)}%`, pct(B.cvr, R.cvr), "up")}
             </tbody>
           </table>
 
@@ -249,7 +258,7 @@ export function RoasAlertDetail(props: Props & { color: string }) {
               <table className="w-full">
                 <tbody>
                   {accountRows.map((a) =>
-                    metric(a.label, eur(a.before), eur(a.recent), pct(a.before, a.recent), false),
+                    metric(a.label, eur(a.before), eur(a.recent), pct(a.before, a.recent), "neutral"),
                   )}
                 </tbody>
               </table>
@@ -281,7 +290,7 @@ export function RoasAlertDetail(props: Props & { color: string }) {
                   }}
                 >
                   <td className="py-1 pr-2" style={{ color: d.recent ? "var(--text)" : "var(--text-dim)" }}>
-                    {d.date.slice(5)}{d.recent ? " •" : ""}
+                    {d.date.slice(5)}{d.recent ? " •" : ""}{d.noData ? " (no data)" : ""}
                   </td>
                   <td className="py-1 px-2 text-right tabular-nums">{eur(d.spend)}</td>
                   <td className="py-1 px-2 text-right tabular-nums">{eur(d.revenue)}</td>
