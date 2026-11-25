@@ -34,6 +34,9 @@ export default function ListingsPage() {
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
         setData(d)
+        // Open on the most useful view: must-fix if any, otherwise tips
+        const hasCritical = (d.listings as LiveListing[]).some((l) => l.issues.some((i) => i.level === "critical"))
+        if (!hasCritical) setFilter("warning")
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
