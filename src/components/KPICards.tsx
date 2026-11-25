@@ -28,6 +28,11 @@ function Delta({ current, previous, invert }: { current: number; previous: numbe
 }
 
 const ICONS: Record<string, React.ReactNode> = {
+  cvr: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
+  ),
   revenue: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -139,7 +144,7 @@ export function KPICards({
     : ""
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
       <KPICard
         title="Revenue"
         icon={ICONS.revenue}
@@ -177,6 +182,17 @@ export function KPICards({
         valueColor={refundColor}
         accentColor={refundColor === "var(--green)" ? "#34d399" : "#f87171"}
         delta={<Delta current={data.refundRate} previous={prevData?.refundRate ?? null} invert />}
+      />
+      <KPICard
+        title="CVR"
+        icon={ICONS.cvr}
+        value={data.cvr !== null ? `${data.cvr.toFixed(2)}%` : "—"}
+        sub={data.cvr !== null
+          ? `Orders ÷ ${fmt(data.sessions)} human sessions`
+          : "Waiting for Shopify sessions (daily refresh)"}
+        valueColor="var(--text)"
+        accentColor="#8B6BB0"
+        delta={data.cvr !== null && prevData?.cvr != null ? <Delta current={data.cvr} previous={prevData.cvr} /> : undefined}
       />
       <KPICard
         title="COGS"
