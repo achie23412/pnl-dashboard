@@ -6,6 +6,7 @@ import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Notice, Loading, EmptyState, SectionLabel, TH, TD } from "@/components/ui"
 import { SHOPIFY_STORES, STORE_COLORS } from "@/lib/constants"
+import { STORE_CURRENCY } from "@/lib/currency"
 
 interface CatalogProduct {
   product_name: string
@@ -20,6 +21,10 @@ interface CatalogProduct {
   roas: number | null
   be_roas: number | null
   product_ids: string[]
+  // From the catalog API: revenue − COGS − ad spend − media buyer fee − transaction fee (store currency)
+  profit: number | null
+  margin: number | null
+  margin_basis: "net" | "before_ads" | null
 }
 
 interface StoreSummary {
@@ -38,7 +43,6 @@ type Verdict = "scale" | "live" | "review" | "draft" | "new"
 interface RatedProduct extends CatalogProduct {
   verdict: Verdict
   rule: string
-  margin: number | null
 }
 
 // Badge colours follow STYLE.md: red = must fix, amber = check, green = good, blue = info, grey = no data.
@@ -81,8 +85,7 @@ function classifyProducts(
 
   return d30.map((p) => {
     const st = storeInfo.get(p.store)
-    const margin = p.cog_pct != null ? 100 - p.cog_pct : null
-    const base: RatedProduct = { ...p, verdict: "live", rule: "Active product", margin }
+    const base: RatedProduct = { ...p, verdict: "live", rule: "Active product" }
 
     if (!st || !st.product_level_spend || p.ad_spend == null) {
       if (p.units_sold === 0) return { ...base, verdict: "new", rule: "No sales yet" }
@@ -226,10 +229,12 @@ export default function ProductRulesPage() {
   }, [products, fStore, fVerdict, sortKey, sortDir])
 
   const count = (v: Verdict) => products.filter((p) => p.verdict === v).length
+  // Revenue-weighted: total profit ÷ total revenue of the products with a known margin
   const avgMargin = useMemo(() => {
-    const withMargin = products.filter((p) => p.margin != null)
-    if (withMargin.length === 0) return null
-    return withMargin.reduce((s, p) => s + p.margin!, 0) / withMargin.length
+    const withMargin = products.filter((p) => p.margin != null && p.profit != null && p.sales_revenue > 0)
+    const rev = withMargin.reduce((s, p) => s + p.sales_revenue, 0)
+    if (rev <= 0) return null
+    return (withMargin.reduce((s, p) => s + p.profit!, 0) / rev) * 100
   }, [products])
 
   function toggleSort(key: SortKey) {
@@ -368,10 +373,11 @@ export default function ProductRulesPage() {
                   p.be_roas != null && p.roas < p.be_roas ? "var(--red)" :
                   p.roas >= 2.2 ? "var(--green)" :
                   "var(--orange)"
+                // Simo scale gate: net profit above 20%. Below 0 = losing money.
                 const marginColor =
                   p.margin == null ? "var(--text-dim)" :
-                  p.margin >= 50 ? "var(--green)" :
-                  p.margin >= 30 ? "var(--text)" :
+                  p.margin > 20 ? "var(--green)" :
+                  p.margin >= 0 ? "var(--orange)" :
                   "var(--red)"
 
                 return (
@@ -408,10 +414,10 @@ export default function ProductRulesPage() {
                     </td>
                     <td className={`${TD} text-right tabular-nums`}>{p.units_sold}</td>
                     <td className={`${TD} text-right tabular-nums`}>
-                      {p.sales_revenue > 0 ? `€${p.sales_revenue.toFixed(0)}` : "—"}
+                      {p.sales_revenue > 0 ? money(p.sales_revenue, STORE_CURRENCY[p.store] || "EUR") : "—"}
                     </td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: p.ad_spend != null ? "var(--text)" : "var(--text-dim)" }}>
-                      {p.ad_spend != null ? `€${p.ad_spend.toFixed(0)}` : "—"}
+                      {p.ad_spend != null ? money(p.ad_spend, STORE_CURRENCY[p.store] || "EUR") : "—"}
                     </td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: roasColor }}>
                       {x(p.roas)}
@@ -419,8 +425,17 @@ export default function ProductRulesPage() {
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-dim)" }}>
                       {x(p.be_roas)}
                     </td>
-                    <td className={`${TD} text-right tabular-nums`} style={{ color: marginColor }}>
+                    <td
+                      className={`${TD} text-right tabular-nums`}
+                      style={{ color: marginColor }}
+                      title={
+                        p.margin == null
+                          ? p.cogs_usd == null ? "No COGS known for this product" : "No sales in this period"
+                          : `Profit ${money(p.profit!, STORE_CURRENCY[p.store] || "EUR")} on ${money(p.sales_revenue, STORE_CURRENCY[p.store] || "EUR")} revenue${p.margin_basis === "before_ads" ? " (before ads: no per-product spend for this store)" : ""}`
+                      }
+                    >
                       {p.margin != null ? `${p.margin.toFixed(1)}%` : "—"}
+                      {p.margin_basis === "before_ads" && <span className="text-[8px] ml-1" style={{ color: "var(--text-dim)" }}>pre-ads</span>}
                     </td>
                   </tr>
                 )
@@ -441,6 +456,7 @@ export default function ProductRulesPage() {
         </div>
         <div className="text-[9px] mt-2" style={{ color: "var(--text-dim)" }}>
           Google stores (Walsh &amp; Farley, Carter &amp; Collins, Susan &amp; Allen) have per-product ad spend from Google Shopping. Meta stores (LUMEGLASSES, Blinky) only get store-level and margin-based verdicts. Click a row to see the rule.
+          {" "}Margin = (revenue − COGS − ad spend − media buyer fee − transaction fee) ÷ revenue, as on the profit sheet (Google stores: 10% media buyer fee, 6% fees). Meta stores show it before ads (pre-ads). Revenue and spend are in the store&apos;s own currency. Green = above the 20% net profit gate (Simo), orange = 0–20%, red = losing money.
         </div>
       </Panel>
     </PageShell>

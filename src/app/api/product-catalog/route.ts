@@ -299,6 +299,12 @@ interface CatalogProduct {
   be_roas: number | null
   // Shopify product ids in the store (empty when unknown)
   product_ids: string[]
+  // Net profit in store currency, profit-sheet style: revenue − COGS − ad spend
+  // − media buyer fee − transaction fee. Without per-product spend (Meta stores)
+  // it is the profit before ads. null when COGS is unknown or there are no sales.
+  profit: number | null
+  margin: number | null // profit ÷ revenue × 100
+  margin_basis: "net" | "before_ads" | null
 }
 
 interface StoreContext {
@@ -316,6 +322,18 @@ function beRoas(cogsUsdPerUnit: number | null, units: number, revenue: number, c
   const cogsPct = (cogsUsdPerUnit * ctx.usdToStore * units) / revenue
   const be = breakEvenRoas(cogsPct, ctx.txnRate, ctx.mbRate)
   return Number.isFinite(be) ? be : null
+}
+
+function netMargin(cogsUsdPerUnit: number | null, units: number, revenue: number, adSpend: number | null, ctx: StoreContext) {
+  if (cogsUsdPerUnit == null || units <= 0 || revenue <= 0) return { profit: null, margin: null, margin_basis: null }
+  const cogs = cogsUsdPerUnit * ctx.usdToStore * units
+  const ads = adSpend ?? 0
+  const profit = revenue - cogs - ads - ads * ctx.mbRate - revenue * ctx.txnRate
+  return {
+    profit: Math.round(profit * 100) / 100,
+    margin: Math.round((profit / revenue) * 1000) / 10,
+    margin_basis: (adSpend == null ? "before_ads" : "net") as "net" | "before_ads",
+  }
 }
 
 function findShipgoodsCogs(
@@ -446,6 +464,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       roas: adSpend != null && adSpend > 0 ? s.revenue / adSpend : null,
       be_roas: beRoas(cogsUsd, s.qty, s.revenue, ctx),
       product_ids: s.productIds,
+      ...netMargin(cogsUsd, s.qty, s.revenue, adSpend, ctx),
     })
   }
 
@@ -484,6 +503,9 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       roas: null,
       be_roas: null,
       product_ids: [],
+      profit: null,
+      margin: null,
+      margin_basis: null,
     })
   }
 
@@ -522,6 +544,9 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
         roas: null,
         be_roas: null,
         product_ids: [],
+        profit: null,
+        margin: null,
+        margin_basis: null,
       })
     }
   }
@@ -606,7 +631,7 @@ export async function GET(req: Request) {
     let productSpend: Map<string, number> | null = null
     if (isGoogle) {
       productSpend = new Map()
-      for (const g of googleSpend) if (g.store === s) productSpend.set(g.productId, g.spend)
+      for (const g of googleSpend) if (g.store === s) productSpend.set(g.productId, g.spend * perEur(cur)) // Windsor spend is EUR → store currency
     }
     return { productSpend, usdToStore: perEur(cur) / perEur("USD"), txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035, mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0 }
   }
@@ -647,6 +672,9 @@ export async function GET(req: Request) {
           roas: 0,
           be_roas: null,
           product_ids: [productId],
+          profit: -Math.round(spend * (1 + ctx.mbRate) * 100) / 100,
+          margin: null,
+          margin_basis: null,
         })
       })
     }
