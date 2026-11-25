@@ -217,7 +217,6 @@ export default function CompetitorsPage() {
                 <ThSort label="TP reviews" field="tp_reviews" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className={`${TH} text-right`}>Est. revenue</th>
                 <th className={`${TH} text-center`}>Status</th>
-                <th className={TH} />
               </tr>
             </thead>
             <tbody>
@@ -260,16 +259,27 @@ export default function CompetitorsPage() {
                   </td>
                   <td className={`${TD} text-right tabular-nums`}>{fmtRev(c.est_monthly_revenue, usdPerEur)}</td>
                   <td className={`${TD} text-center`}>
-                    <PillSelect
-                      value={c.status}
-                      onChange={(v) => c.id && updateStatus(c.id, v as Competitor["status"])}
-                      options={["new", "watching", "scaling", "dead"]}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <Button variant="danger" size="sm" className="opacity-0 group-hover:opacity-100" onClick={() => c.id && remove(c.id)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <PillSelect
+                        value={c.status}
+                        onChange={(v) => c.id && updateStatus(c.id, v as Competitor["status"])}
+                        options={["new", "watching", "scaling", "dead"]}
+                      />
+                      <button
+                        type="button"
+                        title={`Remove ${c.domain} from the tracker`}
+                        aria-label={`Remove ${c.domain}`}
+                        className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-1 rounded transition-opacity"
+                        style={{ color: "var(--red)" }}
+                        onClick={() => c.id && window.confirm(`Remove ${c.domain} from the Competitor Tracker? This can't be undone.`) && remove(c.id)}
+                      >
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
