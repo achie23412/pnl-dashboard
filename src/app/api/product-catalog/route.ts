@@ -58,33 +58,37 @@ async function fetchCogsProducts(store: string): Promise<CogsRow[]> {
   const tab = STORE_SHEET_TAB[store]
   if (!tab) return []
 
-  const url = `https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&range=A3:O600`
-  const resp = await fetch(url, { next: { revalidate: 300 } })
-  if (!resp.ok) return []
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${COGS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}&range=A3:O600`
+    const resp = await fetch(url, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) })
+    if (!resp.ok) return []
 
-  const csv = await resp.text()
-  const rows = csv.split("\n").filter((r) => r.trim())
-  if (rows.length < 2) return []
+    const csv = await resp.text()
+    const rows = csv.split("\n").filter((r) => r.trim())
+    if (rows.length < 2) return []
 
-  const products: CogsRow[] = []
-  for (let i = 1; i < rows.length; i++) {
-    const cols = parseCsvRow(rows[i])
-    const name = (cols[1] || "").trim()
-    const cogsStr = (cols[9] || "").trim()
-    if (!name || !cogsStr) continue
+    const products: CogsRow[] = []
+    for (let i = 1; i < rows.length; i++) {
+      const cols = parseCsvRow(rows[i])
+      const name = (cols[1] || "").trim()
+      const cogsStr = (cols[9] || "").trim()
+      if (!name || !cogsStr) continue
 
-    const cogsUsd = parseNumber(cogsStr)
-    if (cogsUsd <= 0) continue
+      const cogsUsd = parseNumber(cogsStr)
+      if (cogsUsd <= 0) continue
 
-    products.push({
-      product_name: name,
-      cogs_usd: cogsUsd,
-      retail_price: (cols[8] || "").trim(),
-      cog_pct: (cols[13] || "").trim(),
-      category: (cols[3] || "").trim(),
-    })
+      products.push({
+        product_name: name,
+        cogs_usd: cogsUsd,
+        retail_price: (cols[8] || "").trim(),
+        cog_pct: (cols[13] || "").trim(),
+        category: (cols[3] || "").trim(),
+      })
+    }
+    return products
+  } catch {
+    return []
   }
-  return products
 }
 
 interface ShipgoodsItem {
@@ -112,53 +116,58 @@ async function fetchShipgoodsCogs(): Promise<Map<string, { avgCogs: number; tota
   const base = process.env.SHIPGOODS_BASE || "https://dashboard.shipgoods.eu"
   if (!token) return new Map()
 
-  const productMap = new Map<string, { totalCost: number; totalQty: number }>()
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-  const today = new Date().toISOString().slice(0, 10)
+  try {
+    const productMap = new Map<string, { totalCost: number; totalQty: number }>()
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    const today = new Date().toISOString().slice(0, 10)
 
-  let page = 1
-  const maxPages = 3
+    let page = 1
+    const maxPages = 3
 
-  while (page <= maxPages) {
-    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
-    const res: Response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    })
+    while (page <= maxPages) {
+      const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
+      const res: Response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(8000),
+      })
 
-    if (!res.ok) break
+      if (!res.ok) break
 
-    const json: ShipgoodsResponse = await res.json()
-    if (!json.data?.list) break
+      const json: ShipgoodsResponse = await res.json()
+      if (!json.data?.list) break
 
-    for (const order of json.data.list) {
-      if (!order.items) continue
-      for (const item of order.items) {
-        const title = item.title
-        if (!title) continue
-        const existing = productMap.get(title) || { totalCost: 0, totalQty: 0 }
-        existing.totalCost += item.unit_cost * item.quantity
-        existing.totalQty += item.quantity
-        productMap.set(title, existing)
+      for (const order of json.data.list) {
+        if (!order.items) continue
+        for (const item of order.items) {
+          const title = item.title
+          if (!title) continue
+          const existing = productMap.get(title) || { totalCost: 0, totalQty: 0 }
+          existing.totalCost += item.unit_cost * item.quantity
+          existing.totalQty += item.quantity
+          productMap.set(title, existing)
+        }
       }
+
+      if (page >= json.data.pagination.total_pages) break
+      page++
     }
 
-    if (page >= json.data.pagination.total_pages) break
-    page++
+    const result = new Map<string, { avgCogs: number; totalQty: number }>()
+    const entries = Array.from(productMap.entries())
+    for (let i = 0; i < entries.length; i++) {
+      const [title, data] = entries[i]
+      result.set(title, {
+        avgCogs: data.totalQty > 0 ? Math.round((data.totalCost / data.totalQty) * 100) / 100 : 0,
+        totalQty: data.totalQty,
+      })
+    }
+    return result
+  } catch {
+    return new Map()
   }
-
-  const result = new Map<string, { avgCogs: number; totalQty: number }>()
-  const entries = Array.from(productMap.entries())
-  for (let i = 0; i < entries.length; i++) {
-    const [title, data] = entries[i]
-    result.set(title, {
-      avgCogs: data.totalQty > 0 ? Math.round((data.totalCost / data.totalQty) * 100) / 100 : 0,
-      totalQty: data.totalQty,
-    })
-  }
-  return result
 }
 
 async function fetchShopifySales(domain: string, token: string): Promise<Map<string, { qty: number; revenue: number }>> {
