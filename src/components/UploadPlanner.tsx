@@ -179,7 +179,7 @@ export function UploadPlanner({ opps, onApply }: { opps: PlannerOpp[]; onApply: 
                     </div>
                   )}
                   <div className="mt-1 text-[10px]" style={{ color: "var(--text-dim)" }}>
-                    Your sales per product come from Shipgoods fulfilment data; spend from Google Ads per product. Rules: ROAS ≥ 2.5 (OAK target) → more, spend with no sales → fewer, no live products in a category → small boost, a category above 30% of the store → less, max 40% of the batch per category.
+                    Your sales per product come from Shopify orders (last 30 days); spend from Google Ads per product. Rules: ROAS ≥ 2.5 (OAK target) → more, spend with no sales → fewer, no live products in a category → small boost, a category above 30% of the store → less, max 40% of the batch per category.
                   </div>
                 </div>
               )}
