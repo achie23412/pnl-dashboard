@@ -20,6 +20,13 @@ const LISTING_SEASONS: [RegExp, string][] = [
 export function calendarAction(e: { label: string; type: string; note?: string; store?: string }): CalendarAction {
   const label = e.label.toLowerCase()
 
+  // Season Board keyword tasks (from the Keyword Planner exports)
+  if (/season keywords/.test(label)) {
+    return /^push budget/.test(label)
+      ? { fix: `${e.note ? e.note + " " : ""}Raise budget on the matching products in Google Ads (+20% steps per the SOP) as searches climb.`, href: "/season-board", hrefLabel: "Season Board" }
+      : { fix: `${e.note ? e.note + " " : ""}On the Season Board, copy the list plan and add the missing products via the Product Importer.`, href: "/season-board", hrefLabel: "Season Board" }
+  }
+
   // "List … products" / "Publish … collection": choose products for that season.
   if (/^list |publish .*collection/.test(label)) {
     const season = LISTING_SEASONS.find(([re]) => re.test(e.label))?.[1]

@@ -71,7 +71,9 @@ export function TodoPanel({ events, onCustomChange }: Props) {
     ? events
         .filter((e) =>
           (e.date === today && e.type !== "season") ||
-          (e.type === "deadline" && e.date > today && e.date <= addDays(today, 2)))
+          (e.type === "deadline" && e.date > today && e.date <= addDays(today, 2)) ||
+          // Season Board keyword tasks stay open for their whole month
+          (/season keywords/i.test(e.label) && e.date < today && e.date.slice(0, 7) === today.slice(0, 7)))
         .map((e) => {
           const key = `cal:${e.date}:${e.label}`
           return {

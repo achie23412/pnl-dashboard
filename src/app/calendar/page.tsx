@@ -65,8 +65,19 @@ export default function CalendarPage() {
 
   useEffect(() => { fetchDynamic() }, [fetchDynamic])
 
+  // Season Board keyword timing: "List N season keywords" / "Push budget on N season keywords"
+  // per country and month (from the uploaded Keyword Planner exports). Also feeds the to-do list.
+  const [seasonEvents, setSeasonEvents] = useState<CalendarEvent[]>([])
+  useEffect(() => {
+    fetch("/api/season?view=calendar")
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((d) => setSeasonEvents((d.events || []).map((e: CalendarEvent) => ({ ...e, source: "hardcoded" as const }))))
+      .catch(() => {})
+  }, [])
+
   const allEvents: CalendarEvent[] = [
     ...HARDCODED_EVENTS.map((e) => ({ ...e, source: "hardcoded" as const })),
+    ...seasonEvents,
     ...dynamicEvents,
   ]
   // Dated custom to-dos also show on the calendar
