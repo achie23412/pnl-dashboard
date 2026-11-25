@@ -22,10 +22,11 @@ function RefundCell({ rate }: { rate: number }) {
   return <span style={{ color }}>{rate.toFixed(1)}%</span>
 }
 
-function ProfitBar({ profit, maxProfit }: { profit: number; maxProfit: number }) {
+function ProfitBar({ profit, maxProfit, revenue }: { profit: number; maxProfit: number; revenue: number }) {
   if (maxProfit === 0) return null
   const pct = Math.min(Math.abs(profit) / maxProfit * 100, 100)
   const isPositive = profit >= 0
+  const profitPct = revenue > 0 ? (profit / revenue) * 100 : 0
   return (
     <div className="flex items-center gap-2">
       <div className="w-[40px] h-[5px] rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
@@ -44,6 +45,12 @@ function ProfitBar({ profit, maxProfit }: { profit: number; maxProfit: number })
         style={{ color: isPositive ? "var(--green)" : "var(--red)" }}
       >
         {profit < 0 ? "−" : ""}€{fmt(Math.abs(profit))}
+      </span>
+      <span
+        className="text-[10px] tabular-nums"
+        style={{ color: profitPct >= 20 ? "var(--green)" : profitPct >= 0 ? "var(--orange)" : "var(--red)" }}
+      >
+        {profitPct < 0 ? "−" : ""}{Math.abs(profitPct).toFixed(1)}%
       </span>
     </div>
   )
@@ -124,7 +131,7 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RefundCell rate={row.refundRate} /></td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--orange)" }}>€{fmt(row.cogs)}</td>
                   <td className="px-3 py-2 text-right">
-                    <ProfitBar profit={row.profit} maxProfit={maxProfit} />
+                    <ProfitBar profit={row.profit} maxProfit={maxProfit} revenue={row.revenue} />
                   </td>
                 </tr>
               )
