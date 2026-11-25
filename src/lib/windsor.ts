@@ -2,7 +2,7 @@ import { SHOPIFY_ACCOUNT_MAP, WINDSOR_ACCOUNT_MAP } from "./constants"
 
 const BASE = "https://connectors.windsor.ai/all"
 
-interface WindsorRow {
+export interface WindsorRow {
   date: string
   account_name: string
   [key: string]: string | number | null
@@ -10,7 +10,7 @@ interface WindsorRow {
 
 // revalidateSec: cache the response in Next's data cache for that long. Only
 // used by read-only dashboard routes; the nightly refresh always fetches fresh.
-async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string, revalidateSec?: number): Promise<WindsorRow[]> {
+export async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string, revalidateSec?: number): Promise<WindsorRow[]> {
   const params = new URLSearchParams({
     api_key: process.env.WINDSOR_API_KEY!,
     connector,

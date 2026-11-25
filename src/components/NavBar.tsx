@@ -242,7 +242,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/season-board": "season seasonal calendar trends",
 }
 
-const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts"])
+const DONE_PAGES = new Set(["/", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
