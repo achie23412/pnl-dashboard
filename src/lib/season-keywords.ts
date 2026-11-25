@@ -107,15 +107,13 @@ export function timing(months: number[]): Timing {
   const peakVol = months[peak]
   const min = Math.min(...months)
   const evergreen = peakVol > 0 && min >= peakVol * 0.6
-  let onset: number
-  if (months.some((v) => v < peakVol * ONSET_SHARE)) {
-    onset = peak
-    for (let s = 0; s < 11 && months[mod(onset - 1)] >= peakVol * ONSET_SHARE; s++) onset = mod(onset - 1)
-  } else {
-    let minM = 0
-    for (let i = 1; i < 12; i++) if (months[i] < months[minM]) minM = i
-    onset = mod(minM + 1)
-  }
+  // Climb onset = first month (walking back from the peak) that is 15% of the way from the
+  // low point up to the peak. With a near-zero off-season this equals the guide's "15% of
+  // peak"; for keywords that never go quiet (sandals, swimwear) it avoids flagging them
+  // right after the low point.
+  const threshold = min + ONSET_SHARE * (peakVol - min)
+  let onset = peak
+  for (let s = 0; s < 11 && months[mod(onset - 1)] >= threshold && months[mod(onset - 1)] > min; s++) onset = mod(onset - 1)
   return { peak, peakVol, onset, listBy: mod(onset - LIST_BUFFER_MONTHS), pushFrom: onset, evergreen }
 }
 
