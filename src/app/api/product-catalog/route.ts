@@ -1,3 +1,4 @@
+import { fetchProducts, type SGProduct } from "@/lib/shipgoods"
 import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
@@ -309,7 +310,7 @@ interface CatalogProduct {
   category: string
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "quote" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "none"
   // Ad spend attributed to this product (Google Shopping, matched on Shopify
   // product id). null = no per-product spend for this store (Meta/TikTok).
   ad_spend: number | null
@@ -338,6 +339,8 @@ interface StoreContext {
   // launch-sheet quotes (COG $) + Shopify product id -> handle, for COGS when ShipGoods has none
   quotes: Quote[]
   handleById: Map<string, string>
+  // ShipGoods catalog: Shopify product id -> supplier unit price (USD), before any order is charged
+  catalogById: Map<string, number>
 }
 
 function beRoas(cogsUsdPerUnit: number | null, units: number, revenue: number, ctx: StoreContext): number | null {
@@ -474,6 +477,13 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       if (hit != null) {
         cogsUsd = hit
         cogsSource = "shipgoods"
+      }
+    }
+    if (cogsUsd == null) {
+      const c = s.productIds.map((id) => ctx.catalogById.get(id)).find((v) => v != null)
+      if (c != null) {
+        cogsUsd = c
+        cogsSource = "catalog"
       }
     }
     if (cogsUsd == null && ctx.quotes.length) {
@@ -666,10 +676,21 @@ export async function GET(req: Request) {
   if (spendRes.error) errors.push(`Store ad spend: ${spendRes.error.message}`)
 
   // Launch-sheet quotes + own product handles (COGS fallback when ShipGoods has none yet).
-  const [quoteLists, ownRows] = await Promise.all([
+  const [quoteLists, ownRows, sgCatalog] = await Promise.all([
     Promise.all(storeNames.map((st) => (STORE_SHEET_TAB[st] ? fetchQuotes(st).catch(() => [] as Quote[]) : Promise.resolve([] as Quote[])))),
     db.from("own_products").select("store,shopify_product_id,handle").then((r) => (r.data || []) as { store: string; shopify_product_id: string; handle: string }[], () => []),
+    fetchProducts().catch(() => [] as SGProduct[]),
   ])
+  const catalogAcc = new Map<string, { sum: number; n: number }>()
+  for (const p of sgCatalog) {
+    const price = Number(p.unit_price)
+    if (!p.product_id || !(price > 0)) continue
+    const a = catalogAcc.get(String(p.product_id)) || { sum: 0, n: 0 }
+    a.sum += price
+    a.n += 1
+    catalogAcc.set(String(p.product_id), a)
+  }
+  const catalogById = new Map(Array.from(catalogAcc.entries()).map(([id, a]) => [id, Math.round((a.sum / a.n) * 100) / 100]))
   const quotesByStore = new Map(storeNames.map((st, i) => [st, quoteLists[i]]))
   const handlesByStore = new Map<string, Map<string, string>>()
   for (const r of ownRows) {
@@ -693,6 +714,7 @@ export async function GET(req: Request) {
       mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0,
       quotes: quotesByStore.get(s) || [],
       handleById: handlesByStore.get(s) || new Map(),
+      catalogById,
     }
   }
 

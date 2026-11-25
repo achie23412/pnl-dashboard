@@ -16,7 +16,7 @@ interface CatalogProduct {
   cog_pct: number | null
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "quote" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "none"
   ad_spend: number | null
   roas: number | null
   be_roas: number | null
@@ -431,9 +431,9 @@ export default function ProductRulesPage() {
                       style={{ color: "var(--text-dim)" }}
                       title={
                         p.be_roas != null
-                          ? `COGS from ${p.cogs_source === "shipgoods" ? "ShipGoods charges" : p.cogs_source === "quote" ? "the launch sheet quote (COG $)" : "the COGS sheet"}`
+                          ? `COGS from ${p.cogs_source === "shipgoods" ? "ShipGoods charges" : p.cogs_source === "quote" ? "the launch sheet quote (COG $)" : p.cogs_source === "catalog" ? "the ShipGoods catalog price (not charged yet)" : "the COGS sheet"}`
                           : p.cogs_usd == null
-                            ? "No COGS yet: ShipGoods hasn't charged this product and it has no COG $ in the launch sheet. Add the COG $ in the launch sheet."
+                            ? "No COGS yet: ShipGoods hasn't charged this product, it isn't in the ShipGoods catalog and has no COG $ in the launch sheet. Add the COG $ in the launch sheet."
                             : "No sales in this period"
                       }
                     >
