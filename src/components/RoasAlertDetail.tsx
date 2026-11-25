@@ -107,6 +107,16 @@ export function analyseRoasDrop(p: Props) {
     } else {
       why.push(`Cost per order went ${eur(B.cpa)} → ${eur(R.cpa)} and average order value ${eur(B.aov)} → ${eur(R.aov)}.`)
     }
+    // ROAS = AOV ÷ cost per order, so the log change splits exactly into those two parts.
+    const cpaPart = Math.log(cpaChange)
+    const aovPart = -Math.log(aovChange)
+    const total = Math.abs(cpaPart) + Math.abs(aovPart)
+    if (total > 0) {
+      why.push(
+        `Split of the change: ${((Math.abs(cpaPart) / total) * 100).toFixed(0)}% from cost per order ${cpaChange > 1 ? "rising" : "falling"}, ` +
+          `${((Math.abs(aovPart) / total) * 100).toFixed(0)}% from order value ${aovChange < 1 ? "falling" : "rising"} (ROAS = order value ÷ cost per order).`,
+      )
+    }
   }
 
   const spendCh = pct(B.spend, R.spend)
@@ -115,7 +125,7 @@ export function analyseRoasDrop(p: Props) {
   if (spendCh >= 15 && ordersCh < spendCh - 10) {
     why.push(`How: budget went up but sales didn't keep pace. ${spendLine} The extra spend bought fewer sales per euro.`)
   } else if (Math.abs(spendCh) < 15 && ordersCh <= -15) {
-    why.push(`How: same budget, fewer sales. ${spendLine} Fewer people bought from the same ad money — check the ads, the product pages and the offer.`)
+    why.push(`How: same budget, fewer sales. ${spendLine}`)
   } else if (spendCh <= -15 && ordersCh < spendCh) {
     why.push(`How: spend was cut, but orders fell even faster. ${spendLine}`)
   } else {
