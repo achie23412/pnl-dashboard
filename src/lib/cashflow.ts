@@ -8,8 +8,9 @@ import { SHOPIFY_ACCOUNT_MAP } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, fetchEurRates, toEur, type Currency } from "@/lib/currency"
 import { getServiceClient } from "@/lib/supabase"
 import { selectAll } from "@/lib/opportunity-db"
+import { whopConfigured, fetchWhopBalance, type WhopBalance } from "@/lib/whop"
 
-export const PROCESSORS = ["Shopify Payments", "PayPal", "Whop", "Manual", "Other"] as const
+export const PROCESSORS = ["Shopify Payments", "PayPal", "Whop", "Whale Checkout", "Other"] as const
 export type Processor = (typeof PROCESSORS)[number]
 
 export function processorOf(gateway: string): Processor {
@@ -17,7 +18,7 @@ export function processorOf(gateway: string): Processor {
   if (g.includes("shopify_payments") || g.includes("shopify payments")) return "Shopify Payments"
   if (g.includes("paypal")) return "PayPal"
   if (g.includes("whop")) return "Whop"
-  if (g.includes("manual")) return "Manual"
+  if (g.includes("manual") || g.includes("whale")) return "Whale Checkout"
   return "Other"
 }
 
@@ -77,6 +78,7 @@ export interface CashflowData {
   processors: ProcessorFlow[]
   days: DayFlow[]
   payouts: { date: string; store: string; amount: number; currency: string; status: string }[]
+  whop_balance: WhopBalance | null
   notes: string[]
 }
 
@@ -200,6 +202,17 @@ export async function buildCashflow(): Promise<CashflowData> {
     .map((s) => ({ ...s, pending: round(s.pending), in_transit: round(s.in_transit), paid_out_30d: round(s.paid_out_30d), fees_30d: round(s.fees_30d) }))
     .sort((a, b) => b.pending + b.in_transit - (a.pending + a.in_transit))
 
+  let whopBalance: WhopBalance | null = null
+  if (whopConfigured()) {
+    try {
+      whopBalance = await fetchWhopBalance()
+      const wp = proc.get("Whop")
+      if (wp) wp.balance_known = true
+    } catch {
+      // Whop API failed — degrade gracefully, incoming totals still work from Windsor
+    }
+  }
+
   return {
     generated_at: new Date().toISOString(),
     totals: {
@@ -217,9 +230,10 @@ export async function buildCashflow(): Promise<CashflowData> {
       .sort((a, b) => b.incoming_30d - a.incoming_30d),
     days: dayList,
     payouts: payoutList.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 25),
+    whop_balance: whopBalance,
     notes: [
       "Shopify Payments balance = sales not yet paid out (pending) + payouts on their way to the bank (in transit). Older pending sales than 30 days are not included (Windsor trial limit).",
-      "PayPal, Whop and Manual (likely Whale Checkout) show money coming in per order; their account balances and fees aren't connected yet.",
+      "Whop balance and payouts connect automatically when WHOP_API_KEY is set in Vercel. PayPal needs a Windsor connector. Whale Checkout has no API — balance is manual.",
       "Outgoing = ad spend + COGS (ShipGoods) + refunds + Shopify Payments fees. Agency fees, apps and team costs are not included.",
     ],
   }

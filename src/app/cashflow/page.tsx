@@ -8,12 +8,15 @@ const eur = (n: number | null | undefined) =>
   n == null ? "—" : `${n < 0 ? "−" : ""}€${Math.abs(n).toLocaleString("en-IE", { maximumFractionDigits: Math.abs(n) < 100 ? 2 : 0 })}`
 const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
 
-const PROCESSOR_STATUS: Record<string, { connected: boolean; how: string }> = {
-  "Shopify Payments": { connected: true, how: "Connected through Windsor (payouts, pending balance, fees)." },
-  PayPal: { connected: false, how: "Balance not connected: add the PayPal connector in Windsor (windsor.ai → Data sources → PayPal), then the balance and fees show here." },
-  Whop: { connected: false, how: "Balance not connected: needs a Whop API key (Whop → Developer → API keys) added as WHOP_API_KEY in Vercel." },
-  Manual: { connected: false, how: "Likely Whale Checkout. Its balance isn't connected: Whale Checkout needs an API export or a manual balance entry." },
-  Other: { connected: false, how: "Unknown gateway." },
+function processorStatus(name: string, data: CashflowData): { connected: boolean; how: string } {
+  if (name === "Shopify Payments") return { connected: true, how: "Connected via Windsor (payouts, pending balance, fees)." }
+  if (name === "Whop") {
+    if (data.whop_balance?.available) return { connected: true, how: `Balance $${data.whop_balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · pending $${data.whop_balance.pending_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` }
+    return { connected: false, how: "Add WHOP_API_KEY in Vercel (Whop → Developer → API keys)." }
+  }
+  if (name === "PayPal") return { connected: false, how: "Add PayPal connector in Windsor to see balance and fees." }
+  if (name === "Whale Checkout") return { connected: false, how: "No API — enter balance manually or export from Whale dashboard." }
+  return { connected: false, how: "Unknown gateway." }
 }
 
 const CACHE_KEY = "cashflow:v1"
@@ -106,6 +109,41 @@ export default function CashflowPage() {
             </table>
           </div>
 
+          {/* Whop balance */}
+          {data.whop_balance?.available && (
+            <div className="glass rounded-xl p-4">
+              <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text)" }}>Whop balance (USD)</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: "Available", value: `$${data.whop_balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, color: "var(--green)" },
+                  { label: "Pending", value: `$${data.whop_balance.pending_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, color: "var(--orange)" },
+                  { label: "Total income", value: `$${data.whop_balance.income_usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "var(--text)" },
+                  { label: "Withdrawn", value: `$${data.whop_balance.withdrawn_usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, color: "var(--text-muted)" },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <div className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: "var(--text-dim)" }}>{s.label}</div>
+                    <div className="text-[14px] font-semibold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              {data.whop_balance.recent_payouts.length > 0 && (
+                <div className="mt-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="text-[10px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Recent payouts</div>
+                  <div className="space-y-0.5">
+                    {data.whop_balance.recent_payouts.slice(0, 5).map((p) => (
+                      <div key={p.id} className="flex items-center justify-between text-[10px]">
+                        <span style={{ color: "var(--text-muted)" }}>{p.date ? fmtDay(p.date) : "—"}</span>
+                        <span className="tabular-nums" style={{ color: p.status === "completed" ? "var(--green)" : "var(--orange)" }}>
+                          ${p.amount_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })} {p.status !== "completed" ? `(${p.status})` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Processors */}
           <div className="glass rounded-xl overflow-hidden">
             <div className="px-4 pt-3 pb-1 text-[11px] font-semibold" style={{ color: "var(--text)" }}>Money in per payment processor</div>
@@ -122,11 +160,11 @@ export default function CashflowPage() {
               </thead>
               <tbody>
                 {data.processors.map((p) => {
-                  const st = PROCESSOR_STATUS[p.processor] || PROCESSOR_STATUS.Other
+                  const st = processorStatus(p.processor, data)
                   const share = t.incoming_30d > 0 ? (p.incoming_30d / t.incoming_30d) * 100 : 0
                   return (
                     <tr key={p.processor} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                      <td className="px-3 py-2 font-medium" style={{ color: "var(--text)" }}>{p.processor}{p.processor === "Manual" ? " (Whale?)" : ""}</td>
+                      <td className="px-3 py-2 font-medium" style={{ color: "var(--text)" }}>{p.processor}</td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{eur(p.incoming_7d)}</td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{eur(p.incoming_30d)}</td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{share.toFixed(1)}%</td>
