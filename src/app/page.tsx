@@ -6,6 +6,7 @@ import { DatePicker } from "@/components/DatePicker"
 import { KPICards } from "@/components/KPICards"
 import { StoreComparison } from "@/components/StoreComparison"
 import { DailyTable } from "@/components/DailyTable"
+import { RoasAlertDetail } from "@/components/RoasAlertDetail"
 import {
   DailyTrendChart,
   SpendByChannelChart,
@@ -83,6 +84,8 @@ type RoasAlert = {
   breakevenRoas: number
   drop: number
   severity: "loss" | "thin" | "ok"
+  recentFrom: string
+  baselineFrom: string
 }
 
 // loss = last 3 days below break-even ROAS (losing money)
@@ -434,7 +437,7 @@ export default function Dashboard() {
       const severity: RoasAlert["severity"] =
         recentRoas < breakevenRoas ? "loss" : recentRoas < breakevenRoas * 1.2 ? "thin" : "ok"
       alerts.push({
-        store: s, recentRoas, baselineRoas, breakevenRoas, severity,
+        store: s, recentRoas, baselineRoas, breakevenRoas, severity, recentFrom, baselineFrom,
         drop: ((baselineRoas - recentRoas) / baselineRoas) * 100,
       })
     }
@@ -460,6 +463,7 @@ export default function Dashboard() {
     } catch {}
   }
   const visibleAlerts = roasAlerts.filter((a) => !dismissedAlerts.includes(a.store))
+  const [openAlert, setOpenAlert] = useState<string | null>(null)
 
   const dailyPnL = useMemo((): DailyPnL[] => {
     return dailyBriefing.map((row) => ({
@@ -554,11 +558,26 @@ export default function Dashboard() {
               {visibleAlerts.map((a) => {
                 const tone = ALERT_TONE[a.severity]
                 const be = Number.isFinite(a.breakevenRoas) ? `${a.breakevenRoas.toFixed(2)}x` : "n/a"
+                const isOpen = openAlert === a.store
                 return (
                   <div
                     key={a.store}
-                    className="rounded-xl pl-4 pr-2 py-2 flex items-center gap-2"
+                    className="rounded-xl"
                     style={{ background: tone.bg, border: `1px solid ${tone.border}` }}
+                  >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isOpen}
+                    onClick={() => setOpenAlert(isOpen ? null : a.store)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        setOpenAlert(isOpen ? null : a.store)
+                      }
+                    }}
+                    title={isOpen ? "Hide details" : "Show why this happened"}
+                    className="pl-4 pr-2 py-2 flex items-center gap-2 cursor-pointer"
                   >
                     <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tone.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" />
@@ -567,8 +586,20 @@ export default function Dashboard() {
                       {a.store} ROAS down {a.drop.toFixed(0)}% — last 3 days {a.recentRoas.toFixed(2)}x vs {a.baselineRoas.toFixed(2)}x the 7 days before
                       <span style={{ opacity: 0.75 }}> · {tone.label} (break-even {be})</span>
                     </span>
+                    <span className="shrink-0 text-[10px] flex items-center gap-1" style={{ color: tone.color, opacity: 0.8 }}>
+                      {isOpen ? "Hide" : "Why?"}
+                      <svg
+                        width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ transform: isOpen ? "rotate(180deg)" : undefined, transition: "transform 150ms" }}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
                     <button
-                      onClick={() => dismissAlert(a.store)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dismissAlert(a.store)
+                      }}
                       aria-label={`Dismiss ${a.store} alert`}
                       title="Hide for today"
                       className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-opacity opacity-60 hover:opacity-100"
@@ -578,6 +609,22 @@ export default function Dashboard() {
                         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
                     </button>
+                  </div>
+                  {isOpen && (
+                    <RoasAlertDetail
+                      store={a.store}
+                      revenue={revenueEur.filter((r) => r.store === a.store)}
+                      spend={spendEur.filter((r) => r.store === a.store)}
+                      sessions={sessions.filter((r) => r.store === a.store)}
+                      baselineFrom={a.baselineFrom}
+                      recentFrom={a.recentFrom}
+                      todayStr={todayStr}
+                      recentDays={3}
+                      baselineDays={7}
+                      breakevenRoas={a.breakevenRoas}
+                      color={tone.color}
+                    />
+                  )}
                   </div>
                 )
               })}
