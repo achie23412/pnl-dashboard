@@ -6,6 +6,7 @@ import { ADAPT_CHECKS, TARGET_STORES, daysBetween, todayIn, missingChecks, type 
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
 import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 import { FixBanner } from "@/components/FixBanner"
+import { UploadPlanner } from "@/components/UploadPlanner"
 
 interface Evidence {
   key: string
@@ -130,6 +131,8 @@ export default function OpportunitiesPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [bulkStore, setBulkStore] = useState("")
+  // Batch from the upload planner: when set, the list shows only these
+  const [batch, setBatch] = useState<{ ids: Set<number>; store: string } | null>(null)
 
   const CACHE_KEY = "opportunities:v3"
   const applyData = (json: { opportunities?: Opportunity[]; jobs?: ImportJob[]; patterns?: { label: string; detail: string }[]; scan?: typeof scanInfo }) => {
@@ -279,6 +282,7 @@ export default function OpportunitiesPage() {
       opps.filter(
         (o) =>
           tabStatuses.includes(o.status) &&
+          (!batch || batch.ids.has(o.id)) &&
           passes(fStore, o.target_store || "none") &&
           passesAny(fMarket, o.markets) &&
           passesAny(fCompetitor, o.competitor_domains || []) &&
@@ -286,7 +290,7 @@ export default function OpportunitiesPage() {
           passesAny(fSeason, [o.event_label || o.season, o.season]) &&
           passes(fPriority, o.priority),
       ),
-    [opps, tabStatuses, fStore, fMarket, fCompetitor, fCategory, fSeason, fPriority],
+    [opps, tabStatuses, batch, fStore, fMarket, fCompetitor, fCategory, fSeason, fPriority],
   )
   const counts = useMemo(() => Object.fromEntries(TABS.map((t) => [t.key, opps.filter((o) => t.statuses.includes(o.status)).length])), [opps])
   const jobById = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs])
@@ -356,6 +360,25 @@ export default function OpportunitiesPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      <UploadPlanner
+        opps={opps}
+        onApply={(ids, store) => {
+          setTab("review")
+          setFStoreF(EMPTY_FILTER); setFMarket(EMPTY_FILTER); setFCompetitor(EMPTY_FILTER)
+          setFCategory(EMPTY_FILTER); setFSeasonF(EMPTY_FILTER); setFPriority(EMPTY_FILTER)
+          setBatch({ ids: new Set(ids), store })
+          setSelected(new Set(ids))
+          setBulkStore(store)
+        }}
+      />
+
+      {batch && (
+        <div className="rounded-xl px-3 py-2 mb-3 flex items-center gap-2 text-[11px]" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "var(--text)" }}>
+          <span>Showing the planned batch: {batch.ids.size} products for <b>{batch.store}</b>. Check them, untick any you don&apos;t want, then click <b>Approve</b> in the bar below.</span>
+          <button className="ml-auto underline" style={{ color: "var(--text-muted)" }} onClick={() => { setBatch(null); setSelected(new Set()) }}>Show all again</button>
         </div>
       )}
 
