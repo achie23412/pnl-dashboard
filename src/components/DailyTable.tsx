@@ -1,4 +1,5 @@
 "use client"
+import { useState } from "react"
 import type { DailyBriefingRow } from "@/lib/types"
 
 function fmt(n: number, decimals = 0): string {
@@ -48,8 +49,16 @@ function ProfitBar({ profit, maxProfit }: { profit: number; maxProfit: number })
   )
 }
 
+const VISIBLE_DAYS = 7
+
 export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
+  const [expanded, setExpanded] = useState(false)
   if (data.length === 0) return null
+
+  // Newest day on top; only the latest 7 days unless expanded.
+  const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date))
+  const rows = expanded ? sorted : sorted.slice(0, VISIBLE_DAYS)
+  const hidden = sorted.length - rows.length
 
   const maxProfit = Math.max(...data.map((r) => Math.abs(r.profit)), 1)
 
@@ -86,7 +95,7 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {data.map((row, i) => {
+            {rows.map((row, i) => {
               const isEven = i % 2 === 0
               return (
                 <tr
@@ -123,6 +132,15 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
           </tbody>
         </table>
       </div>
+      {sorted.length > VISIBLE_DAYS && (
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full text-[10px] font-medium py-2 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+          style={{ color: "var(--text-muted)", borderTop: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          {expanded ? "Show last 7 days only ▴" : `Show ${hidden} more day${hidden === 1 ? "" : "s"} ▾`}
+        </button>
+      )}
     </div>
   )
 }
