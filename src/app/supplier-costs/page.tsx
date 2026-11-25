@@ -5,6 +5,16 @@ import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
+import { TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+
+// Breakeven ROAS for one product: (1 + media buyer fee) / (1 − COGS% − transaction fee).
+// Same formula as Product Performance and the Ascend profit sheet.
+function beRoasOf(store: string, cogsPct: number | null): number | null {
+  if (cogsPct == null) return null
+  const be = breakEvenRoas(cogsPct / 100, TRANSACTION_FEE_RATE[store] ?? 0.035, MEDIA_BUYER_FEE_RATE[store] ?? 0)
+  return Number.isFinite(be) ? be : null
+}
+const fmtBe = (n: number | null) => (n == null ? "—" : `${n.toFixed(2)}x`)
 
 interface SupplierProduct {
   title: string
@@ -106,6 +116,10 @@ export default function SupplierCostsPage() {
   const negotiateAlerts = products.filter((p) => p.negotiation_alert).length
   const cogsAlerts = products.filter((p) => p.cogs_alert).length
   const inRange = products.filter((p) => p.cogs_pct !== null && p.cogs_pct >= 28 && p.cogs_pct <= 32).length
+  // Average breakeven ROAS, weighted by units sold (what our ad spend actually has to beat).
+  const beRows = products.map((p) => ({ q: p.total_qty, be: beRoasOf(p.store, p.cogs_pct) })).filter((x) => x.be != null && x.q > 0)
+  const beQty = beRows.reduce((a, x) => a + x.q, 0)
+  const avgBe = beQty > 0 ? beRows.reduce((a, x) => a + (x.be as number) * x.q, 0) / beQty : null
 
   return (
     <PageShell
@@ -117,6 +131,7 @@ export default function SupplierCostsPage() {
         { label: "Avg COGS per unit (USD)", value: summary ? usd(summary.avg_cogs_unit) : "—" },
         { label: "COGS% in range", value: loading ? "—" : `${inRange}/${products.filter((p) => p.cogs_pct !== null).length}` },
         { label: "COGS% alerts", value: loading ? "—" : String(cogsAlerts), color: cogsAlerts > 0 ? "var(--red)" : undefined },
+        { label: "Breakeven ROAS (avg)", value: loading ? "—" : fmtBe(avgBe), sub: "weighted by units sold" },
       ]}
       actions={
         <Button onClick={fetchData} disabled={loading}>
@@ -206,6 +221,10 @@ export default function SupplierCostsPage() {
                   COGS%
                   <span className="block text-[8px] font-normal normal-case tracking-normal" style={{ color: "var(--text-dim)" }}>target 28–32%</span>
                 </th>
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }} title="(1 + media buyer fee) ÷ (1 − COGS% − transaction fee). Google stores: 6% transaction + 10% media buyer fee. Meta stores: 2.9% transaction fee. Your ROAS has to be above this to make profit.">
+                  BE ROAS
+                  <span className="block text-[8px] font-normal normal-case tracking-normal" style={{ color: "var(--text-dim)" }}>ROAS must beat this</span>
+                </th>
                 <th className={`${TH} text-center`} style={{ color: "var(--text-dim)" }}>Status</th>
                 <th className={`${TH} text-center`} style={{ color: "var(--text-dim)" }}>Action</th>
               </tr>
@@ -268,6 +287,7 @@ export default function SupplierCostsPage() {
                     <td className={`${TD} text-right tabular-nums`} style={{ color: cogsColor(p.cogs_pct) }}>
                       {p.cogs_pct !== null ? `${p.cogs_pct.toFixed(1)}%` : "—"}
                     </td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>{fmtBe(beRoasOf(p.store, p.cogs_pct))}</td>
                     <td className={`${TD} text-center`}>
                       {badge && (
                         <Badge tone={badge.tone}>{badge.label}</Badge>
