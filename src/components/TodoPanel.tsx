@@ -1,6 +1,8 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import type { AutoTodo } from "@/lib/todo-rules"
+import { calendarAction } from "@/lib/todo-actions"
 
 export type CustomTodo = {
   id: number
@@ -75,6 +77,7 @@ export function TodoPanel({ events, onCustomChange }: Props) {
             title: e.date === today ? e.label : `${e.label} (in ${Math.round((Date.parse(e.date) - Date.parse(today)) / 86400000)}d)`,
             why: e.note || "",
             source: "Calendar",
+            ...calendarAction(e),
             priority: e.type === "deadline" || e.type === "shipping" ? "high" : "normal",
             store: e.store,
             done: doneKeys.has(key),
@@ -223,12 +226,23 @@ export function TodoPanel({ events, onCustomChange }: Props) {
                       {openWhy === m.key ? (
                         <div className="mt-1 text-[10px] leading-relaxed space-y-0.5">
                           {m.why && <div style={{ color: "var(--text-muted)" }}><b>Why:</b> {m.why}</div>}
+                          {m.fix && <div style={{ color: "var(--text)" }}><b>Fix:</b> {m.fix}</div>}
                           <div style={{ color: "var(--text-dim)" }}><b>Rule:</b> {m.source}</div>
                         </div>
                       ) : (
-                        <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>{m.source.split(":")[0]} · tap for why</div>
+                        <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>{m.source.split(":")[0]} · tap for why and fix</div>
                       )}
                     </button>
+                    {m.href && !m.done && (
+                      <Link
+                        href={m.href}
+                        className="text-[10px] font-semibold whitespace-nowrap px-2 py-1 rounded-md"
+                        style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
+                        title={m.hrefLabel ? `Open ${m.hrefLabel}` : "Open"}
+                      >
+                        Go fix →
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

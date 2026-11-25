@@ -34,6 +34,12 @@ export default function ProductAlertsPage() {
   const [fStore, setFStore] = useState("all")
   const [fSev, setFSev] = useState<"all" | Severity>("all")
 
+  // Deep link from the calendar to-do list: /product-alerts?store=<name>
+  useEffect(() => {
+    const st = new URLSearchParams(window.location.search).get("store")
+    if (st) setFStore(st)
+  }, [])
+
   useEffect(() => {
     // 30 / 14 / 7 days and the 7 days before that (drafting SOP windows).
     Promise.all([loadWindow(day(29), day(0)), loadWindow(day(13), day(0)), loadWindow(day(6), day(0)), loadWindow(day(13), day(7))])

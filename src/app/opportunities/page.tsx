@@ -148,6 +148,17 @@ export default function OpportunitiesPage() {
     load()
   }, [load])
 
+  // Deep links from the calendar to-do list: ?season=, ?store=, ?tab=
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    const season = sp.get("season")
+    const st = sp.get("store")
+    const t = sp.get("tab")
+    if (season) setFSeason(season)
+    if (st) setFStore(st)
+    if (t && TABS.some((x) => x.key === t)) setTab(t)
+  }, [])
+
   const flash = (m: string) => {
     if (!m) return
     setToast(m)
@@ -206,9 +217,9 @@ export default function OpportunitiesPage() {
       markets: uniq(opps.flatMap((o) => o.markets)),
       competitors: uniq(opps.flatMap((o) => o.evidence.map((e) => e.competitor_domain))),
       categories: uniq(opps.map((o) => o.category)),
-      seasons: uniq(opps.map((o) => o.event_label || o.season)),
+      seasons: uniq([...opps.map((o) => o.event_label || o.season), ...opps.map((o) => o.season), fSeason !== "all" ? fSeason : null]),
     }
-  }, [opps])
+  }, [opps, fSeason])
 
   const tabStatuses = TABS.find((t) => t.key === tab)?.statuses || []
   const visible = useMemo(
@@ -220,7 +231,7 @@ export default function OpportunitiesPage() {
           (fMarket === "all" || o.markets.includes(fMarket)) &&
           (fCompetitor === "all" || o.evidence.some((e) => e.competitor_domain === fCompetitor)) &&
           (fCategory === "all" || o.category === fCategory) &&
-          (fSeason === "all" || (o.event_label || o.season) === fSeason) &&
+          (fSeason === "all" || (o.event_label || o.season) === fSeason || o.season === fSeason) &&
           (fPriority === "all" || o.priority === fPriority),
       ),
     [opps, tabStatuses, fStore, fMarket, fCompetitor, fCategory, fSeason, fPriority],
