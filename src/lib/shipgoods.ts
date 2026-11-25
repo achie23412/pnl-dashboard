@@ -170,3 +170,55 @@ export async function fetchSummary() {
   const json = await res.json()
   return json.data
 }
+
+export interface SGTracking {
+  tracking_number: string
+  carrier: string
+  tracking_url: string
+  items: { variant_id: string; quantity: number }[]
+}
+
+export interface SGOrder {
+  order_id: string
+  external_order_no: string
+  shop_admin_id: number
+  status: string
+  quote_pending: boolean
+  shipping_method: string
+  currency: string
+  amounts: {
+    product_total: number
+    shipping: number | null
+    total: number | null
+    charged: number | null
+  }
+  trackings: SGTracking[]
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchOrders(updatedSince: string): Promise<SGOrder[]> {
+  const all: SGOrder[] = []
+  let page = 1
+  while (true) {
+    const params = new URLSearchParams({
+      updated_since: updatedSince,
+      per_page: "100",
+      page: String(page),
+    })
+    const res = await fetch(`${BASE}/orders?${params}`, { headers: sgHeaders() })
+    if (!res.ok) throw new Error(`Shipgoods orders: ${res.status}`)
+    const json = await res.json()
+    const items: SGOrder[] = json.data?.list ?? []
+    if (items.length === 0) break
+    all.push(...items)
+    const totalPages = json.data?.pagination?.total_pages ?? 1
+    if (page >= totalPages) break
+    page++
+  }
+  return all
+}
+
+export function resolveStore(shopAdminId: number): string {
+  return SHIPGOODS_SHOP_MAP[shopAdminId] || `Shop #${shopAdminId}`
+}

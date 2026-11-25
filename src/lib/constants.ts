@@ -52,6 +52,9 @@ export const SHOPIFY_STORES: Record<string, { domain: string; envKey: string }> 
 export const SHIPGOODS_SHOP_MAP: Record<number, string> = {
   16918: "LUMEGLASSES",
   18132: "Blinky",
+  18253: "Walsh & Farley",
+  18254: "Carter & Collins",
+  18255: "Susan & Allen",
 }
 
 export const AVG_COGS_PER_ORDER: Record<string, number> = {
