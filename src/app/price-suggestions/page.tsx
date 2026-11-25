@@ -105,8 +105,8 @@ export default function PriceSuggestionsPage() {
     }
   }
 
-  const stores = [...new Set(suggestions.map(s => s.store))]
-  const rules = [...new Set(suggestions.map(s => s.rule))]
+  const stores = Array.from(new Set(suggestions.map(s => s.store)))
+  const rules = Array.from(new Set(suggestions.map(s => s.rule)))
   const filtered = suggestions.filter(s => {
     if (filterStore !== "all" && s.store !== filterStore) return false
     if (filterRule !== "all" && s.rule !== filterRule) return false
