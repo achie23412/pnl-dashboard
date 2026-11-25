@@ -52,6 +52,17 @@ export function phrasesFromTitle(title: string, vendor?: string | null): string[
 const OFF_NICHE = /\b(wedding|bridal|bride|bridesmaid|prom|quinceanera|homecoming|graduation|communion|christening|running|basketball|football|soccer|golf|tennis|hiking|climbing|ski|snowboard|cycling|bike|gym|yoga|workout|nursing|maternity|kids|kid|baby|toddler|girls|boys|child|children|school|uniform|scrubs|costume|cosplay|halloween|lingerie|underwear|bra|bras|panties|swimsuit|bikini|wig|wigs|jewelry|jewellery|ring|rings|necklace|earrings|watch|watches|nike|adidas|puma|reebok|vans|converse|crocs|ugg|uggs|skechers|asics|hoka|birkenstock|timberland|dr|martens|zara|shein|primark|levis|gucci|prada|on)\b/
 
 const host = (d: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")
+// Word forms for matching only: "men's"/"mens" → men, "ladies"/"womens" → women, plurals → singular.
+function stem(w: string): string {
+  if (w === "mens" || w === "man" || w === "male") return "men"
+  if (w === "womens" || w === "woman" || w === "ladies" || w === "lady" || w === "female") return "women"
+  if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y"
+  if (w.length > 4 && /(ss|sh|ch|x)es$/.test(w)) return w.slice(0, -2)
+  if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) return w.slice(0, -1)
+  return w
+}
+const stemAll = (s: string) => s.split(" ").filter(Boolean).map(stem)
+
 const norm = (s: string) => s.toLowerCase().replace(/['’]s\b/g, "").replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim()
 
 export async function buildKeywords(market: MarketCode): Promise<{ keywords: FinderKeyword[]; competitorsInMarket: number; plannerCount: number; productsScanned: number; productsInMarket: number }> {
@@ -108,6 +119,7 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
     }
   }
   for (const r of planner) {
+    if (OFF_NICHE.test(norm(r.keyword))) continue
     const x = get(r.keyword)
     if (!x) continue
     x.volume = Math.max(x.volume || 0, Number(r.avg_monthly) || 0)
@@ -116,13 +128,13 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
   // Product nouns competitors actually use ("coat", "dress", "boots"…): generic keywords must end in one.
   const nouns = new Map<string, number>()
   map.forEach((x) => {
-    const last = x.keyword.split(" ").pop() || ""
+    const last = stem(x.keyword.split(" ").pop() || "")
     nouns.set(last, (nouns.get(last) || 0) + 1)
   })
   const relevant = (kw: string) => {
     const k = norm(kw)
     if (OFF_NICHE.test(k)) return false
-    return nouns.size === 0 || (nouns.get(k.split(" ").pop() || "") || 0) >= 3
+    return nouns.size === 0 || (nouns.get(stem(k.split(" ").pop() || "")) || 0) >= 3
   }
   const baseVol = (b: { uk: number; us: number }) => (market === "US" ? b.us : market === "UK" ? b.uk : Math.round(b.uk / 12)) // IE ≈ 1/12 of UK
   for (const b of base) {
@@ -145,7 +157,7 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
   const index = Array.from(titlesByDomain.entries()).map(([d, titles]) => {
     const byWord = new Map<string, Set<number>>()
     titles.forEach((t, i) => {
-      for (const w of Array.from(new Set(t.split(" ")))) {
+      for (const w of Array.from(new Set(stemAll(t)))) {
         if (!w) continue
         if (!byWord.has(w)) byWord.set(w, new Set())
         byWord.get(w)!.add(i)
@@ -154,7 +166,7 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
     return { d, byWord }
   })
   for (const x of keywords) {
-    const words = x.keyword.split(" ")
+    const words = Array.from(new Set(stemAll(x.keyword)))
     for (const { d, byWord } of index) {
       const sets = words.map((w) => byWord.get(w))
       if (sets.some((st) => !st)) continue
