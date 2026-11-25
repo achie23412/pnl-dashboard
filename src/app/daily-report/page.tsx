@@ -33,6 +33,8 @@ interface StoreRow {
   store: string
   revenue: number
   orders: number
+  sessions: number | null
+  cvr: number | null
   spend: number
   roas: number
   cogs: number
@@ -46,6 +48,7 @@ export default function DailyReportPage() {
   const [spend, setSpend] = useState<SpendRow[]>([])
   const [cogs, setCogs] = useState<CogsRow[]>([])
   const [refunds, setRefunds] = useState<RefundRow[]>([])
+  const [sessions, setSessions] = useState<{ store: string; sessions: number }[]>([])
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
@@ -58,16 +61,18 @@ export default function DailyReportPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [{ data: rev }, { data: sp }, { data: cg }, { data: ref }] = await Promise.all([
+      const [{ data: rev }, { data: sp }, { data: cg }, { data: ref }, { data: ses }] = await Promise.all([
         supabase.from("daily_revenue").select("*").eq("date", date),
         supabase.from("daily_spend").select("*").eq("date", date),
         supabase.from("daily_cogs").select("*").eq("date", date),
         supabase.from("refunds").select("*").eq("date", date),
+        supabase.from("daily_sessions").select("store,sessions").eq("date", date),
       ])
       setRevenue((rev as RevenueRow[]) || [])
       setSpend((sp as SpendRow[]) || [])
       setCogs((cg as CogsRow[]) || [])
       setRefunds((ref as RefundRow[]) || [])
+      setSessions((ses as { store: string; sessions: number }[]) || [])
       setRates(await fetchEurRates(date, date))
       setLoading(false)
     }
@@ -96,9 +101,14 @@ export default function DailyReportPage() {
       const profit = totalRevEur - totalRefund - totalSpend - totalCogs
       const roas = totalSpend > 0 ? totalRevEur / totalSpend : 0
 
-      return { store: s, revenue: totalRevEur, orders: totalOrders, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit }
+      // CVR = orders ÷ human sessions (bots excluded), from Shopify Analytics
+      const ses = sessions.filter((r) => r.store === s)
+      const storeSessions = ses.length ? ses.reduce((sum, r) => sum + r.sessions, 0) : null
+      const cvr = storeSessions && storeSessions > 0 ? (totalOrders / storeSessions) * 100 : null
+
+      return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit }
     }).filter((s) => s.revenue > 0 || s.spend > 0)
-  }, [revenue, spend, cogs, refunds, rates, date])
+  }, [revenue, spend, cogs, refunds, sessions, rates, date])
 
   const totals = useMemo(() => {
     const r = storeRows.reduce((acc, s) => ({
@@ -109,7 +119,16 @@ export default function DailyReportPage() {
       refunds: acc.refunds + s.refunds,
       profit: acc.profit + s.profit,
     }), { revenue: 0, orders: 0, spend: 0, cogs: 0, refunds: 0, profit: 0 })
-    return { ...r, roas: r.spend > 0 ? r.revenue / r.spend : 0 }
+    // Total CVR only over stores that have session data
+    const withSessions = storeRows.filter((s) => s.sessions !== null)
+    const totalSessions = withSessions.reduce((a, s) => a + (s.sessions || 0), 0)
+    const ordersWithSessions = withSessions.reduce((a, s) => a + s.orders, 0)
+    return {
+      ...r,
+      roas: r.spend > 0 ? r.revenue / r.spend : 0,
+      sessions: withSessions.length ? totalSessions : null,
+      cvr: totalSessions > 0 ? (ordersWithSessions / totalSessions) * 100 : null,
+    }
   }, [storeRows])
 
   const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
@@ -210,6 +229,7 @@ export default function DailyReportPage() {
                     <th className="px-3 py-2.5 text-left font-semibold text-[9px]" style={{ color: "var(--text-dim)" }}>Market</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Revenue</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Orders</th>
+                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }} title="Orders ÷ human sessions (bots excluded)">CVR</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>ROAS</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Ad Spend</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>COGS</th>
@@ -232,6 +252,10 @@ export default function DailyReportPage() {
                         </td>
                         <td className="px-3 py-2 text-right" style={{ color: "var(--green)" }}>{fmt(s.revenue)}</td>
                         <td className="px-3 py-2 text-right" style={{ color: "var(--text)" }}>{s.orders}</td>
+                        <td className="px-3 py-2 text-right" style={{ color: "var(--text)" }} title={s.sessions !== null ? `${s.orders} orders ÷ ${s.sessions.toLocaleString("en-IE")} human sessions` : "No session data for this day yet"}>
+                          {s.cvr !== null ? `${s.cvr.toFixed(2)}%` : "—"}
+                          {s.sessions !== null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{s.sessions.toLocaleString("en-IE")} sess.</span>}
+                        </td>
                         <td className="px-3 py-2 text-right" style={{ color: s.roas >= 2.5 ? "var(--green)" : s.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{s.roas.toFixed(2)}x</td>
                         <td className="px-3 py-2 text-right" style={{ color: "var(--text-muted)" }}>{fmt(s.spend)}</td>
                         <td className="px-3 py-2 text-right" style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
@@ -246,6 +270,10 @@ export default function DailyReportPage() {
                     <td className="px-3 py-2"></td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--green)" }}>{fmt(totals.revenue)}</td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text)" }}>{totals.orders}</td>
+                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text)" }}>
+                      {totals.cvr !== null ? `${totals.cvr.toFixed(2)}%` : "—"}
+                      {totals.sessions !== null && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>{totals.sessions.toLocaleString("en-IE")} sess.</span>}
+                    </td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: totals.roas >= 2.5 ? "var(--green)" : totals.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{totals.roas.toFixed(2)}x</td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text-muted)" }}>{fmt(totals.spend)}</td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
