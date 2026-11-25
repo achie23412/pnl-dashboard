@@ -169,8 +169,30 @@ export default function OpportunitiesPage() {
     setScanning(true)
     setError(null)
     try {
-      const r = await runCompetitorScan((p) => setScan(p))
-      flash(`Scan done: ${r.created} new, ${r.updated} updated${r.resurfaced ? `, ${r.resurfaced} resurfaced` : ""}${r.failed?.length ? ` · ${r.failed.length} stores unreadable` : ""}.`)
+      // 1) Server scan in rounds (same as the daily automatic scan).
+      let scanned = 0
+      let blocked = 0
+      let failedCount = 0
+      for (let round = 1; round <= 8; round++) {
+        setScan({ done: scanned, total: scanned + 1, current: `server scan, round ${round}`, products: 0, failed: [] })
+        const res = await fetch("/api/opportunities/auto-scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recompute: false }) })
+        const j = await res.json()
+        if (!res.ok) throw new Error(j.error || `Scan failed (HTTP ${res.status})`)
+        scanned += j.scanned
+        blocked += j.blocked
+        failedCount += j.failed.length
+        if (j.remaining === 0 || j.scanned + j.failed.length === 0) break
+      }
+      // 2) If the stores block the server, read them from this browser instead.
+      if (blocked > 0 && blocked >= scanned) {
+        const r = await runCompetitorScan((p) => setScan(p))
+        flash(`Scan done (browser): ${r.created} new, ${r.updated} updated${r.failed?.length ? ` · ${r.failed.length} stores unreadable` : ""}.`)
+      } else {
+        const rc = await fetch("/api/opportunities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "recompute" }) })
+        const rj = await rc.json()
+        if (!rc.ok) throw new Error(rj.error || "Rebuilding opportunities failed")
+        flash(`Scan done: ${scanned} stores read, ${rj.created} new, ${rj.updated} updated${rj.resurfaced ? `, ${rj.resurfaced} resurfaced` : ""}${failedCount ? ` · ${failedCount} stores unreadable` : ""}.`)
+      }
       await load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -260,6 +282,7 @@ export default function OpportunitiesPage() {
             {scanInfo?.last_scan
               ? `Last scan ${scanInfo.last_scan} · ${scanInfo.products_in_window.toLocaleString()} products from ${scanInfo.competitors_in_window} competitors (last 45 days)`
               : "No scan yet."}
+            {" · Updates automatically every morning (06:30); season dates roll forward on their own."}
           </div>
         </div>
         <div className="flex items-center gap-2">

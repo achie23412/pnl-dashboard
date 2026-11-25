@@ -115,6 +115,15 @@ create table if not exists import_jobs (
 );
 create index if not exists idx_jobs_status on import_jobs (status);
 
+-- Daily automatic scan: which competitor was read when (oldest first next run).
+create table if not exists competitor_scan_state (
+  domain text primary key,
+  last_scanned timestamptz,
+  last_ok boolean,
+  last_error text,
+  products_read integer
+);
+
 -- RLS: dashboard reads with the anon key; all writes go through API routes
 -- that use the service key.
 alter table competitor_products enable row level security;
@@ -122,6 +131,7 @@ alter table own_products enable row level security;
 alter table opportunities enable row level security;
 alter table opportunity_history enable row level security;
 alter table import_jobs enable row level security;
+alter table competitor_scan_state enable row level security;
 
 do $$ begin
   create policy "anon_read_competitor_products" on competitor_products for select to anon using (true);
@@ -137,4 +147,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "anon_read_import_jobs" on import_jobs for select to anon using (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "anon_read_competitor_scan_state" on competitor_scan_state for select to anon using (true);
 exception when duplicate_object then null; end $$;

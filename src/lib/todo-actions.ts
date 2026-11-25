@@ -13,6 +13,8 @@ const LISTING_SEASONS: [RegExp, string][] = [
   [/spring/i, "Spring"],
   [/summer/i, "Summer"],
   [/christmas|xmas|gift/i, "Christmas gifting"],
+  [/autumn|fall/i, "Autumn"],
+  [/valentine/i, "Valentine's"],
 ]
 
 export function calendarAction(e: { label: string; type: string; note?: string; store?: string }): CalendarAction {

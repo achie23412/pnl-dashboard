@@ -1,4 +1,7 @@
 // Hardcoded marketing/season calendar (shared by the Calendar page and Product Opportunities).
+// The rolling season schedule (src/lib/season-schedule.ts) is merged in, so every
+// coming season always has a "list products by" date, also after these dates run out.
+import { mergeWithSchedule } from "@/lib/season-schedule"
 export type HardcodedEvent = {
   date: string
   label: string
@@ -7,7 +10,7 @@ export type HardcodedEvent = {
   note?: string
 }
 
-export const HARDCODED_EVENTS: HardcodedEvent[] = [
+const STATIC_EVENTS: HardcodedEvent[] = [
   { date: "2026-11-27", label: "Black Friday", type: "sale", note: "Peak ad spend day. All stores max budget." },
   { date: "2026-11-28", label: "Black Saturday", type: "sale", note: "BF weekend — keep budgets high." },
   { date: "2026-11-29", label: "BF Sunday", type: "sale", note: "Momentum day — don't cut spend." },
@@ -42,3 +45,7 @@ export const HARDCODED_EVENTS: HardcodedEvent[] = [
   { date: "2027-01-06", label: "Q5 wind-down check", type: "deadline", note: "CPMs start normalizing. Evaluate which Q5 budgets to pull back." },
   { date: "2027-01-07", label: "Publish spring collection", type: "prep", note: "Transition from winter clearance to spring arrivals. Light layers, rain gear, pastels." },
 ]
+
+const todayUtc = () => new Date().toISOString().slice(0, 10)
+
+export const HARDCODED_EVENTS: HardcodedEvent[] = mergeWithSchedule(STATIC_EVENTS, todayUtc()) as HardcodedEvent[]

@@ -242,6 +242,18 @@ const SEASON_RULES: SeasonRule[] = [
     fallbackPeak: { month: 1, day: 10 },
   },
   {
+    season: "Valentine's",
+    keywords: ["valentine", "valentines", "heart", "romantic"],
+    eventMatch: ["valentine"],
+    fallbackPeak: { month: 2, day: 14 },
+  },
+  {
+    season: "Autumn",
+    keywords: ["autumn", "fall", "corduroy", "flannel", "suede", "plaid", "tweed", "checked"],
+    eventMatch: ["autumn"],
+    fallbackPeak: { month: 10, day: 1 },
+  },
+  {
     season: "Spring",
     keywords: ["trench", "floral", "pastel", "blouse", "light", "spring", "rain"],
     eventMatch: ["spring"],
@@ -308,8 +320,10 @@ export function timingFor(tokens: string[], store: TargetStore | null, events: E
     .filter((e) => !e.store || !store || e.store === store.code)
     .filter((e) => e.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
+  // Prefer a "list products by" (prep) date over e.g. the sale day itself.
+  const prepFirst = [...relevant.filter((e) => e.type === "prep"), ...relevant.filter((e) => e.type !== "prep")]
   for (const m of rule.eventMatch) {
-    const ev = relevant.find((e) => e.label.toLowerCase().includes(m))
+    const ev = prepFirst.find((e) => e.label.toLowerCase().includes(m))
     if (ev) {
       // "prep"/"launch" events are already the listing deadline; for others list ahead.
       const isDeadline = ev.type === "prep" || ev.type === "launch"
