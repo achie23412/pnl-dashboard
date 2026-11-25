@@ -244,7 +244,6 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
       { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
-      { href: "/products", label: "Products", icon: <ProductsIcon /> },
       { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
       { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
       { href: "/listings", label: "Listings", icon: <ListIcon /> },

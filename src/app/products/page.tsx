@@ -1,6 +1,6 @@
-"use client"
-import { ProductTesting } from "@/components/ProductTesting"
+import { redirect } from "next/navigation"
 
+// Products were merged into Product Performance (one product page).
 export default function ProductsPage() {
-  return <ProductTesting />
+  redirect("/product-performance")
 }

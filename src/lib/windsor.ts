@@ -8,7 +8,9 @@ interface WindsorRow {
   [key: string]: string | number | null
 }
 
-async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string): Promise<WindsorRow[]> {
+// revalidateSec: cache the response in Next's data cache for that long. Only
+// used by read-only dashboard routes; the nightly refresh always fetches fresh.
+async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string, revalidateSec?: number): Promise<WindsorRow[]> {
   const params = new URLSearchParams({
     api_key: process.env.WINDSOR_API_KEY!,
     connector,
@@ -16,7 +18,10 @@ async function fetchWindsor(connector: string, fields: string[], dateFrom: strin
     date_to: dateTo,
     fields: fields.join(","),
   })
-  const res = await fetch(`${BASE}?${params}`)
+  const res = await fetch(
+    `${BASE}?${params}`,
+    revalidateSec ? { next: { revalidate: revalidateSec } } : { cache: "no-store" },
+  )
   if (!res.ok) throw new Error(`Windsor ${connector}: ${res.status} ${await res.text()}`)
   const json = await res.json()
   return Array.isArray(json.data) ? json.data : []
@@ -65,7 +70,7 @@ export interface GoogleProductSpend {
 // Google Shopping spend per product. product_item_id looks like
 // "shopify_<country>_<productId>_<variantId>"; variants are summed per product.
 export async function fetchGoogleProductSpend(dateFrom: string, dateTo: string): Promise<GoogleProductSpend[]> {
-  const rows = await fetchWindsor("google_ads", ["date", "account_name", "product_item_id", "product_title", "spend"], dateFrom, dateTo)
+  const rows = await fetchWindsor("google_ads", ["date", "account_name", "product_item_id", "product_title", "spend"], dateFrom, dateTo, 3600)
   const byKey = new Map<string, GoogleProductSpend>()
   for (const r of rows) {
     const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
@@ -87,7 +92,7 @@ export async function fetchGoogleProductSpend(dateFrom: string, dateTo: string):
 
 // Shopify order id -> order total actually paid (shop currency), order rows only.
 export async function fetchShopifyOrderTotals(dateFrom: string, dateTo: string): Promise<Map<string, number>> {
-  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price", "order_refund_id"], dateFrom, dateTo)
+  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price", "order_refund_id"], dateFrom, dateTo, 3600)
   const totals = new Map<string, number>()
   for (const row of rows) {
     if (row.order_refund_id) continue

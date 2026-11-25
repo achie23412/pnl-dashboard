@@ -155,6 +155,7 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(SG_TIMEOUT_MS),
+      next: { revalidate: 3600 }, // ShipGoods is slow (~7s/page); cache each page for 1h
     })
     if (!res.ok) throw new Error(`page ${page}: HTTP ${res.status}`)
     const json: ShipgoodsResponse = await res.json()
@@ -670,6 +671,14 @@ export async function GET(req: Request) {
   const sheetCount = allProducts.filter((p) => p.cogs_source === "sheet").length
   const mostSold = withSales.length > 0 ? withSales[0] : null
 
+  // Cache at Vercel's edge per URL (store + date range): served instantly for 6h,
+  // then served stale while it refreshes in the background. Not cached when a
+  // data source failed (missing Shopify tokens are a known state, not a failure).
+  const hardErrors = errors.filter((e) => !e.includes("no Shopify token"))
+  const cacheHeader = hardErrors.length === 0
+    ? "public, s-maxage=21600, stale-while-revalidate=86400"
+    : "no-store"
+
   return NextResponse.json({
     products: allProducts,
     stores,
@@ -686,5 +695,6 @@ export async function GET(req: Request) {
     period: { from: dateFrom, to: dateTo },
     sales_sources: salesSources,
     errors,
-  })
+    generated_at: new Date().toISOString(),
+  }, { headers: { "Cache-Control": cacheHeader } })
 }

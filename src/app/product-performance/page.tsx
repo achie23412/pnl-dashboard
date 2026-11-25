@@ -58,6 +58,7 @@ type SortDir = "asc" | "desc"
 export default function ProductPerformancePage() {
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [store, setStore] = useState<StoreName>("Overall")
   const [sortKey, setSortKey] = useState<SortKey>("revenue")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
@@ -72,31 +73,62 @@ export default function ProductPerformancePage() {
   const [summary, setSummary] = useState({ total: 0, withSales: 0, withCogs: 0, totalUnits: 0, totalRevenue: 0 })
 
   useEffect(() => {
-    setLoading(true)
+    let cancelled = false
+    const cacheKey = `product-performance:v1:${dateFrom}:${dateTo}`
+    const apply = (data: CatalogResponse) => {
+      setProducts(data.products || [])
+      setDataErrors(data.errors || [])
+      setSalesSources(data.sales_sources || {})
+      setStoreSummaries(data.stores || [])
+      setSummary({
+        total: data.total_products,
+        withSales: data.products_with_sales,
+        withCogs: data.products_with_cogs,
+        totalUnits: data.total_units_sold,
+        totalRevenue: data.total_revenue,
+      })
+    }
+
+    // Show the last result for this date range immediately (if any), then refresh.
+    let hadCache = false
+    try {
+      const raw = localStorage.getItem(cacheKey)
+      if (raw) {
+        apply(JSON.parse(raw) as CatalogResponse)
+        hadCache = true
+      }
+    } catch {
+      // storage unavailable or corrupt: just load normally
+    }
+    setLoading(!hadCache)
+    setRefreshing(hadCache)
     setLoadError(null)
+
     fetch(`/api/product-catalog?store=all&from=${dateFrom}&to=${dateTo}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`Product API returned HTTP ${r.status}`)
         return r.json()
       })
       .then((data: CatalogResponse) => {
-        setProducts(data.products || [])
-        setDataErrors(data.errors || [])
-        setSalesSources(data.sales_sources || {})
-        setStoreSummaries(data.stores || [])
-        setSummary({
-          total: data.total_products,
-          withSales: data.products_with_sales,
-          withCogs: data.products_with_cogs,
-          totalUnits: data.total_units_sold,
-          totalRevenue: data.total_revenue,
-        })
+        if (cancelled) return
+        apply(data)
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(data))
+        } catch {
+          // quota exceeded etc.: caching is optional
+        }
         setLoading(false)
+        setRefreshing(false)
       })
       .catch((e: unknown) => {
+        if (cancelled) return
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
+        setRefreshing(false)
       })
+    return () => {
+      cancelled = true
+    }
   }, [dateFrom, dateTo])
 
   const filtered = useMemo(() => {
@@ -149,6 +181,7 @@ export default function ProductPerformancePage() {
           <h1 className="text-[20px] font-bold mb-1" style={{ color: "var(--text)" }}>Product Performance</h1>
           <p className="text-[12px] max-w-3xl" style={{ color: "var(--text-muted)" }}>
             Every product with its ROAS against its breakeven ROAS. {dateFrom} → {dateTo}.
+            {refreshing && <span className="ml-2 text-[10px]" style={{ color: "var(--text-dim)" }}>Updating…</span>}
           </p>
         </div>
         <DatePicker
