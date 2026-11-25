@@ -115,6 +115,12 @@ export default function PriceSuggestionsPage() {
 
   const eur = (n: number) => `€${n.toFixed(2)}`
 
+  const cogsColor = (pct: number) => {
+    if (pct >= 28 && pct <= 32) return "#4ade80"
+    if ((pct >= 25 && pct < 28) || (pct > 32 && pct <= 35)) return "#facc15"
+    return "#f87171"
+  }
+
   return (
     <PageShell
       title="Price Suggestions"
@@ -180,7 +186,7 @@ export default function PriceSuggestionsPage() {
             <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(168,85,247,0.10)", color: "#a855f7" }}>COGS% too high: &gt;40% of price → target 30%</span>
             <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(96,165,250,0.10)", color: "#60a5fa" }}>Possibly overpriced: ROAS &gt;5 but ≤2 sales → −8%</span>
           </div>
-          <div className="text-[9px] mt-2" style={{ color: "var(--text-dim)" }}>7-day cooldown per product after each price change. Only products with €25+ ad spend are evaluated.</div>
+          <div className="text-[9px] mt-2" style={{ color: "var(--text-dim)" }}>7-day cooldown per product after each price change. Only products with €5+ ad spend are evaluated.</div>
         </div>
       )}
 
@@ -196,6 +202,14 @@ export default function PriceSuggestionsPage() {
                 <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Current</th>
                 <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Suggested</th>
                 <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Change</th>
+                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>
+                  <div>COGS%</div>
+                  <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>now</div>
+                </th>
+                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>
+                  <div>COGS%</div>
+                  <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>after</div>
+                </th>
                 <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>ROAS</th>
                 <th className="text-center px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Action</th>
               </tr>
@@ -247,6 +261,20 @@ export default function PriceSuggestionsPage() {
                     <td className="px-3 py-2.5 text-right font-mono font-medium" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>{eur(s.suggested_price)}</td>
                     <td className="px-3 py-2.5 text-right font-mono" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>
                       {s.change_pct > 0 ? "+" : ""}{s.change_pct}%
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {s.metrics.cogs_usd !== null && s.current_price > 0 ? (
+                        <span style={{ color: cogsColor((s.metrics.cogs_usd / s.current_price) * 100) }}>
+                          {((s.metrics.cogs_usd / s.current_price) * 100).toFixed(1)}%
+                        </span>
+                      ) : <span style={{ color: "var(--text-dim)" }}>—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {s.metrics.cogs_usd !== null && s.suggested_price > 0 ? (
+                        <span style={{ color: cogsColor((s.metrics.cogs_usd / s.suggested_price) * 100) }}>
+                          {((s.metrics.cogs_usd / s.suggested_price) * 100).toFixed(1)}%
+                        </span>
+                      ) : <span style={{ color: "var(--text-dim)" }}>—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{s.metrics.roas.toFixed(2)}x</td>
                     <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
