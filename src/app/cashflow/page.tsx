@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { Panel, Notice, Loading, Button, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_COLORS } from "@/lib/constants"
 import type { CashflowData } from "@/lib/cashflow"
 
@@ -54,7 +55,6 @@ export default function CashflowPage() {
 
   const t = data?.totals
   const days = data ? (allDays ? data.days : data.days.slice(0, 7)) : []
-  const th = "px-3 py-2 text-[9px] font-semibold uppercase tracking-wider"
 
   return (
     <PageShell
@@ -68,46 +68,45 @@ export default function CashflowPage() {
         { label: "Net flow (7d)", value: t ? eur(t.net_7d) : "—" },
       ]}
     >
-      {error && <div className="text-[11px] mb-3" style={{ color: "var(--red)" }}>{error}</div>}
-      {loading && !data && <div className="text-[11px] py-12 text-center" style={{ color: "var(--text-dim)" }}>Loading payouts and balances…</div>}
+      {error && <Notice tone="error">Couldn&apos;t load cashflow: {error}.</Notice>}
+      {loading && !data && <Loading>Loading payouts and balances…</Loading>}
 
       {data && t && (
         <div className="space-y-4">
           {/* Shopify Payments per store */}
-          <div className="glass rounded-xl overflow-hidden">
-            <div className="px-4 pt-3 pb-1 text-[11px] font-semibold" style={{ color: "var(--text)" }}>Shopify Payments per store</div>
+          <Panel title="Shopify Payments per store" pad={false}>
             <table className="w-full text-[11px]">
               <thead>
                 <tr style={{ color: "var(--text-dim)" }}>
-                  <th className={`${th} text-left`}>Store</th>
-                  <th className={`${th} text-right`}>Pending</th>
-                  <th className={`${th} text-right`}>In transit</th>
-                  <th className={`${th} text-right`}>Paid out (30d)</th>
-                  <th className={`${th} text-right`}>Fees (30d)</th>
-                  <th className={`${th} text-right`}>Last payout</th>
+                  <th className={`${TH} text-left`}>Store</th>
+                  <th className={`${TH} text-right`}>Pending</th>
+                  <th className={`${TH} text-right`}>In transit</th>
+                  <th className={`${TH} text-right`}>Paid out (30d)</th>
+                  <th className={`${TH} text-right`}>Fees (30d)</th>
+                  <th className={`${TH} text-right`}>Last payout</th>
                 </tr>
               </thead>
               <tbody>
                 {data.stores.map((s) => (
-                  <tr key={s.store} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-3 py-2">
+                  <tr key={s.store} style={ROW_BORDER}>
+                    <td className={TD}>
                       <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--text)" }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: STORE_COLORS[s.store] || "#666" }} />
                         {s.store}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--orange)" }}>{eur(s.pending)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{eur(s.in_transit)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--green)" }}>{eur(s.paid_out_30d)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{eur(s.fees_30d)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--orange)" }}>{eur(s.pending)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{eur(s.in_transit)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--green)" }}>{eur(s.paid_out_30d)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(s.fees_30d)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
                       {s.last_payout ? `${eur(s.last_payout.amount)} · ${fmtDay(s.last_payout.date)}` : "none in 30 days"}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </Panel>
 
           {/* Whop balance */}
           {data.whop_balance?.available && (
@@ -145,17 +144,16 @@ export default function CashflowPage() {
           )}
 
           {/* Processors */}
-          <div className="glass rounded-xl overflow-hidden">
-            <div className="px-4 pt-3 pb-1 text-[11px] font-semibold" style={{ color: "var(--text)" }}>Money in per payment processor</div>
+          <Panel title="Money in per payment processor" pad={false}>
             <table className="w-full text-[11px]">
               <thead>
                 <tr style={{ color: "var(--text-dim)" }}>
-                  <th className={`${th} text-left`}>Processor</th>
-                  <th className={`${th} text-right`}>Incoming (7d)</th>
-                  <th className={`${th} text-right`}>Incoming (30d)</th>
-                  <th className={`${th} text-right`}>Share (30d)</th>
-                  <th className={`${th} text-left`}>Stores</th>
-                  <th className={`${th} text-left`}>Balance</th>
+                  <th className={`${TH} text-left`}>Processor</th>
+                  <th className={`${TH} text-right`}>Incoming (7d)</th>
+                  <th className={`${TH} text-right`}>Incoming (30d)</th>
+                  <th className={`${TH} text-right`}>Share (30d)</th>
+                  <th className={`${TH} text-left`}>Stores</th>
+                  <th className={`${TH} text-left`}>Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,58 +161,59 @@ export default function CashflowPage() {
                   const st = processorStatus(p.processor, data)
                   const share = t.incoming_30d > 0 ? (p.incoming_30d / t.incoming_30d) * 100 : 0
                   return (
-                    <tr key={p.processor} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                      <td className="px-3 py-2 font-medium" style={{ color: "var(--text)" }}>{p.processor}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{eur(p.incoming_7d)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{eur(p.incoming_30d)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{share.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-[10px]" style={{ color: "var(--text-muted)" }}>{p.stores.join(", ")}</td>
-                      <td className="px-3 py-2 text-[10px] max-w-[320px]" style={{ color: st.connected ? "var(--green)" : "var(--orange)" }}>{st.how}</td>
+                    <tr key={p.processor} style={ROW_BORDER}>
+                      <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{p.processor}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{eur(p.incoming_7d)}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{eur(p.incoming_30d)}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{share.toFixed(1)}%</td>
+                      <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{p.stores.join(", ")}</td>
+                      <td className={`${TD} text-[10px] max-w-[320px]`} style={{ color: st.connected ? "var(--green)" : "var(--orange)" }}>{st.how}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
-          </div>
+          </Panel>
 
           {/* Daily flow */}
-          <div className="glass rounded-xl overflow-hidden">
-            <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-              <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Daily cash flow</div>
-              <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>30 days: in {eur(t.incoming_30d)} · out {eur(t.outgoing_30d)} · net {eur(t.net_30d)}</div>
-            </div>
+          <Panel
+            title="Daily cash flow"
+            pad={false}
+            right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>30 days: in {eur(t.incoming_30d)} · out {eur(t.outgoing_30d)} · net {eur(t.net_30d)}</span>}
+          >
             <table className="w-full text-[11px]">
               <thead>
                 <tr style={{ color: "var(--text-dim)" }}>
                   {["Date", "Incoming", "Ad spend", "COGS", "Refunds", "Fees", "Net"].map((h, i) => (
-                    <th key={h} className={`${th} ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
+                    <th key={h} className={`${TH} ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {days.map((d) => (
-                  <tr key={d.date} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-3 py-1.5" style={{ color: "var(--text)" }}>{fmtDay(d.date)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--green)" }}>{eur(d.incoming)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{eur(d.ad_spend)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{eur(d.cogs)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{eur(d.refunds)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{eur(d.fees)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: d.net >= 0 ? "var(--green)" : "var(--red)" }}>{eur(d.net)}</td>
+                  <tr key={d.date} style={ROW_BORDER}>
+                    <td className={TD} style={{ color: "var(--text)" }}>{fmtDay(d.date)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--green)" }}>{eur(d.incoming)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(d.ad_spend)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(d.cogs)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(d.refunds)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(d.fees)}</td>
+                    <td className={`${TD} text-right tabular-nums font-semibold`} style={{ color: d.net >= 0 ? "var(--green)" : "var(--red)" }}>{eur(d.net)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {data.days.length > 7 && (
-              <button onClick={() => setAllDays((x) => !x)} className="w-full text-[10px] py-2" style={{ color: "var(--text-muted)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                {allDays ? "Show last 7 days only ▴" : `Show ${data.days.length - 7} more days ▾`}
-              </button>
+              <div className="flex justify-center py-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <Button variant="ghost" size="sm" onClick={() => setAllDays((x) => !x)}>
+                  {allDays ? "Show last 7 days only" : `Show ${data.days.length - 7} more days`}
+                </Button>
+              </div>
             )}
-          </div>
+          </Panel>
 
           {/* Payouts */}
-          <div className="glass rounded-xl p-4">
-            <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text)" }}>Recent Shopify Payments payouts</div>
+          <Panel title="Recent Shopify Payments payouts">
             {data.payouts.length === 0 ? (
               <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No payouts in the last 30 days.</div>
             ) : (
@@ -229,7 +228,7 @@ export default function CashflowPage() {
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
 
           <div className="text-[9px] space-y-0.5" style={{ color: "var(--text-dim)" }}>
             {data.notes.map((n) => <div key={n}>• {n}</div>)}

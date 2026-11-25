@@ -5,7 +5,7 @@ export default function PriceDeductionsPage() {
   return (
     <PageShell
       title="Price Deductions"
-      breadcrumb="Front End → Price Deductions"
+      breadcrumb="Customer Service → Price Deductions"
       description="Volume-based price tiers from suppliers. Track when products hit the next discount tier."
       stats={[
         { label: "Products tracked", value: "—" },

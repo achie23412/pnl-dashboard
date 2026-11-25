@@ -4,6 +4,8 @@ import { TodoPanel, type CustomTodo } from "@/components/TodoPanel"
 import { HARDCODED_EVENTS } from "@/lib/calendar-hardcoded"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
 import { PillSelect } from "@/components/PillSelect"
+import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, Button } from "@/components/ui"
 
 type CalendarEvent = {
   id?: string
@@ -18,7 +20,7 @@ type CalendarEvent = {
 
 const TYPE_COLORS: Record<CalendarEvent["type"], { bg: string; text: string; label: string }> = {
   deadline: { bg: "rgba(239,68,68,0.18)", text: "#ef4444", label: "Must-do" },
-  sale: { bg: "rgba(34,197,94,0.18)", text: "#22c55e", label: "Sale / Peak" },
+  sale: { bg: "rgba(34,197,94,0.18)", text: "#22c55e", label: "Sale / peak" },
   prep: { bg: "rgba(99,102,241,0.18)", text: "#818cf8", label: "Prep ahead" },
   shipping: { bg: "rgba(249,115,22,0.18)", text: "#f97316", label: "Shipping" },
   season: { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "Season" },
@@ -118,26 +120,19 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Home &rarr; Calendar</div>
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>Calendar</h1>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
-          style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#818cf8" }}
-        >
-          {showAdd ? "Cancel" : "+ Add Event"}
-        </button>
-      </div>
-      <p className="text-[12px] mb-4 max-w-3xl" style={{ color: "var(--text-muted)" }}>
-        E-commerce action calendar &mdash; must-do deadlines, sales peaks, shipping cutoffs, and advance prep for Google indexing.
-      </p>
-
+    <PageShell
+      title="Calendar"
+      breadcrumb="Home → Calendar"
+      description="E-commerce action calendar: must-do deadlines, sales peaks, shipping cutoffs and advance prep for Google indexing."
+      actions={
+        <Button variant={showAdd ? "secondary" : "primary"} onClick={() => setShowAdd(!showAdd)}>
+          {showAdd ? "Cancel" : "Add event"}
+        </Button>
+      }
+    >
       {/* Add event form */}
       {showAdd && (
-        <div className="glass rounded-xl p-4 mb-4" style={{ border: "1px solid rgba(99,102,241,0.2)" }}>
-          <h3 className="text-[12px] font-bold mb-3" style={{ color: "var(--text)" }}>New Event</h3>
+        <Panel title="New event" className="mb-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
               <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Date *</label>
@@ -188,19 +183,10 @@ export default function CalendarPage() {
               />
             </div>
           </div>
-          <button
-            onClick={handleAdd}
-            disabled={saving || !addForm.date || !addForm.label}
-            className="px-4 py-1.5 rounded-lg text-[11px] font-medium transition-all"
-            style={{
-              background: addForm.date && addForm.label ? "var(--accent)" : "rgba(255,255,255,0.05)",
-              color: addForm.date && addForm.label ? "#fff" : "var(--text-dim)",
-              opacity: saving ? 0.5 : 1,
-            }}
-          >
-            {saving ? "Saving..." : "Add Event"}
-          </button>
-        </div>
+          <Button variant="primary" onClick={handleAdd} disabled={saving || !addForm.date || !addForm.label}>
+            {saving ? "Saving…" : "Add event"}
+          </Button>
+        </Panel>
       )}
 
       {/* Legend */}
@@ -218,9 +204,9 @@ export default function CalendarPage() {
       {/* Month nav */}
       <div className="glass rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>&larr; Prev</button>
-          <div className="text-sm font-bold" style={{ color: "var(--text)" }}>{monthName}</div>
-          <button onClick={nextMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>Next &rarr;</button>
+          <Button size="sm" onClick={prevMonth}>&larr; Previous</Button>
+          <div className="text-[13px] font-bold" style={{ color: "var(--text)" }}>{monthName}</div>
+          <Button size="sm" onClick={nextMonth}>Next &rarr;</Button>
         </div>
         <div className="grid grid-cols-7 gap-px">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
@@ -272,10 +258,10 @@ export default function CalendarPage() {
       {selected && selectedEvents.length > 0 && (
         <div className="mt-4 glass rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[13px] font-bold" style={{ color: "var(--text)" }}>
+            <h3 className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>
               {new Date(selected + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </h3>
-            <button onClick={() => setSelected(null)} className="text-[10px] px-2 py-1 rounded-lg" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}>Close</button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(null)}>Close</Button>
           </div>
           <div className="space-y-2">
             {selectedEvents.map((ev, i) => (
@@ -285,20 +271,17 @@ export default function CalendarPage() {
                     {TYPE_COLORS[ev.type].label}
                   </span>
                   <span className="text-[12px] font-semibold" style={{ color: TYPE_COLORS[ev.type].text }}>{ev.label}</span>
-                  {ev.store && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.1)", color: "var(--text-muted)" }}>{ev.store}</span>
-                  )}
-                  {ev.source === "dynamic" && (
-                    <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8" }}>Custom</span>
-                  )}
+                  {ev.store && <Badge>{ev.store}</Badge>}
+                  {ev.source === "dynamic" && <Badge tone="accent">Custom</Badge>}
                   {ev.source === "dynamic" && ev.id && (
-                    <button
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      className="ml-auto"
                       onClick={(e) => { e.stopPropagation(); handleDelete(ev.id!) }}
-                      className="ml-auto text-[9px] px-2 py-0.5 rounded-lg transition-all hover:scale-105"
-                      style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
                     >
                       Delete
-                    </button>
+                    </Button>
                   )}
                 </div>
                 {ev.note && <div className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{ev.note}</div>}
@@ -310,7 +293,7 @@ export default function CalendarPage() {
 
       {/* Upcoming events list */}
       <div className="mt-4 glass rounded-xl p-4">
-        <h3 className="text-[13px] font-bold mb-3" style={{ color: "var(--text)" }}>Upcoming (next 6 weeks)</h3>
+        <h3 className="text-[12px] font-semibold mb-3" style={{ color: "var(--text)" }}>Upcoming</h3>
         <div className="space-y-1.5">
           {allEvents
             .filter((ev) => {
@@ -325,26 +308,23 @@ export default function CalendarPage() {
               const daysAway = Math.round((evDate.getTime() - todayStart.getTime()) / 86400000)
               return (
                 <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                  <div className="w-[52px] text-[10px] font-mono shrink-0" style={{ color: "var(--text-dim)" }}>
+                  <div className="w-[52px] text-[10px] tabular-nums shrink-0" style={{ color: "var(--text-dim)" }}>
                     {evDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
                   </div>
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: TYPE_COLORS[ev.type].text }} />
                   <div className="flex-1 min-w-0">
                     <span className="text-[11px] font-medium" style={{ color: TYPE_COLORS[ev.type].text }}>{ev.label}</span>
                     {ev.store && <span className="ml-1.5 text-[9px]" style={{ color: "var(--text-dim)" }}>({ev.store})</span>}
-                    {ev.source === "dynamic" && <span className="ml-1.5 text-[8px] px-1 py-0.5 rounded" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}>Custom</span>}
+                    {ev.source === "dynamic" && <span className="ml-1.5"><Badge tone="accent">Custom</Badge></span>}
                   </div>
-                  <div className="text-[9px] shrink-0 px-1.5 py-0.5 rounded-full" style={{
-                    background: daysAway <= 3 ? "rgba(239,68,68,0.15)" : daysAway <= 7 ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.05)",
-                    color: daysAway <= 3 ? "#ef4444" : daysAway <= 7 ? "#f97316" : "var(--text-dim)",
-                  }}>
+                  <Badge tone={daysAway <= 3 ? "red" : daysAway <= 7 ? "amber" : "grey"}>
                     {daysAway === 0 ? "Today" : daysAway === 1 ? "Tomorrow" : `${daysAway}d`}
-                  </div>
+                  </Badge>
                 </div>
               )
             })}
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }

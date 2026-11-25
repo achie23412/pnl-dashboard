@@ -1,6 +1,8 @@
 "use client"
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 
 interface Keyword {
@@ -17,17 +19,17 @@ type LinkMode = "trends" | "shopping" | "ads"
 
 const GEOS = [
   { code: "IE", label: "Ireland" },
-  { code: "NL", label: "Nederland" },
-  { code: "DE", label: "Duitsland" },
-  { code: "DK", label: "Denemarken" },
+  { code: "NL", label: "Netherlands" },
+  { code: "DE", label: "Germany" },
+  { code: "DK", label: "Denmark" },
   { code: "GB", label: "UK" },
   { code: "US", label: "US" },
 ] as const
 
-const LINK_MODES: { mode: LinkMode; label: string; color: string }[] = [
-  { mode: "shopping", label: "Google Shopping", color: "#34A853" },
-  { mode: "ads", label: "Ads Library", color: "#D47B6A" },
-  { mode: "trends", label: "Google Trends", color: "#4E6AA7" },
+const LINK_MODES: { mode: LinkMode; label: string }[] = [
+  { mode: "shopping", label: "Google Shopping" },
+  { mode: "ads", label: "Ads Library" },
+  { mode: "trends", label: "Google Trends" },
 ]
 
 const SHOPPING_TLDS: Record<string, string> = {
@@ -146,21 +148,22 @@ export default function KeywordsPage() {
   const otherGeos = GEOS.filter((g) => g.code !== activeGeo).slice(0, 3)
 
   return (
-    <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold">Keyword Research</h1>
-        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-          6,938 fashion keywords from UK + US Google Keyword Planner — search keywords on Google Shopping or Ads Library to find competitors
-        </p>
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-wrap gap-2 items-center mb-3">
+    <PageShell
+      title="Keyword Research"
+      breadcrumb="Front End → Keyword Research"
+      description="6,938 fashion keywords from UK and US Google Keyword Planner. Open a keyword in Google Shopping or the Ads Library to find competitors."
+      stats={loading ? undefined : [
+        { label: "Keywords", value: filtered.length.toLocaleString("en-GB") },
+        { label: "Rising", value: String(risingCount), sub: "UK or US trend above +10%", color: "var(--green)" },
+        { label: "Falling", value: String(fallingCount), sub: "UK or US trend below −10%", color: "var(--red)" },
+      ]}
+    >
+      <FilterBar>
         <input
-          className="flex-1 min-w-[200px] px-3 py-2 rounded-lg text-sm outline-none"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
+          className="min-w-[200px] px-2.5 py-1 rounded-lg text-[10px] outline-none"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
           type="text"
-          placeholder="Search keywords..."
+          placeholder="Search keywords…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -183,105 +186,64 @@ export default function KeywordsPage() {
           onChange={(v) => setMinWords(Number(v))}
           options={[{ value: "1", label: "all" }, { value: "2", label: "2+ words" }, { value: "3", label: "3+ words" }, { value: "4", label: "4+ words" }]}
         />
-      </div>
-
-      {/* Link mode toggle */}
-      <div className="flex flex-wrap gap-1.5 items-center mb-3">
-        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Open in:</span>
-        {LINK_MODES.map((m) => (
-          <button
-            key={m.mode}
-            onClick={() => setLinkMode(m.mode)}
-            className="px-3 py-1 rounded-md text-xs font-semibold transition-colors"
-            style={{
-              border: "1px solid " + (linkMode === m.mode ? m.color : "var(--border)"),
-              background: linkMode === m.mode ? m.color : "var(--bg-card)",
-              color: linkMode === m.mode ? "#fff" : "var(--text)",
-            }}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Market bar */}
-      <div className="flex flex-wrap gap-1.5 items-center mb-3">
-        <span className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>Market:</span>
-        {GEOS.map((g) => (
-          <button
-            key={g.code}
-            onClick={() => setActiveGeo(g.code)}
-            className="px-3 py-1 rounded-md text-xs font-semibold transition-colors"
-            style={{
-              border: "1px solid " + (activeGeo === g.code ? "#4E6AA7" : "var(--border)"),
-              background: activeGeo === g.code ? "#4E6AA7" : "var(--bg-card)",
-              color: activeGeo === g.code ? "#fff" : "var(--text)",
-            }}
-          >
-            {g.label}
-          </button>
-        ))}
-      </div>
+        <PillSelect
+          label="Open in"
+          value={linkMode}
+          onChange={(v) => setLinkMode(v as LinkMode)}
+          options={LINK_MODES.map((m) => ({ value: m.mode, label: m.label }))}
+        />
+        <PillSelect
+          label="Market"
+          value={activeGeo}
+          onChange={setActiveGeo}
+          options={GEOS.map((g) => ({ value: g.code, label: g.label }))}
+        />
+      </FilterBar>
 
       {/* Selected comparison bar */}
       {selected.size > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-lg mb-3"
-          style={{ background: "rgba(78, 106, 167, 0.15)" }}
-        >
-          <span className="text-xs font-semibold" style={{ color: "#4E6AA7" }}>Compare:</span>
-          {Array.from(selected).map((kw) => (
-            <span
-              key={kw}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium"
-              style={{ background: "#4E6AA7", color: "#fff" }}
+        <Panel className="mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>Compare:</span>
+            {Array.from(selected).map((kw) => (
+              <span
+                key={kw}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+                style={{ background: "rgba(99,102,241,0.18)", color: "#c7d2fe" }}
+              >
+                {kw}
+                <button onClick={() => removeSelected(kw)} className="opacity-80 hover:opacity-100 ml-0.5" aria-label={`Remove ${kw}`}>×</button>
+              </span>
+            ))}
+            <a
+              href={compareUrl(Array.from(selected), activeGeo, linkMode)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto inline-flex items-center px-3 py-1.5 rounded-lg text-[11px] font-medium hover:opacity-90"
+              style={{ background: "var(--accent)", color: "#fff" }}
             >
-              {kw}
-              <button onClick={() => removeSelected(kw)} className="opacity-80 hover:opacity-100 ml-0.5">×</button>
-            </span>
-          ))}
-          <a
-            href={compareUrl(Array.from(selected), activeGeo, linkMode)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto px-4 py-1.5 rounded-md text-xs font-semibold"
-            style={{ background: LINK_MODES.find(m => m.mode === linkMode)?.color || "#4E6AA7", color: "#fff" }}
-          >
-            {linkMode === "trends" ? "Compare in Google Trends" : linkMode === "shopping" ? "Search Google Shopping" : "Search Ads Library"}
-          </a>
-        </div>
-      )}
-
-      {/* Stats */}
-      {!loading && (
-        <div className="flex gap-4 flex-wrap mb-3">
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            <strong style={{ color: "var(--text)" }}>{filtered.length}</strong> keywords
-          </span>
-          <span className="text-xs" style={{ color: "var(--green)" }}>
-            <strong>{risingCount}</strong> rising
-          </span>
-          <span className="text-xs" style={{ color: "var(--red)" }}>
-            <strong>{fallingCount}</strong> falling
-          </span>
-        </div>
+              {linkMode === "trends" ? "Compare in Google Trends" : linkMode === "shopping" ? "Search Google Shopping" : "Search Ads Library"}
+            </a>
+          </div>
+        </Panel>
       )}
 
       {/* Table */}
       {loading ? (
-        <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>
-          Loading keyword data...
-        </div>
+        <Loading>Loading keywords…</Loading>
+      ) : pageData.length === 0 ? (
+        <EmptyState title="No keywords match these filters">Clear the search or lower the minimum volume or word count.</EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-xl" style={{ border: "1px solid var(--border)" }}>
-          <table className="w-full text-sm" style={{ minWidth: 700, borderCollapse: "collapse" }}>
+        <Panel pad={false}>
+          <div className="overflow-x-auto">
+          <table className="w-full" style={{ minWidth: 700 }}>
             <thead>
-              <tr>
-                <th className="w-9 text-center" style={thStyle}>
+              <tr style={{ color: "var(--text-dim)" }}>
+                <th className={`${TH} w-9 text-center`}>
                   <input
                     type="checkbox"
                     className="cursor-pointer"
-                    style={{ accentColor: "#4E6AA7", width: 15, height: 15 }}
+                    style={{ accentColor: "var(--accent)", width: 13, height: 13 }}
                     onChange={(e) => {
                       setSelected((prev) => {
                         const next = new Set(prev)
@@ -297,54 +259,42 @@ export default function KeywordsPage() {
                 </th>
                 <SortTh col="k" label="Keyword" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
                 <SortTh col="c" label="Category" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} />
-                <SortTh col="uk" label="UK Vol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
-                <SortTh col="tu" label="UK Trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
-                <SortTh col="us" label="US Vol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
-                <SortTh col="ta" label="US Trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
-                <th style={thStyle}>
+                <SortTh col="uk" label="UK vol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
+                <SortTh col="tu" label="UK trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
+                <SortTh col="us" label="US vol" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
+                <SortTh col="ta" label="US trend" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} align="right" />
+                <th className={`${TH} text-left`}>
                   {linkMode === "shopping" ? "Google Shopping" : linkMode === "ads" ? "Ads Library" : "Google Trends"}
                 </th>
               </tr>
             </thead>
             <tbody>
-              {pageData.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-10" style={{ color: "var(--text-muted)" }}>
-                    No keywords match your filters
-                  </td>
-                </tr>
-              ) : (
-                pageData.map((d) => {
+              {pageData.map((d) => {
                   const isSelected = selected.has(d.k)
                   return (
                     <tr
                       key={d.k}
-                      style={{ background: isSelected ? "rgba(78, 106, 167, 0.1)" : undefined }}
-                      className="hover:bg-[var(--bg-card-hover)]"
+                      style={{ ...ROW_BORDER, background: isSelected ? "rgba(99,102,241,0.08)" : undefined }}
+                      className="hover:bg-white/[0.02]"
                     >
-                      <td className="text-center" style={tdStyle}>
+                      <td className={`${TD} text-center`}>
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelect(d.k)}
                           className="cursor-pointer"
-                          style={{ accentColor: "#4E6AA7", width: 15, height: 15 }}
+                          style={{ accentColor: "var(--accent)", width: 13, height: 13 }}
                         />
                       </td>
-                      <td style={tdStyle} className="font-medium">{d.k}</td>
-                      <td style={tdStyle}>
-                        <span
-                          className="inline-block px-2 py-0.5 rounded text-xs font-medium capitalize"
-                          style={{ background: "var(--bg-card)", color: "var(--text-muted)" }}
-                        >
-                          {d.c}
-                        </span>
+                      <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{d.k}</td>
+                      <td className={TD}>
+                        <Badge>{d.c}</Badge>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtVol(d.uk)}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{fmtVol(d.uk)}</td>
                       <TrendCell value={d.tu} hasData={!!d.uk} />
-                      <td style={{ ...tdStyle, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtVol(d.us)}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{fmtVol(d.us)}</td>
                       <TrendCell value={d.ta} hasData={!!d.us} />
-                      <td style={tdStyle}>
+                      <td className={TD}>
                         <div className="flex gap-1 flex-wrap">
                           <KeywordLink keyword={d.k} geo={activeGeo} mode={linkMode} />
                           {otherGeos.map((g) => (
@@ -354,59 +304,35 @@ export default function KeywordsPage() {
                       </td>
                     </tr>
                   )
-                })
-              )}
+                })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </Panel>
       )}
 
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 py-4">
-          <button
+          <Button
             onClick={() => { setPage((p) => p - 1); window.scrollTo(0, 0) }}
             disabled={page === 0}
-            className="px-3.5 py-1.5 rounded-md text-sm disabled:opacity-40"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
           >
-            Prev
-          </button>
-          <span className="text-sm" style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
+            Previous
+          </Button>
+          <span className="text-[11px] tabular-nums" style={{ color: "var(--text-muted)" }}>
             {page + 1} / {totalPages}
           </span>
-          <button
+          <Button
             onClick={() => { setPage((p) => p + 1); window.scrollTo(0, 0) }}
             disabled={page >= totalPages - 1}
-            className="px-3.5 py-1.5 rounded-md text-sm disabled:opacity-40"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
           >
             Next
-          </button>
+          </Button>
         </div>
       )}
-    </main>
+    </PageShell>
   )
-}
-
-const thStyle: React.CSSProperties = {
-  background: "var(--bg-card)",
-  padding: "10px 12px",
-  textAlign: "left",
-  fontWeight: 600,
-  fontSize: "0.7rem",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-  color: "var(--text-muted)",
-  borderBottom: "2px solid var(--border)",
-  whiteSpace: "nowrap",
-  userSelect: "none",
-}
-
-const tdStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderBottom: "1px solid var(--border)",
-  verticalAlign: "middle",
 }
 
 function SortTh({ col, label, sortCol, sortDir, onSort, align }: {
@@ -417,43 +343,34 @@ function SortTh({ col, label, sortCol, sortDir, onSort, align }: {
   return (
     <th
       onClick={() => onSort(col)}
-      className="cursor-pointer hover:text-[#4E6AA7]"
-      style={{ ...thStyle, textAlign: align || "left", color: active ? "#4E6AA7" : "var(--text-muted)" }}
+      className={`${TH} cursor-pointer select-none whitespace-nowrap ${align === "right" ? "text-right" : "text-left"}`}
+      style={{ color: active ? "var(--text)" : "var(--text-dim)" }}
     >
       {label}
-      {active && <span className="text-[0.65rem] ml-1">{sortDir === -1 ? "▼" : "▲"}</span>}
+      {active && <span className="ml-1">{sortDir === -1 ? "▼" : "▲"}</span>}
     </th>
   )
 }
 
 function TrendCell({ value, hasData }: { value: number; hasData: boolean }) {
-  if (!hasData) return <td style={{ ...tdStyle, textAlign: "right", color: "var(--text-muted)" }}>—</td>
+  if (!hasData) return <td className={`${TD} text-right`} style={{ color: "var(--text-dim)" }}>—</td>
   const color = value > 10 ? "var(--green)" : value < -10 ? "var(--red)" : "var(--text-muted)"
   const sign = value > 0 ? "+" : ""
   return (
-    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, fontSize: "0.75rem", color, fontVariantNumeric: "tabular-nums" }}>
+    <td className={`${TD} text-right tabular-nums font-semibold`} style={{ color }}>
       {sign}{value}%
     </td>
   )
 }
 
 function KeywordLink({ keyword, geo, mode }: { keyword: string; geo: string; mode: LinkMode }) {
-  const hoverColor = LINK_MODES.find(m => m.mode === mode)?.color || "#4E6AA7"
   return (
     <a
       href={getKeywordUrl(keyword, geo, mode)}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-block px-1.5 py-0.5 rounded text-[0.65rem] font-semibold transition-colors"
-      style={{ border: "1px solid var(--border)", color: "var(--text-muted)", textDecoration: "none" }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = hoverColor
-        e.currentTarget.style.color = hoverColor
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "var(--border)"
-        e.currentTarget.style.color = "var(--text-muted)"
-      }}
+      className="inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors hover:!text-[var(--accent)] hover:!border-[var(--accent)]"
+      style={{ border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-muted)", textDecoration: "none" }}
     >
       {geo}
     </a>

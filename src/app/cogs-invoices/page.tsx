@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
+import { FilterBar } from "@/components/PillSelect"
+import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 interface LineItem {
   quoted_unit?: number | null
@@ -32,13 +34,13 @@ interface Invoice {
 }
 
 // What each status means (shown as the badge and its tooltip).
-const QUOTE_STATUS: Record<string, { label: string; color: string; bg: string; why: string }> = {
-  over: { label: "Above quote", color: "#f87171", bg: "rgba(239,68,68,0.12)", why: "ShipGoods charged more than our quote sheet (more than $0.50 and 3% per unit). Ask the supplier why." },
-  under: { label: "Below quote", color: "#4ade80", bg: "rgba(74,222,128,0.12)", why: "Charged less than quoted. In our favour." },
-  ok: { label: "As quoted", color: "#4ade80", bg: "rgba(74,222,128,0.12)", why: "Charged matches the quote sheet." },
-  partial: { label: "Partly quoted", color: "#fbbf24", bg: "rgba(251,191,36,0.12)", why: "Some items in this order have no COG $ in the launch sheet, so only those with a quote are compared." },
-  no_quote: { label: "No quote in sheet", color: "var(--text-dim)", bg: "rgba(255,255,255,0.05)", why: "This product has no COG $ (USD) filled in the store's launch sheet. Add it to compare." },
-  no_sheet: { label: "No quote sheet", color: "var(--text-dim)", bg: "rgba(255,255,255,0.05)", why: "This store has no launch sheet (e.g. LUMEGLASSES), so there's nothing to compare with." },
+const QUOTE_STATUS: Record<string, { label: string; tone: "red" | "green" | "amber" | "grey"; why: string }> = {
+  over: { label: "Above quote", tone: "red", why: "ShipGoods charged more than our quote sheet (more than $0.50 and 3% per unit). Ask the supplier why." },
+  under: { label: "Below quote", tone: "green", why: "Charged less than quoted. In our favour." },
+  ok: { label: "As quoted", tone: "green", why: "Charged matches the quote sheet." },
+  partial: { label: "Partly quoted", tone: "amber", why: "Some items in this order have no COG $ in the launch sheet, so only those with a quote are compared." },
+  no_quote: { label: "No quote in sheet", tone: "grey", why: "This product has no COG $ (USD) filled in the store's launch sheet. Add it to compare." },
+  no_sheet: { label: "No quote sheet", tone: "grey", why: "This store has no launch sheet (e.g. LUMEGLASSES), so there's nothing to compare with." },
 }
 
 interface Summary {
@@ -106,21 +108,29 @@ export default function CogsInvoicesPage() {
           value: summary ? String(summary.discrepancies) : "—",
         },
         {
-          label: "SG Balance",
+          label: "ShipGoods balance (USD)",
           value:
             summary?.balance
               ? `${summary.balance.currency === "USD" ? "$" : ""}${summary.balance.amount.toFixed(2)}`
               : "—",
         },
       ]}
+      actions={
+        <Button onClick={fetchData} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
+        </Button>
+      }
     >
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <FilterBar
+        right={
+          <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
+            {filtered.length} invoices
+          </span>
+        }
+      >
         <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
-        <label
-          className="flex items-center gap-1.5 text-[11px] cursor-pointer"
-          style={{ color: "var(--text-muted)" }}
-        >
+        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer" style={{ color: "var(--text-muted)" }}>
           <input
             type="checkbox"
             checked={showDiscrepancies}
@@ -129,48 +139,15 @@ export default function CogsInvoicesPage() {
           />
           Above quote only
         </label>
-        <span
-          className="text-[10px] ml-auto"
-          style={{ color: "var(--text-dim)" }}
-        >
-          {filtered.length} invoices
-        </span>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-medium"
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            color: "var(--text-muted)",
-          }}
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
-      </div>
+      </FilterBar>
 
-      {error && (
-        <div
-          className="glass rounded-xl p-4 mb-4 text-[11px]"
-          style={{ color: "#f87171" }}
-        >
-          {error}
-        </div>
-      )}
+      {error && <Notice tone="error">Couldn&apos;t load ShipGoods invoices: {error}.</Notice>}
 
-      {loading && invoices.length === 0 && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div
-            className="text-[11px]"
-            style={{ color: "var(--text-dim)" }}
-          >
-            Loading ShipGoods invoice data...
-          </div>
-        </div>
-      )}
+      {loading && invoices.length === 0 && <Loading>Loading ShipGoods invoices…</Loading>}
 
       {/* Invoice table */}
       {!loading && filtered.length > 0 && (
-        <div className="glass rounded-xl overflow-hidden">
+        <Panel pad={false}>
           <table className="w-full text-[11px]">
             <thead>
               <tr
@@ -178,59 +155,41 @@ export default function CogsInvoicesPage() {
                   borderBottom: "1px solid rgba(255,255,255,0.06)",
                 }}
               >
-                <th
-                  className="text-left px-4 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}
                 >
                   Date
                 </th>
-                <th
-                  className="text-left px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}
                 >
                   Store
                 </th>
-                <th
-                  className="text-left px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}
                 >
                   Order
                 </th>
-                <th
-                  className="text-right px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
                 >
                   Product total
                 </th>
-                <th
-                  className="text-right px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
                 >
                   Discount
                 </th>
-                <th
-                  className="text-right px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
                 >
                   Charged
                 </th>
-                <th
-                  className="text-right px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
                   title="Our quote (launch sheet COG $ x quantity) for the items that have a quote"
                 >
                   Quoted
                 </th>
-                <th
-                  className="text-right px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
                   title="Charged minus quoted, for the quoted items. Positive = paid more than quoted."
                 >
                   Difference
                 </th>
-                <th
-                  className="text-center px-3 py-2.5 font-medium"
-                  style={{ color: "var(--text-muted)" }}
+                <th className={`${TH} text-center`} style={{ color: "var(--text-dim)" }}
                 >
                   Status
                 </th>
@@ -243,16 +202,14 @@ export default function CogsInvoicesPage() {
                   <tr
                     key={inv.id}
                     className="cursor-pointer hover:bg-white/[0.02] transition-colors"
-                    style={{
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    }}
+                    style={ROW_BORDER}
                     onClick={() =>
                       setExpanded(isExpanded ? null : inv.id)
                     }
                   >
-                    <td className="px-4 py-2.5">
+                    <td className={TD}>
                       <div
-                        className="font-mono"
+                        className="tabular-nums"
                         style={{ color: "var(--text)" }}
                       >
                         {inv.date}
@@ -298,26 +255,26 @@ export default function CogsInvoicesPage() {
                                 x{li.quantity}
                               </span>
                               <span
-                                className="font-mono"
+                                className="tabular-nums"
                                 style={{ color: "var(--text)" }}
                               >
                                 {usd(li.unit_cost)}
                               </span>
                               <span
-                                className="font-mono"
+                                className="tabular-nums"
                                 style={{
                                   color:
                                     li.quoted_unit == null
                                       ? "var(--text-dim)"
                                       : li.unit_cost - li.quoted_unit > 0.5
-                                        ? "#f87171"
-                                        : "#4ade80",
+                                        ? "var(--red)"
+                                        : "var(--green)",
                                 }}
                               >
                                 {li.quoted_unit == null ? "no quote" : `quoted ${usd(li.quoted_unit)}`}
                               </span>
                               <span
-                                className="font-mono"
+                                className="tabular-nums"
                                 style={{
                                   color: "var(--text-dim)",
                                 }}
@@ -330,66 +287,62 @@ export default function CogsInvoicesPage() {
                       )}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-[10px]"
+                      className={`${TD} text-[10px]`}
                       style={{ color: "var(--text-muted)" }}
                     >
                       {inv.store}
                     </td>
                     <td
-                      className="px-3 py-2.5 font-mono text-[10px]"
+                      className={`${TD} tabular-nums text-[10px]`}
                       style={{ color: "var(--text-muted)" }}
                     >
                       #{inv.order_id_in_shop}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono"
+                      className={`${TD} text-right tabular-nums`}
                       style={{ color: "var(--text)" }}
                     >
                       {usd(inv.product_total)}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono"
+                      className={`${TD} text-right tabular-nums`}
                       style={{
-                        color: inv.discount > 0 ? "#4ade80" : "var(--text-dim)",
+                        color: inv.discount > 0 ? "var(--green)" : "var(--text-dim)",
                       }}
                     >
                       {inv.discount > 0 ? `-${usd(inv.discount)}` : "—"}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono font-medium"
+                      className={`${TD} text-right tabular-nums font-medium`}
                       style={{ color: "var(--text)" }}
                     >
                       {usd(inv.amount)}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text-muted)" }}>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
                       {inv.quoted_total != null ? usd(inv.quoted_total) : "—"}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-right font-mono font-medium"
+                      className={`${TD} text-right tabular-nums font-medium`}
                       style={{
                         color:
                           inv.quoted_total == null
                             ? "var(--text-dim)"
                             : (inv.charged_quoted_lines ?? 0) - inv.quoted_total > 0.5
-                              ? "#f87171"
-                              : "#4ade80",
+                              ? "var(--red)"
+                              : "var(--green)",
                       }}
                     >
                       {inv.quoted_total == null
                         ? "—"
                         : `${(inv.charged_quoted_lines ?? 0) - inv.quoted_total >= 0 ? "+" : "−"}${usd(Math.abs((inv.charged_quoted_lines ?? 0) - inv.quoted_total))}`}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`${TD} text-center`}>
                       {(() => {
                         const st = QUOTE_STATUS[inv.quote_status || (inv.has_price_discrepancy ? "over" : "ok")]
                         return (
-                          <span
-                            className="px-2 py-0.5 rounded-full text-[9px] font-medium whitespace-nowrap"
-                            style={{ background: st.bg, color: st.color }}
-                            title={st.why}
-                          >
+                          <Badge tone={st.tone} title={st.why}>
                             {st.label}
-                          </span>
+                          </Badge>
                         )
                       })()}
                     </td>
@@ -406,25 +359,17 @@ export default function CogsInvoicesPage() {
               Showing 100 of {filtered.length} invoices
             </div>
           )}
-        </div>
+        </Panel>
+      )}
+
+      {!loading && invoices.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No invoices match these filters">Clear the store filter or untick &quot;Above quote only&quot;.</EmptyState>
       )}
 
       {!loading && invoices.length === 0 && !error && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div
-            className="text-[13px] font-medium mb-1"
-            style={{ color: "var(--text-muted)" }}
-          >
-            No invoice data
-          </div>
-          <div
-            className="text-[11px]"
-            style={{ color: "var(--text-dim)" }}
-          >
-            Check that SHIPGOODS_TOKEN is set in Vercel environment
-            variables.
-          </div>
-        </div>
+        <EmptyState title="No invoices from ShipGoods">
+          Check that SHIPGOODS_TOKEN is set in the Vercel environment variables.
+        </EmptyState>
       )}
     </PageShell>
   )

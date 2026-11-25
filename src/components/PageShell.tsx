@@ -14,10 +14,11 @@ interface PageShellProps {
   stats?: StatCard[]
   tabs?: { label: string; count?: number; active?: boolean }[]
   filters?: boolean // unused: pages put their own filters in a FilterBar
+  actions?: React.ReactNode // buttons/pickers on the right of the title
   children?: React.ReactNode
 }
 
-export function PageShell({ title, breadcrumb, description, stats, tabs, children }: PageShellProps) {
+export function PageShell({ title, breadcrumb, description, stats, tabs, actions, children }: PageShellProps) {
   return (
     <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
       {/* Breadcrumb */}
@@ -26,10 +27,11 @@ export function PageShell({ title, breadcrumb, description, stats, tabs, childre
       </div>
 
       {/* Title row */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>
           {title}
         </h1>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
 
       {description && (
@@ -95,16 +97,14 @@ export function PageShell({ title, breadcrumb, description, stats, tabs, childre
         </div>
       )}
 
-      {/* Content */}
-      <div
-        className="rounded-xl"
-        style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        {children || <PlaceholderTable />}
-      </div>
+      {/* Content: pages put their own Panels here; placeholder pages get one box. */}
+      {children ? (
+        <div>{children}</div>
+      ) : (
+        <div className="glass rounded-xl">
+          <PlaceholderTable />
+        </div>
+      )}
     </div>
   )
 }

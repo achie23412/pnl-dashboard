@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { PageShell } from "@/components/PageShell"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { Panel, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
 
@@ -149,15 +150,15 @@ export default function ProfitLossPage() {
   const monthsWithData = YEAR_MONTHS.filter((m) => m <= thisMonth)
 
   const cols: { key: string; label: string; fmt: (l: Line) => string; color?: (l: Line) => string | undefined }[] = [
-    { key: "gross", label: "Gross Revenue", fmt: (l) => eur(l.gross) },
+    { key: "gross", label: "Gross revenue", fmt: (l) => eur(l.gross) },
     { key: "refunds", label: "Refunds", fmt: (l) => eur(l.refunds), color: (l) => (l.refunds > 0 ? "var(--red)" : undefined) },
-    { key: "net", label: "Net Revenue", fmt: (l) => eur(l.net) },
-    { key: "cogs", label: "Cost of Goods", fmt: (l) => eur(l.cogs) + (l.cogsEst > 0.005 ? "*" : "") },
-    { key: "ad", label: "Ad Spend", fmt: (l) => eur(l.ad) },
-    { key: "mb", label: "Media Buyer Fee", fmt: (l) => eur(l.mb) },
-    { key: "txn", label: "Transaction Fee", fmt: (l) => eur(l.txn) },
-    { key: "pb", label: "Profit before Refunds", fmt: (l) => eur(l.profitBefore) },
-    { key: "profit", label: "PROFIT", fmt: (l) => eur(l.profit), color: (l) => (l.profit > 0.005 ? "var(--green)" : l.profit < -0.005 ? "var(--red)" : undefined) },
+    { key: "net", label: "Net revenue", fmt: (l) => eur(l.net) },
+    { key: "cogs", label: "Cost of goods", fmt: (l) => eur(l.cogs) + (l.cogsEst > 0.005 ? "*" : "") },
+    { key: "ad", label: "Ad spend", fmt: (l) => eur(l.ad) },
+    { key: "mb", label: "Media buyer fee", fmt: (l) => eur(l.mb) },
+    { key: "txn", label: "Transaction fee", fmt: (l) => eur(l.txn) },
+    { key: "pb", label: "Profit before refunds", fmt: (l) => eur(l.profitBefore) },
+    { key: "profit", label: "Profit", fmt: (l) => eur(l.profit), color: (l) => (l.profit > 0.005 ? "var(--green)" : l.profit < -0.005 ? "var(--red)" : undefined) },
     { key: "roas", label: "ROAS", fmt: (l) => xr(l.roas) },
     { key: "groas", label: "Gross ROAS", fmt: (l) => xr(l.grossRoas) },
     { key: "ppct", label: "Profit %", fmt: (l) => pct(l.profitPct), color: (l) => (l.profitPct === null ? undefined : l.profitPct >= 0 ? "var(--green)" : "var(--red)") },
@@ -169,21 +170,21 @@ export default function ProfitLossPage() {
       <table className="w-full text-[11px] whitespace-nowrap">
         <thead>
           <tr style={{ color: "var(--text-dim)" }}>
-            <th className="text-left font-semibold px-2 py-2">{head}</th>
-            {cols.map((c) => <th key={c.key} className="text-right font-semibold px-2 py-2">{c.label}</th>)}
+            <th className={`${TH} text-left`}>{head}</th>
+            {cols.map((c) => <th key={c.key} className={`${TH} text-right`}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.label} style={{ borderTop: "1px solid rgba(255,255,255,0.04)", opacity: r.dim ? 0.45 : 1 }}>
-              <td className="px-2 py-1.5 font-medium" style={{ color: "var(--text)" }}>{r.label}</td>
-              {cols.map((c) => <td key={c.key} className="px-2 py-1.5 text-right tabular-nums" style={{ color: c.color?.(r.line) || "var(--text-muted)" }}>{c.fmt(r.line)}</td>)}
+            <tr key={r.label} style={{ ...ROW_BORDER, opacity: r.dim ? 0.45 : 1 }}>
+              <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{r.label}</td>
+              {cols.map((c) => <td key={c.key} className={`${TD} text-right tabular-nums`} style={{ color: c.color?.(r.line) || "var(--text-muted)" }}>{c.fmt(r.line)}</td>)}
             </tr>
           ))}
           {total && (
             <tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-              <td className="px-2 py-2 font-bold" style={{ color: "var(--text)" }}>{total.label}</td>
-              {cols.map((c) => <td key={c.key} className="px-2 py-2 text-right font-bold tabular-nums" style={{ color: c.color?.(total.line) || "var(--text)" }}>{c.fmt(total.line)}</td>)}
+              <td className={`${TD} font-bold`} style={{ color: "var(--text)" }}>{total.label}</td>
+              {cols.map((c) => <td key={c.key} className={`${TD} text-right font-bold tabular-nums`} style={{ color: c.color?.(total.line) || "var(--text)" }}>{c.fmt(total.line)}</td>)}
             </tr>
           )}
         </tbody>
@@ -191,7 +192,6 @@ export default function ProfitLossPage() {
     </div>
   )
 
-  const field = { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text)" }
   const t = monthTotal
   const scopeLabel = scope === "google" ? "Google stores" : scope === "all" ? "all stores" : scope
 
@@ -201,16 +201,16 @@ export default function ProfitLossPage() {
       breadcrumb="Finance → Profit & Loss"
       description="Built on the Ascend profit sheet: same columns, same fees (Google stores: media buyer 10% of ad spend, transaction fee 6% of gross revenue). Filled automatically from Shopify revenue, Windsor ad spend, refunds and COGS. All amounts in EUR."
       stats={raw ? [
-        { label: `Gross Revenue · ${monthLabel(month)}`, value: eur0(t.gross), sub: `${t.orders} orders · ${scopeLabel}` },
-        { label: "Ad Spend", value: eur0(t.ad), sub: `+ ${eur0(t.mb)} media buyer fee` },
-        { label: "Cost of Goods", value: eur0(t.cogs), sub: t.cogPct !== null ? `${t.cogPct.toFixed(1)}% of revenue` : "" },
-        { label: "PROFIT", value: eur0(t.profit), sub: t.profitPct !== null ? `${t.profitPct.toFixed(1)}% of revenue` : "", color: t.profit >= 0 ? "var(--green)" : "var(--red)" },
+        { label: `Gross revenue · ${monthLabel(month)}`, value: eur0(t.gross), sub: `${t.orders} orders · ${scopeLabel}` },
+        { label: "Ad spend", value: eur0(t.ad), sub: `+ ${eur0(t.mb)} media buyer fee` },
+        { label: "Cost of goods", value: eur0(t.cogs), sub: t.cogPct !== null ? `${t.cogPct.toFixed(1)}% of revenue` : "" },
+        { label: "Profit", value: eur0(t.profit), sub: t.profitPct !== null ? `${t.profitPct.toFixed(1)}% of revenue` : "", color: t.profit >= 0 ? "var(--green)" : "var(--red)" },
         { label: "ROAS", value: t.roas !== null ? `${t.roas.toFixed(2)}x` : "—", sub: t.grossRoas !== null ? `gross ${t.grossRoas.toFixed(2)}x` : "" },
       ] : [
-        { label: "Gross Revenue", value: "—" }, { label: "Ad Spend", value: "—" }, { label: "Cost of Goods", value: "—" }, { label: "PROFIT", value: "—" }, { label: "ROAS", value: "—" },
+        { label: "Gross revenue", value: "—" }, { label: "Ad spend", value: "—" }, { label: "Cost of goods", value: "—" }, { label: "Profit", value: "—" }, { label: "ROAS", value: "—" },
       ]}
     >
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <FilterBar>
         <PillSelect
           label="Stores"
           value={scope}
@@ -221,47 +221,43 @@ export default function ProfitLossPage() {
             ...ALL_STORES.map((s) => ({ value: s })),
           ]}
         />
-        <div className="flex gap-1 flex-wrap">
-          {monthsWithData.map((m) => (
-            <button key={m} onClick={() => setMonth(m)} className="text-[11px] px-3 py-1.5 rounded-lg" style={{ ...field, background: m === month ? "rgba(99,102,241,0.25)" : field.background, color: m === month ? "#c7d2fe" : "var(--text-muted)" }}>
-              {monthLabel(m)}
-            </button>
-          ))}
-        </div>
-      </div>
+        <PillSelect
+          label="Month"
+          value={month}
+          onChange={setMonth}
+          options={monthsWithData.map((m) => ({ value: m, label: monthLabel(m) }))}
+        />
+      </FilterBar>
 
-      {error && <div className="rounded-lg px-3 py-2 mb-4 text-[11px]" style={{ background: "rgba(239,68,68,0.1)", color: "#f87171" }}>Couldn&apos;t load data: {error}</div>}
-      {!raw && !error && <div className="glass rounded-xl p-6 text-[11px]" style={{ color: "var(--text-dim)" }}>Loading…</div>}
+      {error && <Notice tone="error">Couldn&apos;t load profit data: {error}.</Notice>}
+      {!raw && !error && <Loading>Loading revenue, ad spend, refunds and COGS…</Loading>}
 
       {raw && (
         <>
-          <div className="glass rounded-xl p-4 mb-4">
-            <div className="text-[12px] font-semibold mb-2" style={{ color: "var(--text)" }}>{monthLabel(month).toUpperCase()} — by store</div>
-            {table("In EUR", storeLines.map((s) => ({ label: s.store, line: s.line, dim: s.line.gross === 0 && s.line.ad === 0 })), { label: "MONTH TOTAL", line: monthTotal })}
-          </div>
+          <Panel title={`${monthLabel(month)} by store`} sub="In EUR" className="mb-4">
+            {table("Store", storeLines.map((s) => ({ label: s.store, line: s.line, dim: s.line.gross === 0 && s.line.ad === 0 })), { label: "Month total", line: monthTotal })}
+          </Panel>
 
-          <div className="glass rounded-xl p-4 mb-4">
-            <div className="text-[12px] font-semibold mb-2" style={{ color: "var(--text)" }}>Day by day — {scopeLabel}</div>
+          <Panel title={`Day by day: ${scopeLabel}`} className="mb-4">
             {table("Date", dayLines.slice().reverse().map((d) => ({
               label: new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }),
               line: d.line,
               dim: d.line.gross === 0 && d.line.ad === 0,
             })))}
-          </div>
+          </Panel>
 
-          <div className="glass rounded-xl p-4 mb-4">
-            <div className="text-[12px] font-semibold mb-2" style={{ color: "var(--text)" }}>YEAR OVERVIEW (Sep 2026 – Aug 2027)</div>
-            {table("Month", yearLines.map((y) => ({ label: monthLabel(y.month), line: y.line, dim: y.line.gross === 0 && y.line.ad === 0 })), { label: "FULL YEAR", line: yearTotal })}
+          <Panel title="Year overview (Sep 2026 – Aug 2027)" className="mb-4">
+            {table("Month", yearLines.map((y) => ({ label: monthLabel(y.month), line: y.line, dim: y.line.gross === 0 && y.line.ad === 0 })), { label: "Full year", line: yearTotal })}
             {storesInScope.length > 1 && (
               <div className="overflow-x-auto mt-4">
-                <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-dim)" }}>Profit by store</div>
+                <SectionLabel>Profit by store</SectionLabel>
                 <table className="w-full text-[11px] whitespace-nowrap">
                   <thead>
                     <tr style={{ color: "var(--text-dim)" }}>
-                      <th className="text-left font-semibold px-2 py-1.5">Month</th>
-                      {storesInScope.map((s) => <th key={s} className="text-right font-semibold px-2 py-1.5">{s}</th>)}
-                      <th className="text-right font-semibold px-2 py-1.5">Combined</th>
-                      <th className="text-right font-semibold px-2 py-1.5">Best store</th>
+                      <th className={`${TH} text-left`}>Month</th>
+                      {storesInScope.map((s) => <th key={s} className={`${TH} text-right`}>{s}</th>)}
+                      <th className={`${TH} text-right`}>Combined</th>
+                      <th className={`${TH} text-right`}>Best store</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -269,11 +265,11 @@ export default function ProfitLossPage() {
                       const hasAny = y.byStore.some((v) => Math.abs(v) > 0.005)
                       const best = hasAny ? storesInScope[y.byStore.indexOf(Math.max(...y.byStore))] : "–"
                       return (
-                        <tr key={y.month} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td className="px-2 py-1.5" style={{ color: "var(--text)" }}>{monthLabel(y.month)}</td>
-                          {y.byStore.map((v, i) => <td key={i} className="px-2 py-1.5 text-right tabular-nums" style={{ color: v > 0.005 ? "var(--green)" : v < -0.005 ? "var(--red)" : "var(--text-dim)" }}>{eur(v)}</td>)}
-                          <td className="px-2 py-1.5 text-right font-semibold tabular-nums" style={{ color: y.line.profit >= 0 ? "var(--green)" : "var(--red)" }}>{eur(y.line.profit)}</td>
-                          <td className="px-2 py-1.5 text-right" style={{ color: "var(--text-muted)" }}>{best}</td>
+                        <tr key={y.month} style={ROW_BORDER}>
+                          <td className={TD} style={{ color: "var(--text)" }}>{monthLabel(y.month)}</td>
+                          {y.byStore.map((v, i) => <td key={i} className={`${TD} text-right tabular-nums`} style={{ color: v > 0.005 ? "var(--green)" : v < -0.005 ? "var(--red)" : "var(--text-dim)" }}>{eur(v)}</td>)}
+                          <td className={`${TD} text-right font-semibold tabular-nums`} style={{ color: y.line.profit >= 0 ? "var(--green)" : "var(--red)" }}>{eur(y.line.profit)}</td>
+                          <td className={`${TD} text-right`} style={{ color: "var(--text-muted)" }}>{best}</td>
                         </tr>
                       )
                     })}
@@ -281,12 +277,12 @@ export default function ProfitLossPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Panel>
 
           <div className="text-[10px] space-y-1" style={{ color: "var(--text-dim)" }}>
-            <div>Same formulas as the profit sheet: Net Revenue = Gross − Refunds · Profit before Refunds = Gross − Cost of Goods − Ad Spend − Media Buyer Fee − Transaction Fee · PROFIT = Profit before Refunds − Refunds · ROAS = Net ÷ Ad Spend · Gross ROAS = Gross ÷ Ad Spend.</div>
+            <div>Same formulas as the Ascend profit sheet: net revenue = gross − refunds · profit before refunds = gross − cost of goods − ad spend − media buyer fee − transaction fee · profit = profit before refunds − refunds · ROAS = net ÷ ad spend · gross ROAS = gross ÷ ad spend.</div>
             <div>Fees: Google stores media buyer 10% of ad spend + transaction 6% of gross revenue (Setup tab). LUMEGLASSES and Blinky: no media buyer, transaction fee {(FEES.LUMEGLASSES.txn * 100).toFixed(1)}%.</div>
-            <div>* Cost of Goods with a star includes an estimate (average COGS per order) for days without ShipGoods COGS. The sheet currently types a flat 30%.</div>
+            <div>* Cost of goods with a star includes an estimate (average COGS per order) for days without ShipGoods COGS. The sheet currently types a flat 30%.</div>
             <div>Differences vs the sheet: amounts use the daily ECB rate (the sheet one rate per month); ad spend is the full Google Ads day from Windsor (the sheet&apos;s daily split is typed by hand). Dashboard data starts {firstData ? new Date(firstData + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "late Oct 2026"}, so September only exists in the sheet.</div>
           </div>
         </>

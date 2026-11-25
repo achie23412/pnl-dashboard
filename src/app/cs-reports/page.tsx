@@ -1,31 +1,24 @@
 "use client"
 import { PageShell } from "@/components/PageShell"
+import { EmptyState } from "@/components/ui"
 
 export default function CSReportsPage() {
   return (
     <PageShell
-      title="CS Reports"
+      title="Reports"
       breadcrumb="Customer Service → Reports"
-      description="Refund rate per store, per reason breakdown, funnel acceptance rate, store credit report, refund by collection."
+      description="Refund rate per store, refunds by reason and by collection, funnel acceptance rate and store credit use."
       stats={[
         { label: "Avg acceptance rate", value: "—" },
         { label: "Top reason", value: "—" },
         { label: "Highest refund store", value: "—" },
-        { label: "Store credits used", value: "—" },
-      ]}
-      tabs={[
-        { label: "By store", active: true },
-        { label: "By reason" },
-        { label: "By collection" },
-        { label: "Store credit" },
+        { label: "Store credit used", value: "—" },
       ]}
     >
-      <div className="glass rounded-xl p-6">
-        <div className="text-center py-8">
-          <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Reports will populate from refund data</div>
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Charts and breakdowns appear as refund records are added.</div>
-        </div>
-      </div>
+      <EmptyState title="Not connected yet">
+        This page will show refund breakdowns by store, reason and collection, plus store credit use, once refund records are
+        stored in the dashboard. Nothing is connected yet, so there are no numbers.
+      </EmptyState>
     </PageShell>
   )
 }

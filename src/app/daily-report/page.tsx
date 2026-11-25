@@ -6,6 +6,9 @@ import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, FALLBACK_RATES } f
 import type { EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow, RefundRow } from "@/lib/types"
 import { FixBanner } from "@/components/FixBanner"
+import { PageShell } from "@/components/PageShell"
+import { SingleDatePicker } from "@/components/SingleDatePicker"
+import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -136,44 +139,31 @@ export default function DailyReportPage() {
   const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
   // Profit margin: est. profit as a share of revenue
   const profitPct = (profit: number, revenue: number) => (revenue > 0 ? `${((profit / revenue) * 100).toFixed(1)}%` : "—")
+  const shiftDay = (n: number) => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() + n); setDate(toInputDate(d)) }
+  const hasData = !loading && storeRows.length > 0
 
   return (
-    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Home → Daily Report</div>
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>Daily Report</h1>
-      </div>
-
+    <PageShell
+      title="Daily Report"
+      breadcrumb="Home → Daily Report"
+      description={`Revenue, ad spend, COGS, refunds and estimated profit per store for ${formatDate(date)}. All in EUR.`}
+      stats={[
+        { label: "Revenue", value: hasData ? fmt(totals.revenue) : "—", color: "var(--green)" },
+        { label: "Orders", value: hasData ? String(totals.orders) : "—" },
+        { label: "Ad spend", value: hasData ? fmt(totals.spend) : "—" },
+        { label: "ROAS", value: hasData ? `${totals.roas.toFixed(2)}x` : "—" },
+        { label: "Est. profit", value: hasData ? fmt(totals.profit) : "—", sub: hasData ? `${profitPct(totals.profit, totals.revenue)} of revenue` : undefined, color: hasData ? (totals.profit >= 0 ? "var(--green)" : "var(--red)") : undefined },
+      ]}
+      actions={
+        <>
+          <Button size="sm" onClick={() => shiftDay(-1)} title="Previous day">←</Button>
+          <SingleDatePicker value={date} onChange={(v) => v && setDate(v)} allowEmpty={false} />
+          <Button size="sm" onClick={() => shiftDay(1)} title="Next day">→</Button>
+          <Button size="sm" onClick={() => setDate(toInputDate(new Date()))}>Today</Button>
+        </>
+      }
+    >
       <FixBanner />
-
-      {/* Date picker */}
-      <div className="flex items-center gap-3 mb-3">
-        <button
-          onClick={() => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() - 1); setDate(toInputDate(d)) }}
-          className="px-2 py-1 rounded-lg text-[11px] font-medium"
-          style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >←</button>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-medium"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text)", colorScheme: "dark" }}
-        />
-        <button
-          onClick={() => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() + 1); setDate(toInputDate(d)) }}
-          className="px-2 py-1 rounded-lg text-[11px] font-medium"
-          style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >→</button>
-        <button
-          onClick={() => setDate(toInputDate(new Date()))}
-          className="px-2.5 py-1 rounded-lg text-[10px] font-medium"
-          style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)" }}
-        >Today</button>
-        <div className="text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>
-          {formatDate(date)}
-        </div>
-      </div>
 
       {/* Store timezone clocks */}
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -187,121 +177,104 @@ export default function DailyReportPage() {
           return (
             <div
               key={s}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px]"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+              className="glass flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px]"
             >
               <span className="font-medium" style={{ color: "var(--text-muted)" }}>{s}</span>
               <span style={{ color: "var(--text-dim)" }}>{market}</span>
-              <span className="font-mono" style={{ color: "var(--text)" }}>{localTime}</span>
-              {isFuture && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: "rgba(249,115,22,0.15)", color: "#f97316" }}>
-                  still {localDate.slice(5)}
-                </span>
-              )}
-              {isSelectedDate && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>
-                  today
-                </span>
-              )}
+              <span className="font-mono tabular-nums" style={{ color: "var(--text)" }}>{localTime}</span>
+              {isFuture && <Badge tone="amber">Still {localDate.slice(5)}</Badge>}
+              {isSelectedDate && <Badge tone="green">Today</Badge>}
             </div>
           )
         })}
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-3">
-          <div className="relative w-8 h-8">
-            <div className="absolute inset-0 rounded-full animate-spin" style={{ border: "2px solid rgba(255,255,255,0.06)", borderTopColor: "var(--accent)" }} />
-          </div>
-          <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Loading</span>
-        </div>
+        <Loading>Loading the daily report…</Loading>
       ) : (
         <div className="space-y-4">
           {storeRows.length === 0 ? (
-            <div className="glass rounded-xl p-8 text-center">
-              <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>No data for {formatDate(date)}</div>
-              <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Data may not have been imported for this date yet.</div>
-            </div>
+            <EmptyState title={`No data for ${formatDate(date)}`}>Data may not have been imported for this date yet. The daily refresh runs around 07:00 Amsterdam time.</EmptyState>
           ) : (
-            <div className="glass rounded-xl overflow-hidden">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <th className="px-3 py-2.5 text-left font-semibold" style={{ color: "var(--text-muted)" }}>Store</th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-[9px]" style={{ color: "var(--text-dim)" }}>Market</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Revenue</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Orders</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }} title="Orders ÷ human sessions (bots excluded)">CVR</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>ROAS</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Ad Spend</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>COGS</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Refunds</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Est. Profit</th>
-                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }} title="Est. profit ÷ revenue">Profit %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {storeRows.map((s) => {
-                    const tz = STORE_TIMEZONE[s.store] || "UTC"
-                    const localDate = getLocalDate(tz)
-                    const isFuture = date > localDate
-                    return (
-                      <tr key={s.store} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", opacity: isFuture ? 0.5 : 1 }}>
-                        <td className="px-3 py-2 font-medium" style={{ color: "var(--text)" }}>{s.store}</td>
-                        <td className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)" }}>
-                          {STORE_MARKET[s.store] || ""}
-                          {isFuture && <span className="ml-1 text-[8px]" style={{ color: "#f97316" }}>⏳</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--green)" }}>{fmt(s.revenue)}</td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--text)" }}>{s.orders}</td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--text)" }} title={s.sessions !== null ? `${s.orders} orders ÷ ${s.sessions.toLocaleString("en-IE")} human sessions` : "No session data for this day yet"}>
-                          {s.cvr !== null ? `${s.cvr.toFixed(2)}%` : "—"}
-                          {s.sessions !== null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{s.sessions.toLocaleString("en-IE")} sess.</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right" style={{ color: s.roas >= 2.5 ? "var(--green)" : s.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{s.roas.toFixed(2)}x</td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--text-muted)" }}>{fmt(s.spend)}</td>
-                        <td className="px-3 py-2 text-right" style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
-                        <td className="px-3 py-2 text-right" style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
-                        <td className="px-3 py-2 text-right font-medium" style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(s.profit)}</td>
-                        <td className="px-3 py-2 text-right font-medium" style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(s.profit, s.revenue)}</td>
-                      </tr>
-                    )
-                  })}
-                  <tr style={{ borderTop: "2px solid rgba(255,255,255,0.1)" }}>
-                    <td className="px-3 py-2 font-bold" style={{ color: "var(--text)" }}>Total</td>
-                    <td className="px-3 py-2"></td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--green)" }}>{fmt(totals.revenue)}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text)" }}>{totals.orders}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text)" }}>
-                      {totals.cvr !== null ? `${totals.cvr.toFixed(2)}%` : "—"}
-                      {totals.sessions !== null && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>{totals.sessions.toLocaleString("en-IE")} sess.</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: totals.roas >= 2.5 ? "var(--green)" : totals.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{totals.roas.toFixed(2)}x</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text-muted)" }}>{fmt(totals.spend)}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: totals.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(totals.refunds)}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(totals.profit)}</td>
-                    <td className="px-3 py-2 text-right font-bold" style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(totals.profit, totals.revenue)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <Panel pad={false}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", color: "var(--text-dim)" }}>
+                      <th className={`${TH} text-left`}>Store</th>
+                      <th className={`${TH} text-left`}>Market</th>
+                      <th className={`${TH} text-right`}>Revenue</th>
+                      <th className={`${TH} text-right`}>Orders</th>
+                      <th className={`${TH} text-right`} title="Orders ÷ human sessions (bots excluded)">CVR</th>
+                      <th className={`${TH} text-right`}>ROAS</th>
+                      <th className={`${TH} text-right`}>Ad spend</th>
+                      <th className={`${TH} text-right`}>COGS</th>
+                      <th className={`${TH} text-right`}>Refunds</th>
+                      <th className={`${TH} text-right`}>Est. profit</th>
+                      <th className={`${TH} text-right`} title="Est. profit ÷ revenue">Profit %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storeRows.map((s) => {
+                      const tz = STORE_TIMEZONE[s.store] || "UTC"
+                      const localDate = getLocalDate(tz)
+                      const isFuture = date > localDate
+                      return (
+                        <tr key={s.store} style={{ ...ROW_BORDER, opacity: isFuture ? 0.5 : 1 }}>
+                          <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{s.store}</td>
+                          <td className={`${TD} text-[10px]`} style={{ color: "var(--text-dim)" }}>
+                            {STORE_MARKET[s.store] || ""}
+                            {isFuture && <span className="ml-1 text-[9px]" style={{ color: "var(--orange)" }} title="This day isn't over yet in this store's timezone">(day not over)</span>}
+                          </td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--green)" }}>{fmt(s.revenue)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{s.orders}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }} title={s.sessions !== null ? `${s.orders} orders ÷ ${s.sessions.toLocaleString("en-IE")} human sessions` : "No session data for this day yet"}>
+                            {s.cvr !== null ? `${s.cvr.toFixed(2)}%` : "—"}
+                            {s.sessions !== null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{s.sessions.toLocaleString("en-IE")} sess.</span>}
+                          </td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: s.roas >= 2.5 ? "var(--green)" : s.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{s.roas.toFixed(2)}x</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(s.spend)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
+                          <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(s.profit)}</td>
+                          <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(s.profit, s.revenue)}</td>
+                        </tr>
+                      )
+                    })}
+                    <tr style={{ borderTop: "2px solid rgba(255,255,255,0.1)" }}>
+                      <td className={`${TD} font-bold`} style={{ color: "var(--text)" }}>Total</td>
+                      <td className={TD}></td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--green)" }}>{fmt(totals.revenue)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text)" }}>{totals.orders}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text)" }}>
+                        {totals.cvr !== null ? `${totals.cvr.toFixed(2)}%` : "—"}
+                        {totals.sessions !== null && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>{totals.sessions.toLocaleString("en-IE")} sess.</span>}
+                      </td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.roas >= 2.5 ? "var(--green)" : totals.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{totals.roas.toFixed(2)}x</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.spend)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(totals.refunds)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(totals.profit)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(totals.profit, totals.revenue)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone
+              </div>
+            </Panel>
           )}
 
-          <div className="text-[9px] text-center py-1" style={{ color: "var(--text-dim)" }}>
-            All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store's market timezone
-          </div>
-
-          <div className="glass rounded-xl p-4">
-            <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text-muted)" }}>Notes</div>
+          <Panel title="Notes">
             <textarea
               className="w-full bg-transparent border rounded-lg p-3 text-[11px] resize-none"
               style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)", minHeight: 80 }}
-              placeholder="Daily notes — what happened today, what to check tomorrow..."
+              placeholder="Daily notes: what happened today, what to check tomorrow…"
             />
-          </div>
+          </Panel>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

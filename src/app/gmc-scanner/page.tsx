@@ -5,6 +5,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, Button, Notice, EmptyState } from "@/components/ui"
 import { checkLiveProduct, type LiveIssue, type LiveProductInput } from "@/lib/gmc-check"
 
 const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
@@ -104,14 +105,14 @@ export default function GMCScannerPage() {
         { label: "Ready to list", value: String(stats.ready) },
       ]}
     >
-      <div className="glass rounded-xl p-4 mb-4">
+      <Panel className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="inline-flex gap-1 p-0.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)" }}>
             {tab("link", "Paste a product link")}
             {tab("manual", "Type it in")}
           </div>
           <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-            New listing? The <Link href="/product-importer" className="underline">Product Importer</Link> runs this check for you. Already live? See{" "}
+            New listing? The <Link href="/product-importer" className="underline">Product importer</Link> runs this check for you. Already live? See{" "}
             <Link href="/listings" className="underline">Listings</Link>.
           </div>
         </div>
@@ -126,9 +127,9 @@ export default function GMCScannerPage() {
               style={inputStyle}
               placeholder="https://store.com/products/product-name"
             />
-            <button onClick={scanLink} disabled={busy || !url.trim()} className="px-4 py-2 rounded-lg text-[11px] font-medium" style={{ background: "var(--accent)", color: "#fff", opacity: busy || !url.trim() ? 0.5 : 1 }}>
+            <Button variant="primary" onClick={scanLink} disabled={busy || !url.trim()}>
               {busy ? "Checking…" : "Check"}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-4">
@@ -137,25 +138,27 @@ export default function GMCScannerPage() {
             <input value={manual.price} onChange={(e) => setManual({ ...manual, price: e.target.value })} className="rounded-lg px-3 py-2 text-[11px] outline-none" style={inputStyle} placeholder="Price" />
             <input value={manual.images} onChange={(e) => setManual({ ...manual, images: e.target.value })} className="rounded-lg px-3 py-2 text-[11px] outline-none" style={inputStyle} placeholder="Number of images" />
             <input value={manual.productType} onChange={(e) => setManual({ ...manual, productType: e.target.value })} className="rounded-lg px-3 py-2 text-[11px] outline-none" style={inputStyle} placeholder="Product type (e.g. Dresses)" />
-            <button onClick={scanManual} className="rounded-lg text-[11px] font-medium" style={{ background: "var(--accent)", color: "#fff" }}>
+            <Button variant="primary" onClick={scanManual}>
               Check
-            </button>
+            </Button>
           </div>
         )}
-        {error && <div className="text-[11px] mt-2" style={{ color: "var(--red)" }}>{error}</div>}
-      </div>
+        {error && (
+          <div className="mt-3 -mb-4">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        )}
+      </Panel>
 
       {results.length === 0 ? (
-        <div className="glass rounded-xl p-6 text-[11px] text-center" style={{ color: "var(--text-dim)" }}>
-          Paste a product link above to see what Google would flag.
-        </div>
+        <EmptyState title="No products checked yet">Paste a product link above to see what Google would flag.</EmptyState>
       ) : (
         <div className="space-y-3">
           {results.map((r, i) => {
             const critical = r.issues.filter((x) => x.level === "critical")
             const tips = r.issues.filter((x) => x.level === "warning")
             return (
-              <div key={i} className="glass rounded-xl p-4">
+              <Panel key={i}>
                 <div className="flex items-start gap-3 mb-2">
                   {r.image && <img src={r.image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />}
                   <div className="flex-1 min-w-0">
@@ -170,18 +173,15 @@ export default function GMCScannerPage() {
                       )}
                     </div>
                   </div>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[9px] font-medium whitespace-nowrap"
-                    style={critical.length ? { background: "rgba(239,68,68,0.12)", color: "#f87171" } : { background: "rgba(74,222,128,0.12)", color: "#4ade80" }}
-                  >
+                  <Badge tone={critical.length ? "red" : "green"}>
                     {critical.length ? `${critical.length} must fix` : "Ready to list"}
-                  </span>
+                  </Badge>
                 </div>
-                {r.issues.length === 0 && <div className="text-[11px]" style={{ color: "#4ade80" }}>No issues found.</div>}
+                {r.issues.length === 0 && <div className="text-[11px]" style={{ color: "var(--green)" }}>No issues found.</div>}
                 {[...critical, ...tips].map((x, j) => (
                   <div key={j} className="flex gap-2 py-1.5 text-[11px]" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                    <span className="w-14 flex-shrink-0 text-[9px] font-semibold uppercase pt-0.5" style={{ color: x.level === "critical" ? "#f87171" : "#fbbf24" }}>
-                      {x.level === "critical" ? "Must fix" : "Tip"}
+                    <span className="w-16 flex-shrink-0 pt-0.5">
+                      <Badge tone={x.level === "critical" ? "red" : "amber"}>{x.level === "critical" ? "Must fix" : "Tip"}</Badge>
                     </span>
                     <div className="flex-1">
                       <div style={{ color: "var(--text)" }}>
@@ -193,7 +193,7 @@ export default function GMCScannerPage() {
                     </div>
                   </div>
                 ))}
-              </div>
+              </Panel>
             )
           })}
         </div>

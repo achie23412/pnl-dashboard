@@ -5,6 +5,7 @@ import { PageShell } from "@/components/PageShell"
 import { PillSelect } from "@/components/PillSelect"
 import { ListingWorkflow, type WorkflowStats } from "@/components/ListingWorkflow"
 import { KopyImporter } from "@/components/KopyImporter"
+import { Panel, Badge, Button, Notice } from "@/components/ui"
 
 interface ParsedListing {
   title: string
@@ -14,9 +15,9 @@ interface ParsedListing {
 }
 
 const TABS = [
-  { key: "listings", label: "New Listings", desc: "Paste links → AI listing → GMC check → Shopify" },
-  { key: "import", label: "Quick Import", desc: "Bulk import products as drafts (Kopy-style)" },
-  { key: "ai", label: "AI Listing Tool", desc: "Generate a listing from product details" },
+  { key: "listings", label: "New listings", desc: "Paste links → AI listing → GMC check → Shopify" },
+  { key: "import", label: "Quick import", desc: "Bulk import products as drafts (Kopy-style)" },
+  { key: "ai", label: "AI listing tool", desc: "Generate a listing from product details" },
 ] as const
 type Tab = typeof TABS[number]["key"]
 
@@ -133,18 +134,15 @@ export default function ProductImporterPage() {
       {/* AI Listing Tool tab */}
       {tab === "ai" && (
         <>
-          <div id="redo-listing" className="glass rounded-xl p-4 mb-4">
+          <div id="redo-listing">
+          <Panel title="Generate listing (Ascend SOP)" right={<Badge tone="accent">AI</Badge>} className="mb-4">
             {fromOpportunity && (
               <div className="rounded-lg px-3 py-2 mb-3 text-[10px]" style={{ background: "rgba(99,102,241,0.12)", color: "var(--text)" }}>
                 Adapting <b>{fromOpportunity.title}</b> (opportunity #{fromOpportunity.id}).
                 {fromOpportunity.adminUrl && <> Draft: <a href={fromOpportunity.adminUrl} target="_blank" rel="noreferrer" className="underline">open in Shopify</a>.</>}{" "}
-                Paste the results into the draft, then tick the listing checks on <Link href="/opportunities" className="underline">Product Opportunities</Link>.
+                Paste the results into the draft, then tick the listing checks on <Link href="/opportunities" className="underline">Product opportunities</Link>.
               </div>
             )}
-            <div className="flex items-center gap-2 mb-3">
-              <div className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Generate Listing — Ascend SOP</div>
-              <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>AI</span>
-            </div>
             <p className="text-[10px] mb-3" style={{ color: "var(--text-muted)" }}>
               Generate a GMC-compliant listing for freshly imported products. Paste the product details below.
             </p>
@@ -155,7 +153,7 @@ export default function ProductImporterPage() {
                   className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px] resize-none"
                   style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
                   rows={3}
-                  placeholder="Paste existing product title, description, or any product details..."
+                  placeholder="Paste the existing title, description or any product details…"
                   value={productInfo}
                   onChange={(e) => setProductInfo(e.target.value)}
                 />
@@ -166,7 +164,7 @@ export default function ProductImporterPage() {
                   <input
                     className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px]"
                     style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-                    placeholder="https://competitor.com/product..."
+                    placeholder="https://competitor.com/product…"
                     value={competitorUrl}
                     onChange={(e) => setCompetitorUrl(e.target.value)}
                   />
@@ -176,7 +174,7 @@ export default function ProductImporterPage() {
                   <input
                     className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px]"
                     style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-                    placeholder="Describe what the product looks like..."
+                    placeholder="Describe what the product looks like…"
                     value={imageDesc}
                     onChange={(e) => setImageDesc(e.target.value)}
                   />
@@ -187,45 +185,39 @@ export default function ProductImporterPage() {
                 </div>
               </div>
             </div>
-            <button
-              className="px-4 py-2 rounded-lg text-[11px] font-medium disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg, #7c3aed, #a78bfa)", color: "#fff" }}
+            <Button
+              variant="primary"
               onClick={handleRedo}
               disabled={loading || (!productInfo && !competitorUrl && !imageDesc)}
             >
-              {loading ? "Generating..." : "Generate Listing"}
-            </button>
+              {loading ? "Generating…" : "Generate listing"}
+            </Button>
 
             {error && (
-              <div className="mt-3 text-[11px] px-3 py-2 rounded-lg" style={{ background: "rgba(239,68,68,0.1)", color: "#f87171" }}>
-                {error}
+              <div className="mt-3 -mb-4">
+                <Notice tone="error">Couldn&apos;t generate the listing: {error}.</Notice>
               </div>
             )}
+          </Panel>
           </div>
 
           {result && (
-            <div className="glass rounded-xl p-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Generated Listing</div>
-                <button
-                  className="text-[10px] px-3 py-1 rounded-lg font-medium"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}
-                  onClick={() => copyToClipboard(rawResult, "all")}
-                >
-                  {copied === "all" ? "Copied!" : "Copy all"}
-                </button>
-              </div>
+            <Panel
+              title="Generated listing"
+              className="mb-4"
+              right={
+                <Button size="sm" onClick={() => copyToClipboard(rawResult, "all")}>
+                  {copied === "all" ? "Copied" : "Copy all"}
+                </Button>
+              }
+            >
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
                   <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Title</div>
-                  <button
-                    className="text-[9px] px-2 py-0.5 rounded"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-dim)" }}
-                    onClick={() => copyToClipboard(result.title, "title")}
-                  >
-                    {copied === "title" ? "Copied!" : "Copy"}
-                  </button>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.title, "title")}>
+                    {copied === "title" ? "Copied" : "Copy"}
+                  </Button>
                 </div>
                 <div className="text-[12px] font-medium px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)", color: "var(--text)" }}>
                   {result.title}
@@ -236,13 +228,9 @@ export default function ProductImporterPage() {
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
                   <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Description</div>
-                  <button
-                    className="text-[9px] px-2 py-0.5 rounded"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-dim)" }}
-                    onClick={() => copyToClipboard(result.description, "desc")}
-                  >
-                    {copied === "desc" ? "Copied!" : "Copy"}
-                  </button>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.description, "desc")}>
+                    {copied === "desc" ? "Copied" : "Copy"}
+                  </Button>
                 </div>
                 <div className="text-[11px] px-3 py-2 rounded-lg leading-relaxed" style={{ background: "rgba(255,255,255,0.03)", color: "var(--text)" }}>
                   {result.description}
@@ -251,14 +239,10 @@ export default function ProductImporterPage() {
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1">
-                  <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Key Features</div>
-                  <button
-                    className="text-[9px] px-2 py-0.5 rounded"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-dim)" }}
-                    onClick={() => copyToClipboard(result.features.join("\n"), "feat")}
-                  >
-                    {copied === "feat" ? "Copied!" : "Copy"}
-                  </button>
+                  <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>Key features</div>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.features.join("\n"), "feat")}>
+                    {copied === "feat" ? "Copied" : "Copy"}
+                  </Button>
                 </div>
                 <div className="space-y-1">
                   {result.features.map((f, i) => (
@@ -271,14 +255,10 @@ export default function ProductImporterPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>File Names ({result.fileNames.length})</div>
-                  <button
-                    className="text-[9px] px-2 py-0.5 rounded"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-dim)" }}
-                    onClick={() => copyToClipboard(result.fileNames.join("\n"), "files")}
-                  >
-                    {copied === "files" ? "Copied!" : "Copy"}
-                  </button>
+                  <div className="text-[10px] font-medium" style={{ color: "var(--text-muted)" }}>File names ({result.fileNames.length})</div>
+                  <Button size="sm" variant="ghost" onClick={() => copyToClipboard(result.fileNames.join("\n"), "files")}>
+                    {copied === "files" ? "Copied" : "Copy"}
+                  </Button>
                 </div>
                 <div className="max-h-[160px] overflow-y-auto rounded-lg px-3 py-2" style={{ background: "rgba(255,255,255,0.03)" }}>
                   {result.fileNames.map((f, i) => (
@@ -288,7 +268,7 @@ export default function ProductImporterPage() {
                   ))}
                 </div>
               </div>
-            </div>
+            </Panel>
           )}
         </>
       )}

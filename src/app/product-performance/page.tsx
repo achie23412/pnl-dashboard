@@ -1,5 +1,7 @@
 "use client"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, Notice, Loading, TH, TD, ROW_BORDER } from "@/components/ui"
 import { useEffect, useState, useMemo } from "react"
 import { STORES, STORE_COLORS } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
@@ -169,7 +171,7 @@ export default function ProductPerformancePage() {
 
   const SortHeader = ({ label, k, align = "right" }: { label: string; k: SortKey; align?: string }) => (
     <th
-      className={`${align === "left" ? "text-left" : "text-right"} px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider cursor-pointer select-none`}
+      className={`${TH} ${align === "left" ? "text-left" : "text-right"} cursor-pointer select-none`}
       style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       onClick={() => toggleSort(k)}
     >
@@ -177,29 +179,36 @@ export default function ProductPerformancePage() {
     </th>
   )
 
-  return (
-    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Front End → Product Performance</div>
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-[20px] font-bold mb-1" style={{ color: "var(--text)" }}>Product Performance</h1>
-          <p className="text-[12px] max-w-3xl" style={{ color: "var(--text-muted)" }}>
-            Every product with its ROAS against its breakeven ROAS. {dateFrom} → {dateTo}.
-            {refreshing && <span className="ml-2 text-[10px]" style={{ color: "var(--text-dim)" }}>Updating…</span>}
-          </p>
-        </div>
-        <DatePicker
-          preset={preset}
-          customFrom={customFrom}
-          customTo={customTo}
-          onChange={(p, f, t) => {
-            setPreset(p)
-            if (f) setCustomFrom(f)
-            if (t) setCustomTo(t)
-          }}
-        />
-      </div>
+  const thStyle = { color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }
 
+  return (
+    <PageShell
+      title="Product Performance"
+      breadcrumb="Front End → Product Performance"
+      description={`Every product with its ROAS against its breakeven ROAS. ${dateFrom} → ${dateTo}.`}
+      stats={[
+        { label: "Products", value: loading ? "—" : summary.total.toString() },
+        { label: "With sales", value: loading ? "—" : summary.withSales.toString() },
+        { label: "With COGS", value: loading ? "—" : summary.withCogs.toString() },
+        { label: "Units sold", value: loading ? "—" : fmt(summary.totalUnits) },
+        { label: "Product revenue (mixed currencies)", value: loading ? "—" : fmt(summary.totalRevenue), color: "var(--green)" },
+      ]}
+      actions={
+        <>
+          {refreshing && <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>Updating…</span>}
+          <DatePicker
+            preset={preset}
+            customFrom={customFrom}
+            customTo={customTo}
+            onChange={(p, f, t) => {
+              setPreset(p)
+              if (f) setCustomFrom(f)
+              if (t) setCustomTo(t)
+            }}
+          />
+        </>
+      }
+    >
       <FixBanner onApply={(ctx) => {
         if (ctx.store) {
           const match = STORES.find((s) => s === ctx.store)
@@ -209,99 +218,79 @@ export default function ProductPerformancePage() {
         setSortDir("desc")
       }} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-        {[
-          { label: "Products", value: summary.total.toString() },
-          { label: "With sales", value: summary.withSales.toString() },
-          { label: "With COGS", value: summary.withCogs.toString() },
-          { label: "Units sold", value: fmt(summary.totalUnits) },
-          { label: "Product revenue (mixed currencies)", value: fmt(summary.totalRevenue), color: "var(--green)" },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>{s.label}</div>
-            <div className="text-[18px] font-bold" style={{ color: s.color || "var(--text)" }}>{loading ? "—" : s.value}</div>
-          </div>
-        ))}
-      </div>
-
       {!loading && (loadError || dataErrors.length > 0) && (
-        <div className="rounded-xl px-4 py-2.5 mb-4" style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
-          <div className="text-[11px] font-semibold mb-1" style={{ color: "var(--orange)" }}>Some product data could not be loaded</div>
-          {loadError && <div className="text-[10px]" style={{ color: "var(--orange)" }}>{loadError}</div>}
+        <Notice tone="warning">
+          <div className="font-semibold mb-1">Some product data couldn&apos;t be loaded.</div>
+          {loadError && <div className="text-[10px]">Couldn&apos;t load products: {loadError}.</div>}
           {dataErrors.map((e) => (
-            <div key={e} className="text-[10px]" style={{ color: "var(--orange)" }}>{e}</div>
+            <div key={e} className="text-[10px]">{e}</div>
           ))}
-        </div>
+        </Notice>
       )}
 
       {/* ROAS vs breakeven per store (revenue + ad spend as on the Main Hub, all channels) */}
       {!loading && storeSummaries.length > 0 && (
-        <div className="glass rounded-xl overflow-hidden mb-5">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr>
-                {["Store", "Revenue", "Ad spend", "ROAS", "Breakeven ROAS", "Status", "Product-level spend"].map((h, i) => (
-                  <th key={h} className={`${i === 0 ? "text-left" : "text-right"} px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider`} style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {storeSummaries
-                .filter((s) => store === "Overall" || s.store === store)
-                .map((s) => {
-                  const above = s.roas != null && s.be_roas != null ? s.roas >= s.be_roas : null
-                  return (
-                    <tr key={s.store}>
-                      <td className="px-3 py-2">
-                        <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--text)" }}>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: STORE_COLORS[s.store] || "#666" }} />
-                          {s.store}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{sym(s.store)}{fmt(s.revenue)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{sym(s.store)}{fmt(s.ad_spend)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: roasColor(s.roas, s.be_roas) }}>{fmtRoas(s.roas)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{fmtRoas(s.be_roas)}</td>
-                      <td className="px-3 py-2 text-right text-[10px] font-medium" style={{ color: above == null ? "var(--text-dim)" : above ? "var(--green)" : "var(--red)" }}>
-                        {above == null ? "—" : above ? "Above breakeven" : "Below breakeven"}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[10px]" style={{ color: "var(--text-dim)" }}>{s.product_level_spend ? "Yes (Google)" : "No (Meta/TikTok: store level only)"}</td>
-                    </tr>
-                  )
-                })}
-            </tbody>
-          </table>
-        </div>
+        <Panel pad={false} className="mb-4" title="ROAS vs breakeven per store" sub="Revenue and ad spend from all channels, as on the Main Hub.">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr>
+                  {["Store", "Revenue", "Ad spend", "ROAS", "Breakeven ROAS", "Status", "Product-level spend"].map((h, i) => (
+                    <th key={h} className={`${TH} ${i === 0 ? "text-left" : "text-right"}`} style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {storeSummaries
+                  .filter((s) => store === "Overall" || s.store === store)
+                  .map((s) => {
+                    const above = s.roas != null && s.be_roas != null ? s.roas >= s.be_roas : null
+                    return (
+                      <tr key={s.store} style={ROW_BORDER}>
+                        <td className={TD}>
+                          <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--text)" }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: STORE_COLORS[s.store] || "#666" }} />
+                            {s.store}
+                          </span>
+                        </td>
+                        <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{sym(s.store)}{fmt(s.revenue)}</td>
+                        <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{sym(s.store)}{fmt(s.ad_spend)}</td>
+                        <td className={`${TD} text-right tabular-nums font-semibold`} style={{ color: roasColor(s.roas, s.be_roas) }}>{fmtRoas(s.roas)}</td>
+                        <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmtRoas(s.be_roas)}</td>
+                        <td className={`${TD} text-right`}>
+                          {above == null ? <span style={{ color: "var(--text-dim)" }}>—</span> : above ? <Badge tone="green">Above breakeven</Badge> : <Badge tone="red">Below breakeven</Badge>}
+                        </td>
+                        <td className={`${TD} text-right text-[10px]`} style={{ color: "var(--text-dim)" }}>{s.product_level_spend ? "Yes (Google)" : "No (Meta/TikTok: store level only)"}</td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
       )}
 
       {/* Store filter */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <FilterBar>
         <PillSelect
           label="Store"
           value={store}
           onChange={(v) => setStore(v as StoreName)}
           options={STORES.map((s) => ({ value: s, label: s === "Overall" ? "all stores" : s }))}
         />
-      </div>
+      </FilterBar>
 
       {/* Table */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-3">
-          <div className="relative w-8 h-8">
-            <div className="absolute inset-0 rounded-full animate-spin" style={{ border: "2px solid rgba(255,255,255,0.06)", borderTopColor: "var(--accent)" }} />
-          </div>
-          <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Loading products</span>
-        </div>
+        <Loading>Loading products…</Loading>
       ) : (
-        <div className="glass rounded-xl overflow-hidden relative">
-          <div className="absolute top-0 left-0 w-full h-[2px]" style={{ background: "linear-gradient(90deg, rgba(99,102,241,0.5), transparent 60%)" }} />
+        <Panel pad={false}>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
                 <tr>
-                  <th className="text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Product</th>
-                  <th className="text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Store</th>
+                  <th className={`${TH} text-left`} style={thStyle}>Product</th>
+                  <th className={`${TH} text-left`} style={thStyle}>Store</th>
                   <SortHeader label="Units" k="units" />
                   <SortHeader label="Revenue" k="revenue" />
                   <SortHeader label="Ad spend" k="spend" />
@@ -310,54 +299,51 @@ export default function ProductPerformancePage() {
                   <SortHeader label="COGS/unit" k="cogs" />
                   <SortHeader label="Profit" k="profit" />
                   <SortHeader label="Margin" k="margin" />
-                  <th className="text-right px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Source</th>
+                  <th className={`${TH} text-right`} style={thStyle}>Source</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={11} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales or ad spend in this period</td></tr>
+                  <tr><td colSpan={11} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales or ad spend in this period. Pick a longer date range or another store.</td></tr>
                 ) : filtered.map((p, i) => {
                   const totalCogs = p.cogs_usd != null ? p.cogs_usd * p.units_sold : null
                   const profit = totalCogs != null ? p.sales_revenue - totalCogs : null
                   const margin = profit != null && p.sales_revenue > 0 ? (profit / p.sales_revenue) * 100 : null
                   const profitColor = profit != null ? (profit >= 0 ? "var(--green)" : "var(--red)") : "var(--text-dim)"
                   const marginColor = margin != null ? (margin >= 30 ? "var(--green)" : margin >= 0 ? "var(--orange)" : "var(--red)") : "var(--text-dim)"
-                  const sourceColor = p.cogs_source === "shipgoods" ? "var(--green)" : p.cogs_source === "sheet" ? "var(--orange)" : "var(--text-dim)"
 
                   return (
                     <tr
                       key={`${p.product_name}-${p.store}-${i}`}
                       className="transition-colors hover:bg-[rgba(255,255,255,0.04)]"
-                      style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
+                      style={ROW_BORDER}
                     >
-                      <td className="px-3 py-2 max-w-[200px]">
+                      <td className={`${TD} max-w-[200px]`}>
                         <ProductLink store={p.store} name={p.product_name} productId={p.product_ids?.[0]} className="text-[11px] font-medium" maxWidth={200} />
                         {p.category && <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.category}</span>}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className={TD}>
                         <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: STORE_COLORS[p.store] || "#666" }} />
                           {p.store}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{p.units_sold}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>{sym(p.store)}{fmt(p.sales_revenue)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{p.ad_spend != null ? `${sym(p.store)}${fmt(p.ad_spend)}` : "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: roasColor(p.roas, p.be_roas) }}>{fmtRoas(p.roas)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{fmtRoas(p.be_roas)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: p.cogs_usd != null ? "var(--orange)" : "var(--text-dim)" }}>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{p.units_sold}</td>
+                      <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>{sym(p.store)}{fmt(p.sales_revenue)}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{p.ad_spend != null ? `${sym(p.store)}${fmt(p.ad_spend)}` : "—"}</td>
+                      <td className={`${TD} text-right tabular-nums font-semibold`} style={{ color: roasColor(p.roas, p.be_roas) }}>{fmtRoas(p.roas)}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmtRoas(p.be_roas)}</td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: p.cogs_usd != null ? "var(--orange)" : "var(--text-dim)" }}>
                         {p.cogs_usd != null ? `$${p.cogs_usd.toFixed(2)}` : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: profitColor }}>
+                      <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: profitColor }}>
                         {profit != null ? `${profit < 0 ? "-" : ""}$${fmt(Math.abs(profit))}` : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: marginColor }}>
+                      <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: marginColor }}>
                         {margin != null ? `${margin.toFixed(1)}%` : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <span className="text-[9px] font-medium" style={{ color: sourceColor }}>
-                          {p.cogs_source === "shipgoods" ? "SG" : p.cogs_source === "sheet" ? "Sheet" : "None"}
-                        </span>
+                      <td className={`${TD} text-right`}>
+                        {p.cogs_source === "shipgoods" ? <Badge tone="green">SG</Badge> : p.cogs_source === "sheet" ? <Badge tone="amber">Sheet</Badge> : <Badge tone="grey">None</Badge>}
                       </td>
                     </tr>
                   )
@@ -371,8 +357,8 @@ export default function ProductPerformancePage() {
               <> · Sales from: {Object.entries(salesSources).map(([s, src]) => `${s} ${src === "shopify" ? "Shopify" : src === "shipgoods" ? "ShipGoods (fulfilled orders)" : "none"}`).join(", ")}</>
             )}
           </div>
-        </div>
+        </Panel>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { Panel, Badge, Button, Notice, Loading, EmptyState, SectionLabel } from "@/components/ui"
 import type { LiveListing } from "@/app/api/listings/route"
 
 const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
@@ -229,24 +230,26 @@ export default function ListingsPage() {
       description="Every live product in the Google stores, checked for feed and listing problems, with how to fix each one."
       stats={[
         { label: "Live products", value: data ? String(stats.live) : "—" },
-        { label: "Must fix", value: data ? String(stats.critical) : "—" },
-        { label: "Tips only", value: data ? String(stats.warning) : "—" },
+        { label: "Must fix", value: data ? String(stats.critical) : "—", color: data && stats.critical > 0 ? "var(--red)" : undefined },
+        { label: "Tips only", value: data ? String(stats.warning) : "—", color: data && stats.warning > 0 ? "var(--orange)" : undefined },
         { label: "Sold out", value: data ? String(stats.soldOut) : "—" },
       ]}
     >
-      {error && <div className="rounded-lg px-3 py-2 mb-4 text-[11px]" style={{ background: "rgba(239,68,68,0.1)", color: "#f87171" }}>Couldn&apos;t load listings: {error}</div>}
-      {!data && !error && <div className="glass rounded-xl p-6 text-[11px]" style={{ color: "var(--text-dim)" }}>Loading live products from the stores…</div>}
+      {error && <Notice tone="error">Couldn&apos;t load listings: {error}.</Notice>}
+      {!data && !error && <Loading>Loading live products from the stores…</Loading>}
 
       {data && (
         <>
           {data.stores.some((s) => s.error) && (
-            <div className="rounded-lg px-3 py-2 mb-4 text-[11px]" style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>
-              {data.stores.filter((s) => s.error).map((s) => s.error).join(" · ")} — those products may be missing. Reload in a few minutes.
-            </div>
+            <Notice tone="warning">
+              {data.stores.filter((s) => s.error).map((s) => s.error).join(" · ")}. Those products may be missing. Reload in a few minutes.
+            </Notice>
           )}
 
           {/* Filters */}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <FilterBar
+            right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="px-3 py-1.5 rounded-lg text-[11px] w-[200px]" style={inputStyle} />}
+          >
             <FilterSelect
               label="Store"
               options={STORES.map((s) => ({ value: s, count: all.filter((l) => l.store === s).length }))}
@@ -259,15 +262,14 @@ export default function ListingsPage() {
               onChange={(v) => { setFilter(v as (typeof FILTERS)[number]["key"]); setLimit(100) }}
               options={FILTERS.map((f) => ({ value: f.key, label: f.label }))}
             />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="ml-auto px-3 py-1.5 rounded-lg text-[11px] w-[200px]" style={inputStyle} />
-          </div>
+          </FilterBar>
 
-          {/* Most common problems — clickable */}
+          {/* Most common problems: clickable */}
           {topIssues.length > 0 && (
-            <div className="glass rounded-xl p-4 mb-4">
-              <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
-                Most common problems {store.values.length ? `· ${store.mode === "exclude" ? "not " : ""}${store.values.join(", ")}` : ""} — click to see affected products
-              </div>
+            <Panel className="mb-4">
+              <SectionLabel>
+                Most common problems {store.values.length ? `· ${store.mode === "exclude" ? "not " : ""}${store.values.join(", ")}` : ""} · click to see affected products
+              </SectionLabel>
               <div className="grid gap-1.5 md:grid-cols-2">
                 {topIssues.map(([k, v]) => {
                   const isOpen = openIssue === k
@@ -281,7 +283,7 @@ export default function ListingsPage() {
                         onClick={() => setOpenIssue(isOpen ? null : k)}
                         className="w-full px-3 py-2 text-[11px] text-left flex items-center gap-2 hover:bg-white/[0.02] transition-colors"
                       >
-                        <span style={{ color: v.level === "critical" ? "#f87171" : "#facc15" }}>{v.level === "critical" ? "●" : "○"}</span>
+                        <span style={{ color: v.level === "critical" ? "var(--red)" : "var(--orange)" }}>{v.level === "critical" ? "●" : "○"}</span>
                         <span className="font-medium flex-1 min-w-0 truncate" style={{ color: "var(--text)" }}>{k}</span>
                         <span className="text-[10px] px-1.5 rounded shrink-0" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>{v.count}×</span>
                         <span className="text-[10px] shrink-0" style={{ color: "var(--text-dim)" }}>{isOpen ? "▲" : "▼"}</span>
@@ -293,17 +295,16 @@ export default function ListingsPage() {
 
                           {canAutoFix && unfixedProducts.length > 0 && (
                             <div className="mb-2">
-                              <button
+                              <Button
+                                variant="primary"
                                 onClick={(e) => { e.stopPropagation(); requestFixAll(k, unfixedProducts) }}
-                                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:brightness-110"
-                                style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)" }}
                               >
-                                Review & fix {unfixedProducts.length} products
-                              </button>
+                                Review &amp; fix {unfixedProducts.length} products
+                              </Button>
                             </div>
                           )}
                           {canAutoFix && unfixedProducts.length === 0 && v.products.length > 0 && (
-                            <div className="mb-2 text-[10px] font-semibold" style={{ color: "#34d399" }}>
+                            <div className="mb-2 text-[10px] font-semibold" style={{ color: "var(--green)" }}>
                               All {v.products.length} products fixed
                             </div>
                           )}
@@ -323,31 +324,27 @@ export default function ListingsPage() {
                                     <div className="w-8 h-8 rounded-md shrink-0 mt-0.5" style={{ background: "rgba(255,255,255,0.05)" }} />
                                   )}
                                   <div className="flex-1 min-w-0">
-                                    <div className="text-[11px] truncate" style={{ color: isFixed ? "#34d399" : "var(--text)" }}>
+                                    <div className="text-[11px] truncate" style={{ color: isFixed ? "var(--green)" : "var(--text)" }}>
                                       {isFixed ? "✓ " : ""}{p.title}
                                     </div>
                                     {changed && !isFixed && (
                                       <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
-                                        → <span style={{ color: "#34d399" }}>{preview}</span>
+                                        → <span style={{ color: "var(--green)" }}>{preview}</span>
                                       </div>
                                     )}
                                     <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store}</div>
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
                                     {canAutoFix && !isFixed && changed && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); requestFixSingle(p, fixType!) }}
-                                        className="px-2 py-0.5 rounded text-[9px] font-semibold"
-                                        style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
-                                      >
+                                      <Button size="sm" onClick={(e) => { e.stopPropagation(); requestFixSingle(p, fixType!) }}>
                                         Fix
-                                      </button>
+                                      </Button>
                                     )}
                                     {isFixed && (
-                                      <span className="text-[9px] font-semibold" style={{ color: "#34d399" }}>Fixed</span>
+                                      <Badge tone="green">Fixed</Badge>
                                     )}
-                                    <a href={p.adminUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="px-2 py-0.5 rounded text-[9px]" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}>
-                                      Shopify
+                                    <a href={p.adminUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="px-2.5 py-1 rounded-lg text-[10px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                      Shopify ↗
                                     </a>
                                   </div>
                                 </div>
@@ -360,12 +357,14 @@ export default function ListingsPage() {
                   )
                 })}
               </div>
-            </div>
+            </Panel>
           )}
 
           {/* Products */}
+          {rows.length === 0 ? (
+            <EmptyState title="No products match">Pick another store or &ldquo;Show&rdquo; option, or clear the search.</EmptyState>
+          ) : (
           <div className="glass rounded-xl p-2">
-            {rows.length === 0 && <div className="p-4 text-[11px]" style={{ color: "var(--text-dim)" }}>No products match.</div>}
             {rows.slice(0, limit).map((l) => {
               const key = `${l.store}-${l.id}`
               const c = l.issues.filter((i) => i.level === "critical").length
@@ -381,7 +380,7 @@ export default function ListingsPage() {
                       <div className="w-10 h-10 rounded-md shrink-0" style={{ background: "rgba(255,255,255,0.05)" }} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] truncate" style={{ color: isFixed ? "#34d399" : "var(--text)" }}>
+                      <div className="text-[12px] truncate" style={{ color: isFixed ? "var(--green)" : "var(--text)" }}>
                         {isFixed ? "✓ " : ""}{l.title}
                       </div>
                       <div className="text-[10px] truncate" style={{ color: "var(--text-dim)" }}>
@@ -389,14 +388,14 @@ export default function ListingsPage() {
                         {l.alsoOn.length ? ` · also on ${l.alsoOn.join(", ")}` : ""}
                       </div>
                     </div>
-                    {c > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0" style={{ background: "rgba(248,113,113,0.15)", color: "#f87171" }}>{c} must fix</span>}
-                    {w > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0" style={{ background: "rgba(250,204,21,0.12)", color: "#facc15" }}>{w} tip{w === 1 ? "" : "s"}</span>}
-                    {l.issues.length === 0 && <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0" style={{ background: "rgba(52,211,153,0.12)", color: "#34d399" }}>OK</span>}
+                    {c > 0 && <Badge tone="red">{c} must fix</Badge>}
+                    {w > 0 && <Badge tone="amber">{w} tip{w === 1 ? "" : "s"}</Badge>}
+                    {l.issues.length === 0 && <Badge tone="green">OK</Badge>}
                   </button>
                   {isOpen && (
                     <div className="px-3 pb-3 pl-[60px] text-[11px]">
                       {l.issues.length === 0 ? (
-                        <div style={{ color: "#34d399" }}>No issues found by these checks.</div>
+                        <div style={{ color: "var(--green)" }}>No issues found by these checks.</div>
                       ) : (
                         <ul className="space-y-1.5 mb-2">
                           {l.issues.map((i, idx) => {
@@ -410,7 +409,7 @@ export default function ListingsPage() {
 
                             return (
                               <li key={idx} className="flex gap-2">
-                                <span style={{ color: i.level === "critical" ? "#f87171" : "#facc15" }}>{i.level === "critical" ? "●" : "○"}</span>
+                                <span style={{ color: i.level === "critical" ? "var(--red)" : "var(--orange)" }}>{i.level === "critical" ? "●" : "○"}</span>
                                 <div className="flex-1">
                                   <div><b>{i.field}:</b> {i.message}</div>
                                   <div style={{ color: "var(--text-muted)" }}>
@@ -418,14 +417,10 @@ export default function ListingsPage() {
                                   </div>
                                   {issueFixType && changed && !isFixed && (
                                     <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>→ <span style={{ color: "#34d399" }}>{preview}</span></span>
-                                      <button
-                                        onClick={() => requestFixSingle(l, issueFixType)}
-                                        className="px-2 py-0.5 rounded text-[9px] font-semibold"
-                                        style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
-                                      >
-                                        Review & fix
-                                      </button>
+                                      <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>→ <span style={{ color: "var(--green)" }}>{preview}</span></span>
+                                      <Button size="sm" onClick={() => requestFixSingle(l, issueFixType)}>
+                                        Review &amp; fix
+                                      </Button>
                                     </div>
                                   )}
                                 </div>
@@ -435,7 +430,7 @@ export default function ListingsPage() {
                         </ul>
                       )}
                       <div className="flex gap-3">
-                        <a href={l.adminUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "#7dd3fc" }}>Edit in Shopify ↗</a>
+                        <a href={l.adminUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent)" }}>Edit in Shopify ↗</a>
                         <a href={l.url} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--text-muted)" }}>View in store ↗</a>
                       </div>
                     </div>
@@ -444,32 +439,32 @@ export default function ListingsPage() {
               )
             })}
             {rows.length > limit && (
-              <button onClick={() => setLimit(limit + 100)} className="w-full py-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
-                Show more ({rows.length - limit} left)
-              </button>
+              <div className="flex justify-center py-2">
+                <Button variant="ghost" onClick={() => setLimit(limit + 100)}>
+                  Show more ({rows.length - limit} left)
+                </Button>
+              </div>
             )}
           </div>
+          )}
 
           <div className="text-[10px] mt-3" style={{ color: "var(--text-dim)" }}>
             Live = published on the online store (read from each store&apos;s public product feed, cached 15 min; loaded {new Date(data.fetchedAt).toLocaleTimeString()}).
-            Auto-fix works for: repeated words, colour in title, size in title. Every fix opens a review modal first — nothing pushes to Shopify without your confirmation.
+            Auto-fix works for: repeated words, colour in title, size in title. Every fix opens a review window first: nothing pushes to Shopify without your confirmation.
           </div>
         </>
       )}
 
-      {/* ═══ CONFIRMATION MODAL ═══ */}
+      {/* Confirmation modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-          <div className="w-full max-w-2xl rounded-2xl overflow-hidden" style={{ background: "var(--surface, #1a1b2e)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <div className="w-full max-w-2xl rounded-xl overflow-hidden" style={{ background: "var(--surface, #1a1b2e)", border: "1px solid rgba(255,255,255,0.1)" }}>
             {/* Header */}
             <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[16px]" style={{ background: "rgba(99,102,241,0.2)" }}>
-                🔧
-              </div>
               <div className="flex-1">
-                <div className="text-[14px] font-bold" style={{ color: "var(--text)" }}>Review title changes</div>
+                <div className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>Review title changes</div>
                 <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-                  {pendingFixes.length} product{pendingFixes.length !== 1 ? "s" : ""} · uncheck any you don&apos;t want to change
+                  {pendingFixes.length} product{pendingFixes.length !== 1 ? "s" : ""} · untick any you don&apos;t want to change
                 </div>
               </div>
               <button onClick={() => { setShowModal(false); setPushResult(null) }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10" style={{ color: "var(--text-dim)" }}>
@@ -485,7 +480,7 @@ export default function ListingsPage() {
                   checked={checkedCount === pendingFixes.length}
                   onChange={(e) => toggleAll(e.target.checked)}
                   className="rounded"
-                  style={{ accentColor: "#6366f1" }}
+                  style={{ accentColor: "var(--accent)" }}
                 />
                 Select all ({checkedCount}/{pendingFixes.length})
               </label>
@@ -508,7 +503,7 @@ export default function ListingsPage() {
                     checked={f.checked}
                     onChange={() => toggleFix(idx)}
                     className="mt-1 shrink-0 rounded"
-                    style={{ accentColor: "#6366f1" }}
+                    style={{ accentColor: "var(--accent)" }}
                   />
                   {f.image ? (
                     <img src={`${f.image}${f.image.includes("?") ? "&" : "?"}width=64`} alt="" className="w-8 h-8 rounded-md object-cover shrink-0 mt-0.5" loading="lazy" />
@@ -519,7 +514,7 @@ export default function ListingsPage() {
                     <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
                       <span style={{ textDecoration: "line-through", opacity: 0.6 }}>{f.oldTitle}</span>
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: "#34d399" }}>
+                    <div className="text-[11px] mt-0.5" style={{ color: "var(--green)" }}>
                       → {f.newTitle}
                     </div>
                     <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>{f.store}</div>
@@ -530,37 +525,25 @@ export default function ListingsPage() {
 
             {/* Result banner */}
             {pushResult && (
-              <div className="px-5 py-2">
-                <div className="rounded-lg px-3 py-2 text-[11px]" style={{
-                  background: pushResult.failed > 0 ? "rgba(248,113,113,0.1)" : "rgba(52,211,153,0.1)",
-                  color: pushResult.failed > 0 ? "#f87171" : "#34d399",
-                }}>
+              <div className="px-5 pt-2">
+                <Notice tone={pushResult.failed > 0 ? "error" : "success"}>
                   {pushResult.ok > 0 && `${pushResult.ok} title${pushResult.ok !== 1 ? "s" : ""} updated on Shopify. `}
                   {pushResult.failed > 0 && `${pushResult.failed} failed. `}
                   {pushResult.errors.length > 0 && pushResult.errors.slice(0, 3).join(" · ")}
-                </div>
+                </Notice>
               </div>
             )}
 
             {/* Footer */}
             <div className="px-5 py-4 flex items-center gap-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <button
-                onClick={() => { setShowModal(false); setPushResult(null) }}
-                className="px-4 py-2 rounded-lg text-[12px] font-medium"
-                style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}
-              >
+              <Button onClick={() => { setShowModal(false); setPushResult(null) }}>
                 Cancel
-              </button>
-              <button
-                onClick={confirmAndPush}
-                disabled={pushing || checkedCount === 0}
-                className="px-5 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 disabled:opacity-40"
-                style={{ background: "#6366f1", color: "#fff" }}
-              >
-                {pushing ? "Pushing to Shopify…" : `Confirm & push ${checkedCount} change${checkedCount !== 1 ? "s" : ""}`}
-              </button>
+              </Button>
+              <Button variant="primary" onClick={confirmAndPush} disabled={pushing || checkedCount === 0}>
+                {pushing ? "Pushing to Shopify…" : `Confirm and push ${checkedCount} change${checkedCount !== 1 ? "s" : ""}`}
+              </Button>
               <div className="ml-auto text-[10px]" style={{ color: "var(--text-dim)" }}>
-                Changes go live on Shopify immediately
+                Changes go live on Shopify immediately.
               </div>
             </div>
           </div>

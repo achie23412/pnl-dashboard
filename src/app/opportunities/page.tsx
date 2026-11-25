@@ -1,11 +1,12 @@
 "use client"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { runCompetitorScan, type ScanProgress } from "@/lib/competitor-scan"
 import { ADAPT_CHECKS, TARGET_STORES, daysBetween, todayIn, missingChecks, type OppStatus } from "@/lib/opportunity-engine"
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
 import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, Button, Notice, Loading, EmptyState } from "@/components/ui"
 import { FixBanner } from "@/components/FixBanner"
 import { UploadPlanner } from "@/components/UploadPlanner"
 
@@ -94,11 +95,11 @@ const TABS: { key: string; label: string; statuses: OppStatus[] }[] = [
   { key: "rejected", label: "Rejected", statuses: ["rejected"] },
 ]
 
-const PRIORITY_COLOR = { high: "var(--green)", medium: "var(--orange)", low: "var(--text-dim)" }
+const PRIORITY_TONE = { high: "green", medium: "amber", low: "grey" } as const
+const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" }
 const STORE_TZ: Record<string, string> = Object.fromEntries(TARGET_STORES.map((s) => [s.name, s.timezone]))
 const STORE_NAMES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES", "Blinky"]
 
-const btn = "px-2.5 py-1 rounded-md text-[10px] font-semibold transition-opacity"
 const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
 
 function money(price: number | null, cur: string | null, assumed: boolean) {
@@ -304,26 +305,21 @@ export default function OpportunitiesPage() {
     })
 
   return (
-    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Front End → Product Opportunities</div>
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-[20px] font-bold mb-1" style={{ color: "var(--text)" }}>Product Opportunities</h1>
-          <p className="text-[12px] max-w-3xl" style={{ color: "var(--text-muted)" }}>
-            Competitor research → your review → import as draft → adapt with Redo Listing → final check. Nothing is published from here.
-          </p>
-          <div className="text-[10px] mt-1" style={{ color: "var(--text-dim)" }}>
-            {scanInfo?.last_scan
-              ? `Last scan ${scanInfo.last_scan} · ${scanInfo.products_in_window.toLocaleString()} products from ${scanInfo.competitors_in_window} competitors (last 45 days)`
-              : "No scan yet."}
-            {" · Updates automatically every morning (06:30); season dates roll forward on their own."}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={startScan} disabled={scanning || setupNeeded} className={btn} style={{ background: "var(--accent)", color: "#fff", opacity: scanning || setupNeeded ? 0.5 : 1 }}>
-            {scanning ? "Scanning…" : "Scan competitors"}
-          </button>
-        </div>
+    <PageShell
+      title="Product Opportunities"
+      breadcrumb="Front End → Product Opportunities"
+      description="Competitor research → your review → import as draft → adapt with Redo Listing → final check. Nothing is published from here."
+      actions={
+        <Button variant="primary" onClick={startScan} disabled={scanning || setupNeeded}>
+          {scanning ? "Scanning…" : "Scan competitors"}
+        </Button>
+      }
+    >
+      <div className="text-[10px] -mt-2 mb-4" style={{ color: "var(--text-dim)" }}>
+        {scanInfo?.last_scan
+          ? `Last scan ${scanInfo.last_scan} · ${scanInfo.products_in_window.toLocaleString()} products from ${scanInfo.competitors_in_window} competitors (last 45 days)`
+          : "No scan yet."}
+        {" · Updates automatically every morning (06:30); season dates roll forward on their own."}
       </div>
 
       <FixBanner />
@@ -343,15 +339,14 @@ export default function OpportunitiesPage() {
         </div>
       )}
       {error && (
-        <div className="rounded-xl px-4 py-2.5 mb-4 text-[11px]" style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)", color: "var(--red)" }}>
-          {error}
+        <Notice tone="error">
+          Couldn&apos;t load or scan opportunities: {error}
           {setupNeeded && <div className="mt-1" style={{ color: "var(--text-muted)" }}>One-time setup: paste <code>supabase/opportunities.sql</code> into the Supabase SQL editor and run it.</div>}
-        </div>
+        </Notice>
       )}
 
       {patterns.length > 0 && (
-        <div className="glass rounded-xl p-4 mb-4">
-          <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text)" }}>Patterns across tracked competitors <span className="font-normal" style={{ color: "var(--text-dim)" }}>(observed counts, not sales)</span></div>
+        <Panel className="mb-4" title="Patterns across tracked competitors" sub="Observed counts, not sales.">
           <div className="space-y-1">
             {patterns.map((p) => (
               <div key={p.label} className="text-[10px]">
@@ -360,7 +355,7 @@ export default function OpportunitiesPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Panel>
       )}
 
       <UploadPlanner
@@ -376,14 +371,18 @@ export default function OpportunitiesPage() {
       />
 
       {batch && (
-        <div className="rounded-xl px-3 py-2 mb-3 flex items-center gap-2 text-[11px]" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)", color: "var(--text)" }}>
-          <span>Showing the planned batch: {batch.ids.size} products for <b>{batch.store}</b>. Check them, untick any you don&apos;t want, then click <b>Approve</b> in the bar below.</span>
-          <button className="ml-auto underline" style={{ color: "var(--text-muted)" }} onClick={() => { setBatch(null); setSelected(new Set()) }}>Show all again</button>
-        </div>
+        <Notice tone="success">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>Showing the planned batch: {batch.ids.size} products for <b>{batch.store}</b>. Check them, untick any you don&apos;t want, then click <b>Approve</b> in the bar below.</span>
+            <span className="ml-auto">
+              <Button variant="ghost" size="sm" onClick={() => { setBatch(null); setSelected(new Set()) }}>Show all again</Button>
+            </span>
+          </div>
+        </Notice>
       )}
 
       {/* Tabs */}
-      <div className="glass rounded-xl p-1.5 inline-flex gap-1 overflow-x-auto mb-3">
+      <div className="glass rounded-xl p-1.5 inline-flex gap-1 overflow-x-auto mb-4">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -392,7 +391,7 @@ export default function OpportunitiesPage() {
               setSelected(new Set())
             }}
             className="px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
-            style={{ background: tab === t.key ? "rgba(255,255,255,0.08)" : "transparent", color: tab === t.key ? "#fff" : "var(--text-dim)" }}
+            style={{ background: tab === t.key ? "rgba(255,255,255,0.08)" : "transparent", color: tab === t.key ? "var(--text)" : "var(--text-dim)" }}
           >
             {t.label} <span style={{ color: "var(--text-dim)" }}>{counts[t.key] || 0}</span>
           </button>
@@ -400,21 +399,21 @@ export default function OpportunitiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <FilterBar>
         <FilterSelect label="Store" options={[...STORE_NAMES.map((s) => ({ value: s })), { value: "none", label: "No store chosen" }]} value={fStore} onChange={setFStoreF} />
         <FilterSelect label="Market" options={options.markets} value={fMarket} onChange={setFMarket} />
         <FilterSelect label="Competitor" options={options.competitors} value={fCompetitor} onChange={setFCompetitor} />
         <FilterSelect label="Category" options={options.categories} value={fCategory} onChange={setFCategory} />
         <FilterSelect label="Season/event" options={options.seasons} value={fSeason} onChange={setFSeasonF} />
         <FilterSelect label="Priority" options={[{ value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} value={fPriority} onChange={setFPriority} />
-      </div>
+      </FilterBar>
 
       {/* Bulk bar */}
       {selected.size > 0 && (
-        <div className="glass rounded-xl px-3 py-2 mb-3 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "var(--text)" }}>
+        <div className="glass rounded-xl px-3 py-2 mb-4 flex flex-wrap items-center gap-2 text-[11px]" style={{ color: "var(--text)" }}>
           <span>{selected.size} selected</span>
           {tab === "approved" ? (
-            <button className={btn} style={{ background: "var(--accent)", color: "#fff" }} onClick={() => queue(Array.from(selected))}>Send to importer</button>
+            <Button variant="primary" size="sm" onClick={() => queue(Array.from(selected))}>Send to importer</Button>
           ) : (
             <>
               <PillSelect
@@ -422,21 +421,25 @@ export default function OpportunitiesPage() {
                 onChange={setBulkStore}
                 options={[{ value: "", label: "Store for items without one…" }, ...STORE_NAMES.map((s) => ({ value: s }))]}
               />
-              <button className={btn} style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }} onClick={() => bulk("approved")}>Approve</button>
-              <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => bulk("saved")}>Save for later</button>
-              <button className={btn} style={{ background: "rgba(248,113,113,0.12)", color: "var(--red)" }} onClick={() => bulk("rejected")}>Reject</button>
+              <Button variant="primary" size="sm" onClick={() => bulk("approved")}>Approve</Button>
+              <Button size="sm" onClick={() => bulk("saved")}>Save for later</Button>
+              <Button variant="danger" size="sm" onClick={() => bulk("rejected")}>Reject</Button>
             </>
           )}
-          <button className="text-[10px] underline ml-auto" style={{ color: "var(--text-dim)" }} onClick={() => setSelected(new Set())}>clear</button>
+          <span className="ml-auto">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
+          </span>
         </div>
       )}
 
       {loading ? (
-        <div className="text-[11px] py-16 text-center" style={{ color: "var(--text-dim)" }}>Loading opportunities…</div>
+        <Loading>Loading opportunities…</Loading>
       ) : visible.length === 0 ? (
-        <div className="glass rounded-xl text-[11px] py-12 text-center" style={{ color: "var(--text-dim)" }}>
-          {opps.length === 0 ? "No opportunities yet. Run “Scan competitors” to read your tracked competitors' catalogues." : "Nothing here with these filters."}
-        </div>
+        opps.length === 0 ? (
+          <EmptyState title="No opportunities yet">Run &ldquo;Scan competitors&rdquo; to read your tracked competitors&apos; catalogues.</EmptyState>
+        ) : (
+          <EmptyState title="Nothing here with these filters">Try another tab or clear a filter.</EmptyState>
+        )
       ) : (
         <div className="space-y-2">
           {visible.map((o) => (
@@ -459,7 +462,7 @@ export default function OpportunitiesPage() {
       <div className="text-[9px] mt-4" style={{ color: "var(--text-dim)" }}>
         * currency assumed from the competitor&apos;s market. Evidence = what the scan shows; Potential = timing, catalogue gap and market fit (inferences). Rejected items only come back if 2+ more competitors start listing them.
       </div>
-    </div>
+    </PageShell>
   )
 }
 
@@ -511,12 +514,12 @@ function OpportunityCard(props: {
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={props.onExpand} className="text-[12px] font-semibold text-left truncate max-w-[520px]" style={{ color: "var(--text)" }}>{o.title}</button>
             {(o.source_url || o.first_source_url) && (
-              <a href={(o.source_url || o.first_source_url)!} target="_blank" rel="noreferrer" title="Open the competitor's product page" className="text-[10px] opacity-60 hover:opacity-100" style={{ color: "#7dd3fc" }}>↗</a>
+              <a href={(o.source_url || o.first_source_url)!} target="_blank" rel="noreferrer" title="Open the competitor's product page" className="text-[10px] opacity-60 hover:opacity-100" style={{ color: "var(--accent)" }}>↗</a>
             )}
             {o.priority && (
-              <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ color: PRIORITY_COLOR[o.priority], background: "rgba(255,255,255,0.05)" }}>{o.priority}</span>
+              <Badge tone={PRIORITY_TONE[o.priority]}>{PRIORITY_LABEL[o.priority]}</Badge>
             )}
-            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ color: "var(--text-muted)", background: "rgba(255,255,255,0.05)" }}>{STATUS_LABEL[o.status]}</span>
+            <Badge tone={o.status === "failed" ? "red" : "grey"}>{STATUS_LABEL[o.status]}</Badge>
           </div>
           <div className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
             {[o.gender, o.category].filter(Boolean).join(" · ") || "Uncategorised"} · {o.competitor_count} competitor{o.competitor_count === 1 ? "" : "s"} · Evidence {o.evidence_score ?? "—"}/100 · Potential {o.commercial_score ?? "—"}/100
@@ -540,22 +543,22 @@ function OpportunityCard(props: {
           <div className="flex flex-wrap justify-end gap-1">
             {["new", "under_review", "saved"].includes(o.status) && (
               <>
-                <button className={btn} style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }} onClick={() => go("approved")}>Approve</button>
-                {o.status !== "saved" && <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => go("saved")}>Later</button>}
-                <button className={btn} style={{ background: "rgba(248,113,113,0.12)", color: "var(--red)" }} onClick={() => go("rejected")}>Reject</button>
+                <Button variant="primary" size="sm" onClick={() => go("approved")}>Approve</Button>
+                {o.status !== "saved" && <Button size="sm" onClick={() => go("saved")}>Later</Button>}
+                <Button variant="danger" size="sm" onClick={() => go("rejected")}>Reject</Button>
               </>
             )}
             {o.status === "approved" && (
-              <button className={btn} style={{ background: "var(--accent)", color: "#fff" }} onClick={() => props.queue([o.id])}>Send to importer</button>
+              <Button variant="primary" size="sm" onClick={() => props.queue([o.id])}>Send to importer</Button>
             )}
             {o.status === "imported" && (
-              <button className={btn} style={{ background: "var(--accent)", color: "#fff" }} onClick={async () => { if (await go("adapting")) window.location.href = `/product-importer?opportunity=${o.id}` }}>Adapt listing</button>
+              <Button variant="primary" size="sm" onClick={async () => { if (await go("adapting")) window.location.href = `/product-importer?opportunity=${o.id}` }}>Adapt listing</Button>
             )}
             {o.status === "adapting" && (
-              <Link href={`/product-importer?opportunity=${o.id}`} className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }}>Open Redo Listing</Link>
+              <Button size="sm" href={`/product-importer?opportunity=${o.id}`}>Open Redo Listing</Button>
             )}
             {o.status === "rejected" && (
-              <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => go("under_review")}>Reconsider</button>
+              <Button size="sm" onClick={() => go("under_review")}>Reconsider</Button>
             )}
           </div>
         </div>
@@ -595,20 +598,20 @@ function OpportunityCard(props: {
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             {o.status === "adapting" && (
-              <button
-                className={btn}
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={missing.length > 0}
-                style={{ background: "var(--accent)", color: "#fff", opacity: missing.length ? 0.4 : 1 }}
                 onClick={() => go("ready_for_review")}
                 title={missing.length ? `Still open: ${missing.join("; ")}` : ""}
               >
                 Ready for final review {missing.length ? `(${missing.length} open)` : ""}
-              </button>
+              </Button>
             )}
             {o.status === "ready_for_review" && (
               <>
-                <button className={btn} style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }} onClick={() => go("ready_to_publish", { note: "Final review approved. Publish manually in Shopify." })}>Approve: ready to publish</button>
-                <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => go("adapting")}>Back to adapting</button>
+                <Button variant="primary" size="sm" onClick={() => go("ready_to_publish", { note: "Final review approved. Publish manually in Shopify." })}>Approve: ready to publish</Button>
+                <Button size="sm" onClick={() => go("adapting")}>Back to adapting</Button>
               </>
             )}
             {o.status === "ready_to_publish" && (
@@ -673,7 +676,7 @@ function OpportunityCard(props: {
             </div>
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--text)" }}>Priority</div>
-              <div style={{ color: "var(--text-muted)" }}>{d.priority_reason || "Loading…"}</div>
+              <div style={{ color: "var(--text-muted)" }}>{d.priority_reason || "Loading priority…"}</div>
             </div>
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--orange)" }}>Data gaps & risks</div>
@@ -684,7 +687,7 @@ function OpportunityCard(props: {
             <div className="text-[10px] font-semibold mb-1" style={{ color: "var(--text)" }}>Notes</div>
             <textarea className="w-full bg-transparent border rounded-lg px-2 py-1.5 text-[10px]" style={border} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
             {notes !== (o.notes || "") && (
-              <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => patch(o.id, { notes })}>Save notes</button>
+              <div className="mt-1.5"><Button size="sm" onClick={() => patch(o.id, { notes })}>Save notes</Button></div>
             )}
           </div>
           <div>
@@ -694,10 +697,10 @@ function OpportunityCard(props: {
                 {new Date(h.at).toLocaleString()} — {h.from_status || h.to_status ? `${h.from_status ? STATUS_LABEL[h.from_status as OppStatus] || h.from_status : "—"} → ${h.to_status ? STATUS_LABEL[h.to_status as OppStatus] || h.to_status : "—"} · ` : ""}{h.note}
               </div>
             ))}
-            {history === null && <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>Loading…</div>}
+            {history === null && <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>Loading history…</div>}
           </div>
           {["new", "saved", "approved"].includes(o.status) && (
-            <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => go("under_review")}>Mark under review</button>
+            <Button size="sm" onClick={() => go("under_review")}>Mark under review</Button>
           )}
         </div>
       )}

@@ -1,9 +1,10 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
+import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 interface SupplierProduct {
   title: string
@@ -39,17 +40,17 @@ interface Summary {
 
 function cogsColor(pct: number | null): string {
   if (pct === null) return "var(--text-dim)"
-  if (pct >= 28 && pct <= 32) return "#4ade80"
-  if (pct > 32 && pct <= 35) return "#facc15"
-  if (pct >= 25 && pct < 28) return "#facc15"
-  return "#f87171"
+  if (pct >= 28 && pct <= 32) return "var(--green)"
+  if (pct > 32 && pct <= 35) return "var(--orange)"
+  if (pct >= 25 && pct < 28) return "var(--orange)"
+  return "var(--red)"
 }
 
-function cogsBadge(pct: number | null): { label: string; bg: string; fg: string } | null {
+function cogsBadge(pct: number | null): { label: string; tone: "green" | "red" | "amber" } | null {
   if (pct === null) return null
-  if (pct >= 28 && pct <= 32) return { label: "OK", bg: "rgba(74,222,128,0.12)", fg: "#4ade80" }
-  if (pct > 32) return { label: "High", bg: "rgba(239,68,68,0.12)", fg: "#f87171" }
-  return { label: "Low", bg: "rgba(250,204,21,0.12)", fg: "#facc15" }
+  if (pct >= 28 && pct <= 32) return { label: "OK", tone: "green" }
+  if (pct > 32) return { label: "High", tone: "red" }
+  return { label: "Low", tone: "amber" }
 }
 
 export default function SupplierCostsPage() {
@@ -113,42 +114,53 @@ export default function SupplierCostsPage() {
       description="Per-product COGS from ShipGoods. Target COGS%: 28–32% of sale price. Review alerts and take action."
       stats={[
         { label: "Products tracked", value: summary ? String(summary.products_tracked) : "—" },
-        { label: "Avg COGS/unit", value: summary ? usd(summary.avg_cogs_unit) : "—" },
+        { label: "Avg COGS per unit (USD)", value: summary ? usd(summary.avg_cogs_unit) : "—" },
         { label: "COGS% in range", value: loading ? "—" : `${inRange}/${products.filter((p) => p.cogs_pct !== null).length}` },
-        { label: "COGS% alerts", value: loading ? "—" : String(cogsAlerts), color: cogsAlerts > 0 ? "#f87171" : undefined },
+        { label: "COGS% alerts", value: loading ? "—" : String(cogsAlerts), color: cogsAlerts > 0 ? "var(--red)" : undefined },
       ]}
+      actions={
+        <Button onClick={fetchData} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
+        </Button>
+      }
     >
       {/* Alerts banner */}
       {!loading && alertCount > 0 && (
-        <div className="glass rounded-xl p-3 mb-4" style={{ borderLeft: "3px solid #facc15" }}>
-          <div className="text-[11px] font-semibold mb-1" style={{ color: "var(--text)" }}>
-            {alertCount} action{alertCount !== 1 ? "s" : ""} needed
-          </div>
-          <div className="flex flex-wrap gap-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
+        <Panel title={`${alertCount} ${alertCount !== 1 ? "products need" : "product needs"} action`} sub="Click a label to show only those products." className="mb-4">
+          <div className="flex flex-wrap gap-2">
             {cogsAlerts > 0 && (
-              <span className="px-2 py-0.5 rounded-full cursor-pointer" style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}
-                onClick={() => setFilterAlerts("cogs")}>
-                {summary?.cogs_above_32 ?? 0} above 32% · {summary?.cogs_below_28 ?? 0} below 28% — review pricing
-              </span>
+              <button type="button" onClick={() => setFilterAlerts("cogs")}>
+                <Badge tone="red">
+                  {summary?.cogs_above_32 ?? 0} above 32% · {summary?.cogs_below_28 ?? 0} below 28%: review pricing
+                </Badge>
+              </button>
             )}
             {priceAlerts > 0 && (
-              <span className="px-2 py-0.5 rounded-full cursor-pointer" style={{ background: "rgba(250,204,21,0.12)", color: "#facc15" }}
-                onClick={() => setFilterAlerts("price")}>
-                {priceAlerts} price mismatch{priceAlerts !== 1 ? "es" : ""} — ask supplier
-              </span>
+              <button type="button" onClick={() => setFilterAlerts("price")}>
+                <Badge tone="amber">
+                  {priceAlerts} price mismatch{priceAlerts !== 1 ? "es" : ""}: ask the supplier
+                </Badge>
+              </button>
             )}
             {negotiateAlerts > 0 && (
-              <span className="px-2 py-0.5 rounded-full cursor-pointer" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}
-                onClick={() => setFilterAlerts("negotiate")}>
-                {negotiateAlerts} product{negotiateAlerts !== 1 ? "s" : ""} — request volume discount
-              </span>
+              <button type="button" onClick={() => setFilterAlerts("negotiate")}>
+                <Badge tone="blue">
+                  {negotiateAlerts} product{negotiateAlerts !== 1 ? "s" : ""}: ask for a volume discount
+                </Badge>
+              </button>
             )}
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <FilterBar
+        right={
+          <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
+            {filtered.length} products
+          </span>
+        }
+      >
         <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
         <PillSelect
           label="Show"
@@ -159,7 +171,7 @@ export default function SupplierCostsPage() {
             { value: "any", label: "With alerts" },
             { value: "cogs", label: "COGS% out of range" },
             { value: "price", label: "Price mismatches" },
-            { value: "negotiate", label: "Volume negotiate" },
+            { value: "negotiate", label: "Volume discount" },
           ]}
         />
         <PillSelect
@@ -173,43 +185,29 @@ export default function SupplierCostsPage() {
             { value: "variance", label: "Price variance" },
           ]}
         />
-        <span className="text-[10px] ml-auto" style={{ color: "var(--text-dim)" }}>
-          {filtered.length} products
-        </span>
-        <button onClick={fetchData} disabled={loading}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-medium"
-          style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>
-          {loading ? "Loading..." : "Refresh"}
-        </button>
-      </div>
+      </FilterBar>
 
-      {error && (
-        <div className="glass rounded-xl p-4 mb-4 text-[11px]" style={{ color: "#f87171" }}>{error}</div>
-      )}
+      {error && <Notice tone="error">Couldn&apos;t load supplier costs: {error}.</Notice>}
 
-      {loading && products.length === 0 && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Loading supplier cost data from ShipGoods...</div>
-        </div>
-      )}
+      {loading && products.length === 0 && <Loading>Loading supplier costs from ShipGoods…</Loading>}
 
       {/* Product cost table */}
       {!loading && filtered.length > 0 && (
-        <div className="glass rounded-xl overflow-hidden">
+        <Panel pad={false}>
           <table className="w-full text-[11px]">
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Product</th>
-                <th className="text-left px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Store</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Qty (30d)</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Sale Price</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Avg Cost</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>
+                <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}>Product</th>
+                <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}>Store</th>
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}>Qty (30d)</th>
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}>Sale price</th>
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}>Avg cost</th>
+                <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}>
                   COGS%
-                  <span className="block text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>target 28–32%</span>
+                  <span className="block text-[8px] font-normal normal-case tracking-normal" style={{ color: "var(--text-dim)" }}>target 28–32%</span>
                 </th>
-                <th className="text-center px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Status</th>
-                <th className="text-center px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Action</th>
+                <th className={`${TH} text-center`} style={{ color: "var(--text-dim)" }}>Status</th>
+                <th className={`${TH} text-center`} style={{ color: "var(--text-dim)" }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -221,9 +219,9 @@ export default function SupplierCostsPage() {
                 return (
                   <tr key={i}
                     className="cursor-pointer hover:bg-white/[0.02] transition-colors"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                    style={ROW_BORDER}
                     onClick={() => setExpanded(isExpanded ? null : key)}>
-                    <td className="px-4 py-2.5">
+                    <td className={TD}>
                       <div><ProductLink store={p.store} name={p.title} maxWidth={220} /></div>
                       {p.variant_title && <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.variant_title}</div>}
                       {isExpanded && (
@@ -239,67 +237,53 @@ export default function SupplierCostsPage() {
                             <span>Last order: {p.last_order_date}</span>
                           </div>
                           {p.cogs_alert && (
-                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(239,68,68,0.08)", color: "#f87171" }}>
-                              ⚠ {p.cogs_alert}
+                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(239,68,68,0.08)", color: "var(--red)" }}>
+                              {p.cogs_alert}
                             </div>
                           )}
                           {p.cogs_action && (
-                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(99,102,241,0.08)", color: "#818cf8" }}>
-                              → {p.cogs_action}
+                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(99,102,241,0.08)", color: "var(--accent)" }}>
+                              Next step: {p.cogs_action}
                             </div>
                           )}
                           {p.price_alert && (
-                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(250,204,21,0.08)", color: "#facc15" }}>
+                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(250,204,21,0.08)", color: "var(--orange)" }}>
                               {p.price_alert}
                             </div>
                           )}
                           {p.negotiation_alert && (
-                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(99,102,241,0.08)", color: "#818cf8" }}>
+                            <div className="mt-1 px-2 py-1 rounded" style={{ background: "rgba(99,102,241,0.08)", color: "var(--accent)" }}>
                               {p.negotiation_alert}
                             </div>
                           )}
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-[10px]" style={{ color: "var(--text-muted)" }}>{p.store}</td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{p.total_qty}</td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>
+                    <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{p.store}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{p.total_qty}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>
                       {p.sale_price > 0 ? usd(p.sale_price) : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{usd(p.avg_cost)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: cogsColor(p.cogs_pct) }}>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{usd(p.avg_cost)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: cogsColor(p.cogs_pct) }}>
                       {p.cogs_pct !== null ? `${p.cogs_pct.toFixed(1)}%` : "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`${TD} text-center`}>
                       {badge && (
-                        <span className="px-1.5 py-0.5 rounded text-[8px] font-medium" style={{ background: badge.bg, color: badge.fg }}>
-                          {badge.label}
-                        </span>
+                        <Badge tone={badge.tone}>{badge.label}</Badge>
                       )}
                       {!badge && <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className={`${TD} text-center`}>
                       <div className="flex items-center justify-center gap-1">
                         {p.cogs_alert && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-medium"
-                            style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}
-                            title={p.cogs_action || p.cogs_alert}>
-                            COGS
-                          </span>
+                          <Badge tone="red" title={p.cogs_action || p.cogs_alert}>COGS</Badge>
                         )}
                         {p.price_alert && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-medium"
-                            style={{ background: "rgba(250,204,21,0.12)", color: "#facc15" }}
-                            title={p.price_alert}>
-                            Price
-                          </span>
+                          <Badge tone="amber" title={p.price_alert}>Price</Badge>
                         )}
                         {p.negotiation_alert && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-medium"
-                            style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}
-                            title={p.negotiation_alert}>
-                            Volume
-                          </span>
+                          <Badge tone="blue" title={p.negotiation_alert}>Volume</Badge>
                         )}
                         {!hasAnyAlert && <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>—</span>}
                       </div>
@@ -309,14 +293,17 @@ export default function SupplierCostsPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </Panel>
+      )}
+
+      {!loading && products.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No products match these filters">Set Show to &quot;All products&quot; or clear the store filter.</EmptyState>
       )}
 
       {!loading && products.length === 0 && !error && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>No supplier cost data</div>
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Check that SHIPGOODS_TOKEN is set in Vercel environment variables.</div>
-        </div>
+        <EmptyState title="No supplier cost data from ShipGoods">
+          Check that SHIPGOODS_TOKEN is set in the Vercel environment variables.
+        </EmptyState>
       )}
     </PageShell>
   )

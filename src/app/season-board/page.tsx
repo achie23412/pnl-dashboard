@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageShell } from "@/components/PageShell"
 import { ProductLink } from "@/components/ProductLink"
+import { Panel, Badge, Notice, Loading } from "@/components/ui"
 
 interface Product {
   product_name: string
@@ -60,14 +61,14 @@ function getSeasonPhases(today: Date): SeasonPhase[] {
       action: "Max budget on winners. No new tests. Monitor hourly.",
     },
     {
-      name: "Q4 Peak (Dec)",
+      name: "Q4 peak (Dec)",
       dates: `${y}-12-01 → ${y}-12-20`,
       status: m === 11 && d <= 20 ? "active" : m < 11 ? "upcoming" : "past",
       description: "Gift-buying season. Fashion demand peaks mid-December.",
       action: "Scale winners aggressively. Push gift-angle creatives.",
     },
     {
-      name: "Shipping Cutoff",
+      name: "Shipping cutoff",
       dates: `${y}-12-15 → ${y}-12-20`,
       status: m === 11 && d >= 15 && d <= 20 ? "active" : m === 11 && d < 15 ? "upcoming" : "past",
       description: "Last reliable delivery dates. IE/UK cutoff earlier than US.",
@@ -81,7 +82,7 @@ function getSeasonPhases(today: Date): SeasonPhase[] {
       action: "Ramp back up. CPMs drop 30–50%. Test new products. New Year angle.",
     },
     {
-      name: "January Sale",
+      name: "January sale",
       dates: `${y + 1}-01-01 → ${y + 1}-01-31`,
       status: "upcoming",
       description: "Clearance buyers. Good for moving slow inventory.",
@@ -95,11 +96,11 @@ function getSeasonPhases(today: Date): SeasonPhase[] {
 function getSeasonLabel(today: Date): string {
   const m = today.getMonth()
   const d = today.getDate()
-  if (m === 10 && d >= 25) return "BFCM Week"
+  if (m === 10 && d >= 25) return "BFCM week"
   if (m === 10) return "Pre-BFCM"
-  if (m === 11 && d <= 20) return "Q4 Peak"
-  if (m === 11 && d <= 25) return "Shipping Cutoff"
-  if (m === 11) return "Q5 Ramp"
+  if (m === 11 && d <= 20) return "Q4 peak"
+  if (m === 11 && d <= 25) return "Shipping cutoff"
+  if (m === 11) return "Q5 ramp"
   if (m === 0 && d <= 15) return "Q5"
   return `Month ${m + 1}`
 }
@@ -174,16 +175,16 @@ export default function SeasonBoardPage() {
       const totalProducts = storeProducts.filter(p => p.units_sold > 0).length
 
       let budgetAdvice = "Hold"
-      let budgetColor = "#facc15"
+      let budgetTone: "amber" | "green" | "red" = "amber"
       if (s.roas && s.be_roas && s.roas > s.be_roas * 1.3) {
-        budgetAdvice = "Scale ↑"
-        budgetColor = "#4ade80"
+        budgetAdvice = "Scale"
+        budgetTone = "green"
       } else if (s.roas && s.be_roas && s.roas < s.be_roas) {
-        budgetAdvice = "Cut ↓"
-        budgetColor = "#f87171"
+        budgetAdvice = "Cut"
+        budgetTone = "red"
       }
 
-      return { ...s, winners, losers, totalProducts, budgetAdvice, budgetColor }
+      return { ...s, winners, losers, totalProducts, budgetAdvice, budgetTone }
     })
   }, [activeStores, products])
 
@@ -191,7 +192,7 @@ export default function SeasonBoardPage() {
     <PageShell
       title="Season Board"
       breadcrumb="Front End → Season Board"
-      description={`Current phase: ${seasonLabel}. Budget and product decisions based on seasonal timing + store performance.`}
+      description={`Current phase: ${seasonLabel}. Budget and product decisions based on seasonal timing and store performance.`}
       stats={[
         { label: "Active stores", value: String(activeStores.length) },
         { label: "Overall ROAS", value: totalSpend > 0 ? `${(totalRevenue / totalSpend).toFixed(2)}x` : "—" },
@@ -199,21 +200,14 @@ export default function SeasonBoardPage() {
         { label: "Phase", value: seasonLabel },
       ]}
     >
-      {loading && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Loading store data...</div>
-        </div>
-      )}
+      {loading && <Loading>Loading store data…</Loading>}
 
-      {error && (
-        <div className="glass rounded-xl p-4 mb-4 text-[11px]" style={{ color: "#f87171" }}>{error}</div>
-      )}
+      {error && <Notice tone="error">Couldn&apos;t load store data: {error}.</Notice>}
 
       {!loading && (
         <>
           {/* Season Timeline */}
-          <div className="glass rounded-xl p-4 mb-4">
-            <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--text)" }}>Season Timeline</div>
+          <Panel title="Season timeline" className="mb-4">
             <div className="space-y-2">
               {phases.map((p, i) => (
                 <div
@@ -221,33 +215,32 @@ export default function SeasonBoardPage() {
                   className="flex items-start gap-3 p-2.5 rounded-lg transition-colors"
                   style={{
                     background: p.status === "active" ? "rgba(74,222,128,0.06)" : "transparent",
-                    borderLeft: p.status === "active" ? "2px solid #4ade80" : "2px solid rgba(255,255,255,0.06)",
+                    borderLeft: p.status === "active" ? "2px solid var(--green)" : "2px solid rgba(255,255,255,0.06)",
                   }}
                 >
                   <div className="flex-shrink-0 mt-0.5">
-                    {p.status === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
+                    {p.status === "active" && <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--green)" }} />}
                     {p.status === "upcoming" && <span className="inline-block w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.15)" }} />}
                     {p.status === "past" && <span className="inline-block w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.06)" }} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium" style={{ color: p.status === "active" ? "#4ade80" : p.status === "upcoming" ? "var(--text)" : "var(--text-dim)" }}>{p.name}</span>
+                      <span className="text-[11px] font-medium" style={{ color: p.status === "active" ? "var(--green)" : p.status === "upcoming" ? "var(--text)" : "var(--text-dim)" }}>{p.name}</span>
                       <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.dates}</span>
                       {p.status === "active" && (
-                        <span className="text-[8px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "rgba(74,222,128,0.15)", color: "#4ade80" }}>NOW</span>
+                        <Badge tone="green">Now</Badge>
                       )}
                     </div>
                     <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>{p.description}</div>
-                    <div className="text-[10px] mt-1 font-medium" style={{ color: p.status === "active" ? "#4ade80" : "var(--text-muted)" }}>→ {p.action}</div>
+                    <div className="text-[10px] mt-1 font-medium" style={{ color: p.status === "active" ? "var(--green)" : "var(--text-muted)" }}>{p.action}</div>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Panel>
 
           {/* Store Budget Board */}
-          <div className="glass rounded-xl p-4 mb-4">
-            <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--text)" }}>Store Budget Board</div>
+          <Panel title="Store budget board" className="mb-4">
             {storeStats.length === 0 ? (
               <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>No active stores with spend.</div>
             ) : (
@@ -261,35 +254,31 @@ export default function SeasonBoardPage() {
                         <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{STORE_MARKET[s.store]}</span>
                       </div>
                       <div className="flex gap-4 mt-1 text-[10px]" style={{ color: "var(--text-dim)" }}>
-                        <span>Rev: {eur(s.revenue)}</span>
+                        <span>Revenue: {eur(s.revenue)}</span>
                         <span>Spend: {eur(s.ad_spend)}</span>
                         <span>ROAS: {s.roas ? `${s.roas.toFixed(2)}x` : "—"}</span>
-                        <span>BE: {s.be_roas ? `${s.be_roas.toFixed(2)}x` : "—"}</span>
+                        <span>Break-even: {s.be_roas ? `${s.be_roas.toFixed(2)}x` : "—"}</span>
                         <span>{s.winners} winners / {s.losers} losers / {s.totalProducts} selling</span>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <span className="text-[11px] font-semibold" style={{ color: s.budgetColor }}>{s.budgetAdvice}</span>
+                      <Badge tone={s.budgetTone}>{s.budgetAdvice}</Badge>
                       <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>
-                        {s.budgetAdvice === "Scale ↑" ? "ROAS above 1.3× BE" : s.budgetAdvice === "Cut ↓" ? "ROAS below BE" : "Within range"}
+                        {s.budgetAdvice === "Scale" ? "ROAS above 1.3× break-even" : s.budgetAdvice === "Cut" ? "ROAS below break-even" : "Within range"}
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
 
           {/* Product Momentum */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Rising */}
-            <div className="glass rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Rising Products</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}>Scale candidates</span>
-              </div>
+            <Panel title="Rising products" right={<Badge tone="green">Scale candidates</Badge>}>
               {risingProducts.length === 0 ? (
-                <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No products with ROAS &gt;2.5 and 3+ sales yet.</div>
+                <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No products with ROAS above 2.5, 3+ sales and €20+ spend yet.</div>
               ) : (
                 <div className="space-y-2">
                   {risingProducts.map((p, i) => (
@@ -299,23 +288,19 @@ export default function SeasonBoardPage() {
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] font-mono font-medium" style={{ color: "#4ade80" }}>{(p.roas ?? 0).toFixed(2)}x</div>
+                        <div className="text-[11px] tabular-nums font-medium" style={{ color: "var(--green)" }}>{(p.roas ?? 0).toFixed(2)}x</div>
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{eur(p.ad_spend)} spent</div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Panel>
 
             {/* Declining */}
-            <div className="glass rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Declining Products</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.12)", color: "#f87171" }}>Phase-out candidates</span>
-              </div>
+            <Panel title="Declining products" right={<Badge tone="red">Phase-out candidates</Badge>}>
               {decliningProducts.length === 0 ? (
-                <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No products below break-even with significant spend.</div>
+                <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No products below break-even with €20+ spend.</div>
               ) : (
                 <div className="space-y-2">
                   {decliningProducts.map((p, i) => (
@@ -325,39 +310,38 @@ export default function SeasonBoardPage() {
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] font-mono font-medium" style={{ color: "#f87171" }}>{(p.roas ?? 0).toFixed(2)}x</div>
-                        <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>BE: {p.be_roas?.toFixed(2) || "—"}x</div>
+                        <div className="text-[11px] tabular-nums font-medium" style={{ color: "var(--red)" }}>{(p.roas ?? 0).toFixed(2)}x</div>
+                        <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>Break-even: {p.be_roas?.toFixed(2) || "—"}x</div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Panel>
           </div>
 
           {/* Top Sellers */}
-          <div className="glass rounded-xl p-4">
-            <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--text)" }}>Top Sellers This Period</div>
+          <Panel title="Top sellers this period">
             {topProducts.length === 0 ? (
-              <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No sales data available.</div>
+              <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No sales in this period yet.</div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {topProducts.map((p, i) => (
                   <div key={i} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
-                    <span className="text-[10px] font-mono w-5 text-right" style={{ color: "var(--text-dim)" }}>#{i + 1}</span>
+                    <span className="text-[10px] tabular-nums w-5 text-right" style={{ color: "var(--text-dim)" }}>#{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] min-w-0"><ProductLink store={p.store} name={p.product_name} className="font-medium" /></div>
                       <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store}</div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <div className="text-[10px] font-mono" style={{ color: "var(--text)" }}>{eur(p.sales_revenue)}</div>
+                      <div className="text-[10px] tabular-nums" style={{ color: "var(--text)" }}>{eur(p.sales_revenue)}</div>
                       <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.units_sold} sold · {(p.roas ?? 0).toFixed(1)}x</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
     </PageShell>

@@ -1,5 +1,8 @@
 "use client"
 import { useState } from "react"
+import { PageShell } from "@/components/PageShell"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { Panel, Badge, Button, EmptyState } from "@/components/ui"
 
 type Priority = "high" | "medium" | "low"
 type Category = "data" | "automation" | "dashboard" | "tracking"
@@ -40,7 +43,7 @@ const SUGGESTIONS: Suggestion[] = [
   },
   {
     id: "add-lume-blinky-sheet",
-    title: "Add Lume & Blinky to the Profit Sheet",
+    title: "Add Lume and Blinky to the profit sheet",
     description:
       "The Profit Sheet Setup tab has 3 stores (Susan & Allen, Carter & Collins, Walsh & Farley). The two Meta stores — LUMEGLASSES and Blinky — are tracked in Supabase but not in the sheet.",
     priority: "medium",
@@ -84,18 +87,20 @@ const SUGGESTIONS: Suggestion[] = [
   },
 ]
 
-const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string }> = {
-  high: { label: "High", color: "#ef4444", bg: "rgba(239,68,68,0.15)" },
-  medium: { label: "Medium", color: "#f59e0b", bg: "rgba(245,158,11,0.15)" },
-  low: { label: "Low", color: "#6366f1", bg: "rgba(99,102,241,0.15)" },
+const PRIORITY_CONFIG: Record<Priority, { label: string; tone: "red" | "amber" | "blue" }> = {
+  high: { label: "High", tone: "red" },
+  medium: { label: "Medium", tone: "amber" },
+  low: { label: "Low", tone: "blue" },
 }
 
-const CATEGORY_CONFIG: Record<Category, { label: string; color: string }> = {
-  data: { label: "Data", color: "#10b981" },
-  automation: { label: "Automation", color: "#8b5cf6" },
-  dashboard: { label: "Dashboard", color: "#3b82f6" },
-  tracking: { label: "Tracking", color: "#f59e0b" },
+const CATEGORY_LABEL: Record<Category, string> = {
+  data: "Data",
+  automation: "Automation",
+  dashboard: "Dashboard",
+  tracking: "Tracking",
 }
+
+const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
 
 export default function AdvisorPage() {
   const [filter, setFilter] = useState<Priority | "all">("all")
@@ -109,81 +114,43 @@ export default function AdvisorPage() {
   const lowCount = SUGGESTIONS.filter((s) => !dismissed.has(s.id) && s.priority === "low").length
 
   return (
-    <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>
-        System → Advisor
-      </div>
-
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>
-          Advisor
-        </h1>
-        <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-          {visible.length} suggestion{visible.length !== 1 ? "s" : ""}
-        </div>
-      </div>
-
-      <p className="text-[12px] mb-5 max-w-3xl" style={{ color: "var(--text-muted)" }}>
-        Improvements and changes suggested by Claude. Each item is something that would make the
-        dashboard, data pipeline, or automation more accurate or complete.
-      </p>
-
-      {/* Priority filter pills */}
-      <div className="flex gap-2 mb-5">
-        {(["all", "high", "medium", "low"] as const).map((p) => {
-          const active = filter === p
-          const count = p === "all" ? highCount + medCount + lowCount : p === "high" ? highCount : p === "medium" ? medCount : lowCount
-          return (
-            <button
-              key={p}
-              onClick={() => setFilter(p)}
-              className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
-              style={{
-                background: active ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)",
-                border: `1px solid ${active ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.06)"}`,
-                color: active ? "var(--text)" : "var(--text-muted)",
-              }}
-            >
-              {p === "all" ? "All" : PRIORITY_CONFIG[p].label} ({count})
-            </button>
-          )
-        })}
-      </div>
+    <PageShell
+      title="Advisor"
+      breadcrumb="Advisor"
+      description="Improvements suggested by Claude. Each item would make the dashboard, data pipeline or automation more accurate or complete."
+      stats={[
+        { label: "High priority", value: String(highCount), color: highCount ? "var(--red)" : undefined },
+        { label: "Medium priority", value: String(medCount) },
+        { label: "Low priority", value: String(lowCount) },
+      ]}
+    >
+      <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{visible.length} suggestion{visible.length !== 1 ? "s" : ""}</span>}>
+        <PillSelect
+          label="Priority"
+          value={filter}
+          onChange={(v) => setFilter(v as Priority | "all")}
+          options={[
+            { value: "all", label: "all", count: highCount + medCount + lowCount },
+            { value: "high", label: "High", count: highCount },
+            { value: "medium", label: "Medium", count: medCount },
+            { value: "low", label: "Low", count: lowCount },
+          ]}
+        />
+      </FilterBar>
 
       {/* Suggestion cards */}
       <div className="space-y-3">
         {visible.map((s) => {
           const prio = PRIORITY_CONFIG[s.priority]
-          const cat = CATEGORY_CONFIG[s.category]
           return (
-            <div
-              key={s.id}
-              className="rounded-xl p-4"
-              style={{
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
+            <Panel key={s.id}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase"
-                      style={{ background: prio.bg, color: prio.color }}
-                    >
-                      {prio.label}
-                    </span>
-                    <span
-                      className="px-2 py-0.5 rounded-full text-[9px] font-medium"
-                      style={{
-                        background: "rgba(255,255,255,0.05)",
-                        color: cat.color,
-                      }}
-                    >
-                      {cat.label}
-                    </span>
+                    <Badge tone={prio.tone}>{prio.label}</Badge>
+                    <Badge>{CATEGORY_LABEL[s.category]}</Badge>
                     <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
-                      {s.addedDate}
+                      Added {fmtDay(s.addedDate)}
                     </span>
                   </div>
                   <h3 className="text-[13px] font-semibold mb-1" style={{ color: "var(--text)" }}>
@@ -201,8 +168,8 @@ export default function AdvisorPage() {
                         color: "var(--text-muted)",
                       }}
                     >
-                      <span className="font-semibold" style={{ color: "#818cf8" }}>
-                        Action:
+                      <span className="font-semibold" style={{ color: "var(--text)" }}>
+                        What to do:
                       </span>{" "}
                       {s.action}
                     </div>
@@ -211,37 +178,26 @@ export default function AdvisorPage() {
                     <span className="font-semibold">Impact:</span> {s.impact}
                   </div>
                 </div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setDismissed((prev) => { const next = new Set(Array.from(prev)); next.add(s.id); return next })}
-                  className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110"
-                  style={{
-                    background: "rgba(255,255,255,0.05)",
-                    color: "var(--text-dim)",
-                  }}
                   title="Dismiss"
                 >
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                  Dismiss
+                </Button>
               </div>
-            </div>
+            </Panel>
           )
         })}
         {visible.length === 0 && (
-          <div className="text-center py-16">
-            <div className="text-[13px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>
-              {dismissed.size > 0 ? "All suggestions dismissed" : "No suggestions"}
-            </div>
-            <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
-              {dismissed.size > 0
-                ? "New suggestions will appear here when Claude spots improvements."
-                : "Nothing to improve right now."}
-            </div>
-          </div>
+          <EmptyState title={dismissed.size > 0 ? "All suggestions dismissed" : "No suggestions"}>
+            {dismissed.size > 0
+              ? "New suggestions will show here when Claude spots improvements."
+              : "Nothing to improve right now."}
+          </EmptyState>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }

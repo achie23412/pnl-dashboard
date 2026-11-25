@@ -1,6 +1,8 @@
 "use client"
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { PillSelect } from "@/components/PillSelect"
+import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { PageShell } from "@/components/PageShell"
+import { Badge, Button, Loading, EmptyState } from "@/components/ui"
 
 interface Keyword {
   k: string
@@ -12,16 +14,16 @@ interface Keyword {
 }
 
 const CATEGORIES = [
-  { key: "", label: "All", icon: "🔥" },
-  { key: "dresses", label: "Dresses", icon: "👗" },
-  { key: "shoes", label: "Shoes", icon: "👟" },
-  { key: "outerwear", label: "Outerwear", icon: "🧥" },
-  { key: "tops", label: "Tops", icon: "👕" },
-  { key: "bottoms", label: "Bottoms", icon: "👖" },
-  { key: "accessories", label: "Accessories", icon: "👜" },
-  { key: "underwear", label: "Underwear", icon: "🩱" },
-  { key: "sportswear", label: "Sportswear", icon: "🏃" },
-  { key: "other", label: "Other", icon: "📦" },
+  { key: "", label: "all" },
+  { key: "dresses", label: "Dresses" },
+  { key: "shoes", label: "Shoes" },
+  { key: "outerwear", label: "Outerwear" },
+  { key: "tops", label: "Tops" },
+  { key: "bottoms", label: "Bottoms" },
+  { key: "accessories", label: "Accessories" },
+  { key: "underwear", label: "Underwear" },
+  { key: "sportswear", label: "Sportswear" },
+  { key: "other", label: "Other" },
 ]
 
 const MODIFIERS = [
@@ -37,9 +39,9 @@ const MODIFIERS = [
 
 const GEOS = [
   { code: "IE", label: "Ireland", tld: "google.ie" },
-  { code: "NL", label: "Nederland", tld: "google.nl" },
-  { code: "DE", label: "Duitsland", tld: "google.de" },
-  { code: "DK", label: "Denemarken", tld: "google.dk" },
+  { code: "NL", label: "Netherlands", tld: "google.nl" },
+  { code: "DE", label: "Germany", tld: "google.de" },
+  { code: "DK", label: "Denmark", tld: "google.dk" },
   { code: "GB", label: "UK", tld: "google.co.uk" },
   { code: "US", label: "US", tld: "google.com" },
 ]
@@ -181,7 +183,7 @@ export default function KeywordMakerPage() {
   const trendInfo = (tu: number, ta: number) => {
     const best = Math.abs(tu) > Math.abs(ta) ? tu : ta
     const pct = Math.round(best)
-    if (best > 50) return { icon: "🔥", color: "var(--green)", label: `+${pct}%`, hot: true }
+    if (best > 50) return { icon: "↑", color: "var(--green)", label: `+${pct}%`, hot: true }
     if (best > 10) return { icon: "↑", color: "var(--green)", label: `+${pct}%`, hot: false }
     if (best < -10) return { icon: "↓", color: "var(--red)", label: `${pct}%`, hot: false }
     return { icon: "→", color: "var(--text-muted)", label: `${pct > 0 ? "+" : ""}${pct}%`, hot: false }
@@ -190,154 +192,57 @@ export default function KeywordMakerPage() {
   const allPageSelected = pageData.length > 0 && pageData.every((d) => selected.has(d.k))
 
   return (
-    <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold">Keyword Maker</h1>
-        <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-          Find Google Shopping competitor stores — search product queries across your target markets
-        </p>
-      </div>
-
-      {/* Search */}
-      <div className="mb-4">
+    <PageShell
+      title="Keyword Maker"
+      breadcrumb="Front End → Keyword Maker"
+      description="Find Google Shopping competitor stores: search product queries in your target markets and open them in Google Shopping or the Ads Library."
+      stats={loading ? undefined : [
+        { label: "Product queries", value: filtered.length.toLocaleString("en-GB"), sub: modifier !== "none" ? `Modifier: ${MODIFIERS.find((m) => m.key === modifier)?.label}` : undefined },
+        { label: "Selected", value: String(selected.size), sub: "Bulk open is capped at 10" },
+      ]}
+    >
+      <FilterBar
+        right={!loading && (
+          <>
+            <Button size="sm" onClick={selectAllOnPage}>
+              {allPageSelected ? "Deselect page" : "Select page"}
+            </Button>
+            {selected.size > 0 && (
+              <>
+                <Button size="sm" variant="primary" onClick={() => bulkOpen("shopping")}>Open Shopping</Button>
+                <Button size="sm" onClick={() => bulkOpen("ads")}>Open Ads Library</Button>
+                <Button size="sm" onClick={() => bulkOpen("both")}>Open both</Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
+                {bulkOpened && <Badge tone="green">Opened (max 10)</Badge>}
+              </>
+            )}
+          </>
+        )}
+      >
         <input
-          className="w-full px-4 py-2.5 rounded-lg text-sm outline-none"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
+          className="min-w-[220px] px-2.5 py-1 rounded-lg text-[10px] outline-none"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
           type="text"
-          placeholder="Filter keywords... e.g. 'wedding', 'running shoes'"
+          placeholder="Filter keywords, e.g. wedding, running shoes"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-      </div>
-
-      {/* Category pills */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => setCategory(c.key)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{
-              border: "1px solid " + (category === c.key ? "#4E6AA7" : "var(--border)"),
-              background: category === c.key ? "#4E6AA7" : "var(--bg-card)",
-              color: category === c.key ? "#fff" : "var(--text)",
-            }}
-          >
-            {c.icon} {c.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Controls row */}
-      <div className="flex flex-wrap gap-2 items-center mb-3">
-        <div className="flex gap-1 items-center">
-          <span className="text-xs font-medium mr-1" style={{ color: "var(--text-muted)" }}>Market:</span>
-          {GEOS.map((g) => (
-            <button
-              key={g.code}
-              onClick={() => setActiveGeo(g.code)}
-              className="px-2.5 py-1 rounded-md text-xs font-semibold"
-              style={{
-                border: "1px solid " + (activeGeo === g.code ? "#4E6AA7" : "var(--border)"),
-                background: activeGeo === g.code ? "#4E6AA7" : "var(--bg-card)",
-                color: activeGeo === g.code ? "#fff" : "var(--text)",
-              }}
-            >
-              {g.code}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-1 items-center">
-          <span className="text-xs font-medium mr-1" style={{ color: "var(--text-muted)" }}>Sort:</span>
-          {([["volume", "Volume"], ["trend", "Trending"], ["name", "A–Z"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setSortKey(key)}
-              className="px-2.5 py-1 rounded-md text-xs font-semibold"
-              style={{
-                border: "1px solid " + (sortKey === key ? "#4E6AA7" : "var(--border)"),
-                background: sortKey === key ? "#4E6AA7" : "var(--bg-card)",
-                color: sortKey === key ? "#fff" : "var(--text)",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="ml-auto">
-          <PillSelect label="Modifier" value={modifier} onChange={setModifier} options={MODIFIERS.map((m) => ({ value: m.key, label: m.label }))} align="right" />
-        </div>
-      </div>
-
-      {/* Stats + bulk actions */}
-      {!loading && (
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-            <strong style={{ color: "var(--text)" }}>{filtered.length}</strong> product queries
-            {modifier !== "none" && (
-              <span style={{ color: "var(--orange)" }}> · modifier: {MODIFIERS.find(m => m.key === modifier)?.label}</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={selectAllOnPage}
-              className="px-3 py-1 rounded-md text-xs font-medium"
-              style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
-            >
-              {allPageSelected ? "Deselect page" : "Select page"}
-            </button>
-            {selected.size > 0 && (
-              <>
-                <span className="text-xs font-semibold" style={{ color: "#4E6AA7" }}>
-                  {selected.size} selected
-                </span>
-                <button
-                  onClick={() => bulkOpen("shopping")}
-                  className="px-3 py-1 rounded-md text-xs font-semibold"
-                  style={{ background: "#34A853", color: "#fff" }}
-                >
-                  Open Shopping
-                </button>
-                <button
-                  onClick={() => bulkOpen("ads")}
-                  className="px-3 py-1 rounded-md text-xs font-semibold"
-                  style={{ background: "#D47B6A", color: "#fff" }}
-                >
-                  Open Ads
-                </button>
-                <button
-                  onClick={() => bulkOpen("both")}
-                  className="px-3 py-1 rounded-md text-xs font-semibold"
-                  style={{ background: "#4E6AA7", color: "#fff" }}
-                >
-                  Open Both
-                </button>
-                <button
-                  onClick={() => setSelected(new Set())}
-                  className="px-2 py-1 rounded-md text-xs"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Clear
-                </button>
-                {bulkOpened && (
-                  <span className="text-xs font-semibold" style={{ color: "var(--green)" }}>
-                    Opened! (max 10)
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+        <PillSelect label="Category" value={category} onChange={setCategory} options={CATEGORIES.map((c) => ({ value: c.key, label: c.label }))} />
+        <PillSelect label="Market" value={activeGeo} onChange={setActiveGeo} options={GEOS.map((g) => ({ value: g.code, label: g.label }))} />
+        <PillSelect
+          label="Sort"
+          value={sortKey}
+          onChange={(v) => setSortKey(v as SortKey)}
+          options={[{ value: "volume", label: "Volume" }, { value: "trend", label: "Trending" }, { value: "name", label: "A–Z" }]}
+        />
+        <PillSelect label="Modifier" value={modifier} onChange={setModifier} options={MODIFIERS.map((m) => ({ value: m.key, label: m.label }))} />
+      </FilterBar>
 
       {/* Keyword cards grid */}
       {loading ? (
-        <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>Loading keywords...</div>
+        <Loading>Loading keywords…</Loading>
       ) : pageData.length === 0 ? (
-        <div className="text-center py-20" style={{ color: "var(--text-muted)" }}>No keywords match your filters</div>
+        <EmptyState title="No keywords match these filters">Clear the search or pick another category.</EmptyState>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {pageData.map((d) => {
@@ -351,29 +256,27 @@ export default function KeywordMakerPage() {
             return (
               <div
                 key={d.k}
-                className="rounded-xl p-4 border transition-all cursor-pointer"
+                className="glass rounded-xl p-4 transition-all cursor-pointer"
                 onClick={() => toggleSelect(d.k)}
                 style={{
-                  background: "var(--bg-card)",
-                  borderColor: isSelected ? "#4E6AA7" : "var(--border)",
-                  boxShadow: isSelected ? "0 0 0 1px #4E6AA7" : "none",
+                  boxShadow: isSelected ? "0 0 0 1px var(--accent)" : "none",
                 }}
               >
                 {/* Header: keyword + badges */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-xs"
+                      className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center text-[9px]"
                       style={{
-                        borderColor: isSelected ? "#4E6AA7" : "var(--border)",
-                        background: isSelected ? "#4E6AA7" : "transparent",
+                        border: `1px solid ${isSelected ? "var(--accent)" : "rgba(255,255,255,0.15)"}`,
+                        background: isSelected ? "var(--accent)" : "transparent",
                         color: "#fff",
                       }}
                     >
                       {isSelected && "✓"}
                     </div>
                     <span
-                      className="text-sm font-semibold leading-snug truncate"
+                      className="text-[12px] font-semibold leading-snug truncate"
                       style={{ color: "var(--text)" }}
                       title={displayText}
                     >
@@ -381,15 +284,8 @@ export default function KeywordMakerPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {trend.hot && (
-                      <span
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                        style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }}
-                      >
-                        HOT
-                      </span>
-                    )}
-                    <span className="text-xs font-semibold" style={{ color: trend.color }}>
+                    {trend.hot && <Badge tone="green">Hot</Badge>}
+                    <span className="text-[10px] font-semibold tabular-nums" style={{ color: trend.color }}>
                       {trend.icon} {trend.label}
                     </span>
                   </div>
@@ -399,25 +295,23 @@ export default function KeywordMakerPage() {
                 <div className="mb-2">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-3">
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        UK <strong style={{ color: "var(--text)" }}>{fmtVol(d.uk)}</strong>
+                      <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        UK <strong className="tabular-nums" style={{ color: "var(--text)" }}>{fmtVol(d.uk)}</strong>
                       </span>
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        US <strong style={{ color: "var(--text)" }}>{fmtVol(d.us)}</strong>
+                      <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                        US <strong className="tabular-nums" style={{ color: "var(--text)" }}>{fmtVol(d.us)}</strong>
                       </span>
                     </div>
-                    <span className="text-xs font-bold" style={{ color: "var(--text)" }}>
+                    <span className="text-[10px] font-bold tabular-nums" style={{ color: "var(--text)" }}>
                       {fmtVol(totalVol)}
                     </span>
                   </div>
-                  <div className="w-full h-1.5 rounded-full" style={{ background: "var(--border)" }}>
+                  <div className="w-full h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)" }}>
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${volPct}%`,
-                        background: trend.hot
-                          ? "linear-gradient(90deg, #34d399, #4E6AA7)"
-                          : "#4E6AA7",
+                        background: trend.hot ? "var(--green)" : "var(--accent)",
                       }}
                     />
                   </div>
@@ -425,12 +319,7 @@ export default function KeywordMakerPage() {
 
                 {/* Category tag */}
                 <div className="mb-3">
-                  <span
-                    className="text-[10px] px-1.5 py-0.5 rounded capitalize"
-                    style={{ background: "rgba(78,106,167,0.15)", color: "var(--text-muted)" }}
-                  >
-                    {d.c}
-                  </span>
+                  <Badge>{d.c}</Badge>
                 </div>
 
                 {/* Action buttons */}
@@ -439,8 +328,8 @@ export default function KeywordMakerPage() {
                     href={getShoppingUrl(d.k, activeGeo, modifier)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 text-center py-1.5 rounded-md text-xs font-semibold transition-opacity hover:opacity-90"
-                    style={{ background: "#34A853", color: "#fff", textDecoration: "none" }}
+                    className="flex-1 text-center py-1 rounded-lg text-[10px] font-medium transition-opacity hover:opacity-90"
+                    style={{ background: "var(--accent)", color: "#fff", textDecoration: "none" }}
                   >
                     Shopping
                   </a>
@@ -448,22 +337,14 @@ export default function KeywordMakerPage() {
                     href={getAdsUrl(d.k, activeGeo, modifier)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 text-center py-1.5 rounded-md text-xs font-semibold transition-opacity hover:opacity-90"
-                    style={{ background: "#D47B6A", color: "#fff", textDecoration: "none" }}
+                    className="flex-1 text-center py-1 rounded-lg text-[10px] font-medium transition-opacity hover:opacity-90"
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)", textDecoration: "none" }}
                   >
                     Ads Library
                   </a>
-                  <button
-                    onClick={() => copyKeyword(d.k)}
-                    className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                    style={{
-                      border: "1px solid var(--border)",
-                      background: isCopied ? "var(--green)" : "var(--bg-card)",
-                      color: isCopied ? "#fff" : "var(--text-muted)",
-                    }}
-                  >
-                    {isCopied ? "✓" : "Copy"}
-                  </button>
+                  <Button size="sm" variant={isCopied ? "ghost" : "secondary"} onClick={() => copyKeyword(d.k)}>
+                    {isCopied ? "Copied" : "Copy"}
+                  </Button>
                 </div>
               </div>
             )
@@ -473,28 +354,24 @@ export default function KeywordMakerPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-3 py-6">
-          <button
+        <div className="flex justify-center items-center gap-2 py-4">
+          <Button
             onClick={() => { setPage((p) => p - 1); window.scrollTo(0, 0) }}
             disabled={page === 0}
-            className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-40"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
           >
-            Prev
-          </button>
-          <span className="text-sm" style={{ color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
+            Previous
+          </Button>
+          <span className="text-[11px] tabular-nums" style={{ color: "var(--text-muted)" }}>
             {page + 1} / {totalPages}
           </span>
-          <button
+          <Button
             onClick={() => { setPage((p) => p + 1); window.scrollTo(0, 0) }}
             disabled={page >= totalPages - 1}
-            className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-40"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
           >
             Next
-          </button>
+          </Button>
         </div>
       )}
-    </main>
+    </PageShell>
   )
 }

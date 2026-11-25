@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
+import { FilterBar } from "@/components/PillSelect"
+import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY } from "@/lib/currency"
 
 const CURRENCY_SIGN: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" }
@@ -38,18 +40,20 @@ interface Summary {
   high_priority: number
 }
 
-const PRIORITY_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  high: { bg: "rgba(239,68,68,0.12)", text: "#f87171", label: "High" },
-  normal: { bg: "rgba(234,179,8,0.12)", text: "#facc15", label: "Normal" },
-  low: { bg: "rgba(96,165,250,0.12)", text: "#60a5fa", label: "Low" },
+type Tone = "red" | "amber" | "blue" | "grey"
+
+const PRIORITY_BADGE: Record<string, { tone: Tone; label: string }> = {
+  high: { tone: "red", label: "High" },
+  normal: { tone: "amber", label: "Normal" },
+  low: { tone: "blue", label: "Low" },
 }
 
-const RULE_BADGE: Record<string, { bg: string; text: string }> = {
-  thin_margin: { bg: "rgba(239,68,68,0.10)", text: "#f87171" },
-  roas_downtrend: { bg: "rgba(251,146,60,0.10)", text: "#fb923c" },
-  overpriced: { bg: "rgba(96,165,250,0.10)", text: "#60a5fa" },
-  below_be: { bg: "rgba(234,179,8,0.10)", text: "#facc15" },
-  high_cogs: { bg: "rgba(168,85,247,0.10)", text: "#a855f7" },
+const RULE_TONE: Record<string, Tone> = {
+  thin_margin: "red",
+  roas_downtrend: "amber",
+  overpriced: "blue",
+  below_be: "red",
+  high_cogs: "amber",
 }
 
 export default function PriceSuggestionsPage() {
@@ -123,9 +127,9 @@ export default function PriceSuggestionsPage() {
   const money = (n: number, store: string) => `${CURRENCY_SIGN[STORE_CURRENCY[store] || "EUR"] || "€"}${n.toFixed(2)}`
 
   const cogsColor = (pct: number) => {
-    if (pct >= 28 && pct <= 32) return "#4ade80"
-    if ((pct >= 25 && pct < 28) || (pct > 32 && pct <= 35)) return "#facc15"
-    return "#f87171"
+    if (pct >= 28 && pct <= 32) return "var(--green)"
+    if ((pct >= 25 && pct < 28) || (pct > 32 && pct <= 35)) return "var(--orange)"
+    return "var(--red)"
   }
 
   return (
@@ -137,72 +141,60 @@ export default function PriceSuggestionsPage() {
         { label: "Suggestions", value: summary ? String(summary.total) : "—" },
         { label: "Price increases", value: summary ? String(summary.increases) : "—" },
         { label: "Price decreases", value: summary ? String(summary.decreases) : "—" },
-        { label: "High priority", value: summary ? String(summary.high_priority) : "—" },
+        { label: "High priority", value: summary ? String(summary.high_priority) : "—", color: summary && summary.high_priority > 0 ? "var(--red)" : undefined },
       ]}
+      actions={
+        <Button onClick={fetchSuggestions} disabled={loading}>
+          {loading ? "Loading…" : "Refresh"}
+        </Button>
+      }
     >
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <FilterBar>
         <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
         <FilterSelect label="Rule" options={rules} value={filterRule} onChange={setFilterRule} />
-        <button
-          onClick={fetchSuggestions}
-          disabled={loading}
-          className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-medium"
-          style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-muted)" }}
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
-      </div>
+      </FilterBar>
 
-      {error && (
-        <div className="glass rounded-xl p-4 mb-4 text-[11px]" style={{ color: "#f87171" }}>
-          {error}
-        </div>
-      )}
+      {error && <Notice tone="error">Couldn&apos;t load price suggestions: {error}.</Notice>}
 
-      {loading && !suggestions.length && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Loading product data and generating suggestions...</div>
-        </div>
-      )}
+      {loading && !suggestions.length && <Loading>Loading product data and price suggestions…</Loading>}
 
       {/* Rules legend */}
       {!loading && suggestions.length > 0 && (
-        <div className="glass rounded-xl p-3 mb-4">
-          <div className="text-[10px] font-semibold mb-2" style={{ color: "var(--text-muted)" }}>Rules applied</div>
-          <div className="flex flex-wrap gap-2 text-[10px]">
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.10)", color: "#f87171" }}>Thin margin: margin &lt; 25% → raise to 35%</span>
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(251,146,60,0.10)", color: "#fb923c" }}>ROAS downtrend: 1.0–2.2 → +10% (SOP rule 9)</span>
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(234,179,8,0.10)", color: "#facc15" }}>Below break-even: ROAS &lt; BE-ROAS → raise proportionally</span>
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(168,85,247,0.10)", color: "#a855f7" }}>COGS% too high: &gt;40% of price → target 30%</span>
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "rgba(96,165,250,0.10)", color: "#60a5fa" }}>Possibly overpriced: ROAS &gt;5 but ≤2 sales → −8%</span>
+        <Panel className="mb-4" title="Rules applied" sub="7-day cooldown per product after each price change. Only products with €5+ ad spend are evaluated.">
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="red">Thin margin: margin &lt; 25% → raise to 35%</Badge>
+            <Badge tone="amber">ROAS downtrend: 1.0–2.2 → +10% (SOP rule 9)</Badge>
+            <Badge tone="red">Below breakeven: ROAS &lt; BE ROAS → raise proportionally</Badge>
+            <Badge tone="amber">COGS% too high: &gt;40% of price → target 30%</Badge>
+            <Badge tone="blue">Possibly overpriced: ROAS &gt;5 but ≤2 sales → −8%</Badge>
           </div>
-          <div className="text-[9px] mt-2" style={{ color: "var(--text-dim)" }}>7-day cooldown per product after each price change. Only products with €5+ ad spend are evaluated.</div>
-        </div>
+        </Panel>
       )}
 
       {/* Suggestions table */}
       {!loading && filtered.length > 0 && (
-        <div className="glass rounded-xl overflow-hidden">
+        <Panel pad={false}>
+          <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <th className="text-left px-4 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Product</th>
-                <th className="text-left px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Store</th>
-                <th className="text-left px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Rule</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Current</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Suggested</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Change</th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", color: "var(--text-dim)" }}>
+                <th className={`${TH} text-left`}>Product</th>
+                <th className={`${TH} text-left`}>Store</th>
+                <th className={`${TH} text-left`}>Rule</th>
+                <th className={`${TH} text-right`}>Current</th>
+                <th className={`${TH} text-right`}>Suggested</th>
+                <th className={`${TH} text-right`}>Change</th>
+                <th className={`${TH} text-right`}>
                   <div>COGS%</div>
-                  <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>now</div>
+                  <div className="text-[8px] font-normal normal-case">now</div>
                 </th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>
+                <th className={`${TH} text-right`}>
                   <div>COGS%</div>
-                  <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>after</div>
+                  <div className="text-[8px] font-normal normal-case">after</div>
                 </th>
-                <th className="text-right px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>ROAS</th>
-                <th className="text-center px-3 py-2.5 font-medium" style={{ color: "var(--text-muted)" }}>Action</th>
+                <th className={`${TH} text-right`}>ROAS</th>
+                <th className={`${TH} text-center`}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -212,18 +204,18 @@ export default function PriceSuggestionsPage() {
                 const result = applyResult[key]
                 const isOnCooldown = s.cooldown_until && new Date(s.cooldown_until) > new Date()
                 const pb = PRIORITY_BADGE[s.priority]
-                const rb = RULE_BADGE[s.rule_id] || { bg: "rgba(255,255,255,0.06)", text: "var(--text-muted)" }
+                const ruleTone = RULE_TONE[s.rule_id] || "grey"
 
                 return (
                   <tr
                     key={i}
                     className="cursor-pointer hover:bg-white/[0.02] transition-colors"
-                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                    style={ROW_BORDER}
                     onClick={() => setExpanded(isExpanded ? null : key)}
                   >
-                    <td className="px-4 py-2.5">
+                    <td className={TD}>
                       <div className="flex items-center gap-2">
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: pb.bg, color: pb.text }}>{pb.label}</span>
+                        <Badge tone={pb.tone}>{pb.label}</Badge>
                         <ProductLink store={s.store} name={s.product_name} maxWidth={220} />
                       </div>
                       {isExpanded && (
@@ -232,58 +224,51 @@ export default function PriceSuggestionsPage() {
                           <div className="flex gap-4 mt-1 text-[9px]" style={{ color: "var(--text-dim)" }}>
                             <span>Sold: {s.metrics.units_sold}</span>
                             <span>Spend: {eur(s.metrics.ad_spend)}</span>
-                            {s.metrics.be_roas && <span>BE-ROAS: {s.metrics.be_roas.toFixed(2)}x</span>}
+                            {s.metrics.be_roas && <span>BE ROAS: {s.metrics.be_roas.toFixed(2)}x</span>}
                             {s.metrics.margin_pct !== null && <span>Margin: {s.metrics.margin_pct}%</span>}
-                            {s.metrics.cogs_usd !== null && <span>COGS: ${s.metrics.cogs_usd.toFixed(2)}</span>}
+                            {s.metrics.cogs_usd !== null && <span>COGS: ${s.metrics.cogs_usd.toFixed(2)} USD</span>}
                           </div>
                           {result && (
-                            <div className="mt-2 text-[10px]" style={{ color: result.ok ? "#4ade80" : "#f87171" }}>
+                            <div className="mt-2 text-[10px]" style={{ color: result.ok ? "var(--green)" : "var(--red)" }}>
                               {result.msg}
                             </div>
                           )}
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-[10px]" style={{ color: "var(--text-muted)" }}>{s.store}</td>
-                    <td className="px-3 py-2.5">
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{ background: rb.bg, color: rb.text }}>{s.rule}</span>
+                    <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{s.store}</td>
+                    <td className={TD}>
+                      <Badge tone={ruleTone}>{s.rule}</Badge>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{money(s.current_price, s.store)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-medium" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>{money(s.suggested_price, s.store)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{money(s.current_price, s.store)}</td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.change_pct > 0 ? "var(--green)" : "var(--blue)" }}>{money(s.suggested_price, s.store)}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: s.change_pct > 0 ? "var(--green)" : "var(--blue)" }}>
                       {s.change_pct > 0 ? "+" : ""}{s.change_pct}%
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono">
+                    <td className={`${TD} text-right tabular-nums`}>
                       {s.metrics.cogs_usd !== null && s.current_price > 0 ? (
                         <span style={{ color: cogsColor((s.metrics.cogs_usd / s.current_price) * 100) }}>
                           {((s.metrics.cogs_usd / s.current_price) * 100).toFixed(1)}%
                         </span>
                       ) : <span style={{ color: "var(--text-dim)" }}>—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono">
+                    <td className={`${TD} text-right tabular-nums`}>
                       {s.metrics.cogs_usd !== null && s.suggested_price > 0 ? (
                         <span style={{ color: cogsColor((s.metrics.cogs_usd / s.suggested_price) * 100) }}>
                           {((s.metrics.cogs_usd / s.suggested_price) * 100).toFixed(1)}%
                         </span>
                       ) : <span style={{ color: "var(--text-dim)" }}>—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{s.metrics.roas.toFixed(2)}x</td>
-                    <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{s.metrics.roas.toFixed(2)}x</td>
+                    <td className={`${TD} text-center`} onClick={e => e.stopPropagation()}>
                       {isOnCooldown ? (
-                        <span className="text-[9px] px-2 py-1 rounded" style={{ color: "var(--text-dim)" }}>
-                          Cooldown
-                        </span>
+                        <Badge tone="grey">Cooldown</Badge>
                       ) : result?.ok ? (
-                        <span className="text-[9px] px-2 py-1 rounded" style={{ color: "#4ade80" }}>Done</span>
+                        <Badge tone="green">Done</Badge>
                       ) : (
-                        <button
-                          onClick={() => handleApply(s)}
-                          disabled={applying === key}
-                          className="px-3 py-1 rounded-lg text-[10px] font-medium disabled:opacity-50 transition-colors"
-                          style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80" }}
-                        >
-                          {applying === key ? "..." : "Apply"}
-                        </button>
+                        <Button size="sm" onClick={() => handleApply(s)} disabled={applying === key}>
+                          {applying === key ? "Applying…" : "Apply"}
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -291,15 +276,12 @@ export default function PriceSuggestionsPage() {
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </Panel>
       )}
 
       {!loading && suggestions.length === 0 && !error && (
-        <div className="glass rounded-xl p-8 text-center">
-          <div className="text-[32px] mb-2 opacity-30">&#x2714;</div>
-          <div className="text-[12px] font-medium mb-1" style={{ color: "var(--text)" }}>No price suggestions</div>
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>All products are within healthy pricing ranges, or none have enough ad spend (€25+) for analysis.</div>
-        </div>
+        <EmptyState title="No price suggestions">All products are within healthy pricing ranges, or none have enough ad spend (€5+) for analysis.</EmptyState>
       )}
     </PageShell>
   )

@@ -1,28 +1,24 @@
 "use client"
 import { PageShell } from "@/components/PageShell"
+import { EmptyState } from "@/components/ui"
 
 export default function RiskyProductsPage() {
   return (
     <PageShell
       title="Risky Products"
       breadcrumb="Customer Service → Risky Products"
-      description="Early warning: products with 2+ complaints in 7 days. Triggers supplier notification."
+      description="Early warning: products with 2+ complaints in 7 days, so the supplier can be told."
       stats={[
         { label: "Risky now", value: "—" },
         { label: "Supplier notified", value: "—" },
         { label: "Cleared (30d)", value: "—" },
-        { label: "Threshold", value: "—" },
+        { label: "Threshold", value: "2+ in 7 days", sub: "complaints per product" },
       ]}
     >
-      <div className="space-y-2">
-        <div className="glass rounded-xl px-4 py-3 flex items-center gap-3" style={{ borderLeft: "3px solid var(--red)" }}>
-          <div className="flex-1">
-            <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Women's Faux Leather Blazer</div>
-            <div className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>3 complaints in 5 days — quality issue, peeling reported. Supplier A notified 2026-11-22.</div>
-          </div>
-          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}>Active</span>
-        </div>
-      </div>
+      <EmptyState title="Not connected yet">
+        This page will list each product that hits 2+ complaints in 7 days, with the complaint reasons and when the supplier
+        was told. Complaint data isn&apos;t connected yet, so nothing shows here.
+      </EmptyState>
     </PageShell>
   )
 }

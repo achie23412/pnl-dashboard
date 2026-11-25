@@ -5,7 +5,7 @@ export default function StoreCreditPage() {
   return (
     <PageShell
       title="Store Credit"
-      breadcrumb="Back End → Store Credit"
+      breadcrumb="Customer Service → Store Credit"
       description="Issue and track store credits as an alternative to refunds. Lower refund rates, keep customers."
       stats={[
         { label: "To issue", value: "—" },

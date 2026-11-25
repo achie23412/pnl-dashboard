@@ -1,12 +1,21 @@
 "use client"
 import { PageShell } from "@/components/PageShell"
+import { Panel, Badge, TH, TD, ROW_BORDER } from "@/components/ui"
+
+// Planned automations. Only the daily data refresh runs today; the others aren't built yet.
+const WORKFLOWS = [
+  { name: "Quality alert", desc: "Flags a product when its quality refund rate hits 10% with 20+ units sold.", runs: "On refund", live: false },
+  { name: "Risky product notification", desc: "Tells the supplier when a product gets 2+ complaints in 7 days.", runs: "On complaint", live: false },
+  { name: "Refund approval routing", desc: "Sends refunds over €100 to the owner for approval.", runs: "On refund submit", live: false },
+  { name: "Daily P&L sync", desc: "Pulls revenue, ad spend and COGS for the daily report.", runs: "Daily ~07:00 Amsterdam", live: true },
+]
 
 export default function WorkflowsPage() {
   return (
     <PageShell
       title="Workflows"
       breadcrumb="Workflows"
-      description="Automated workflows and task sequences. Set up triggers for refund processing, quality alerts, supplier notifications, and more."
+      description="Automations for refund processing, quality alerts, supplier notifications and the daily data refresh."
       stats={[
         { label: "Active workflows", value: "—" },
         { label: "Runs today", value: "—" },
@@ -14,28 +23,31 @@ export default function WorkflowsPage() {
         { label: "Last run", value: "—" },
       ]}
     >
-      <div className="space-y-2">
-        {[
-          { name: "Quality alert trigger", desc: "Flags product when quality refund rate hits 10% with 20+ units", runs: "On refund", status: "Active" },
-          { name: "Risky product notification", desc: "Notifies supplier when 2+ complaints in 7 days", runs: "On complaint", status: "Active" },
-          { name: "Refund approval routing", desc: "Routes refunds over €100 to owner for approval", runs: "On refund submit", status: "Active" },
-          { name: "Daily P&L sync", desc: "Pulls revenue, spend, and COGS data for daily report", runs: "Daily 07:00", status: "Active" },
-        ].map((w, i) => (
-          <div key={i} className="glass rounded-xl px-4 py-3 flex items-center gap-4">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(99,102,241,0.15)" }}>
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
-                <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>{w.name}</div>
-              <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>{w.desc}</div>
-            </div>
-            <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>{w.runs}</div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>{w.status}</span>
-          </div>
-        ))}
-      </div>
+      <Panel title="Workflows" sub="Run history isn't connected yet, so there are no run counts." pad={false} className="mb-4">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr style={{ color: "var(--text-dim)" }}>
+              <th className={`${TH} text-left`}>Workflow</th>
+              <th className={`${TH} text-left`}>Runs</th>
+              <th className={`${TH} text-left`}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {WORKFLOWS.map((w) => (
+              <tr key={w.name} style={ROW_BORDER}>
+                <td className={TD}>
+                  <div className="font-medium" style={{ color: "var(--text)" }}>{w.name}</div>
+                  <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>{w.desc}</div>
+                </td>
+                <td className={TD} style={{ color: "var(--text-dim)" }}>{w.runs}</td>
+                <td className={TD}>
+                  <Badge tone={w.live ? "green" : "grey"}>{w.live ? "Running" : "Not built yet"}</Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Panel>
     </PageShell>
   )
 }

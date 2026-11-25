@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { FixBanner } from "@/components/FixBanner"
+import { FilterBar } from "@/components/PillSelect"
+import { Badge, Button, Notice, Loading, EmptyState, SectionLabel } from "@/components/ui"
 import { SHOPIFY_STORES, STORE_COLORS } from "@/lib/constants"
 import { buildAlerts, type Alert, type Severity, type StoreWindow, type WindowProduct } from "@/lib/product-alerts"
 
-const SEV: Record<Severity, { label: string; color: string }> = {
-  critical: { label: "Critical", color: "var(--red)" },
-  warning: { label: "Warning", color: "var(--orange)" },
-  info: { label: "Info", color: "var(--blue)" },
+const SEV: Record<Severity, { label: string; color: string; tone: "red" | "amber" | "blue" }> = {
+  critical: { label: "Critical", color: "var(--red)", tone: "red" },
+  warning: { label: "Warning", color: "var(--orange)", tone: "amber" },
+  info: { label: "Info", color: "var(--blue)", tone: "blue" },
 }
 
 const day = (offset: number) => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10)
@@ -107,8 +109,6 @@ export default function ProductAlertsPage() {
   const visible = open.filter(matchesFilters)
   const visibleDone = done.filter(matchesFilters)
   const count = (s: Severity) => open.filter((a) => a.severity === s).length
-  const field = "bg-transparent border rounded-md px-2 py-1 text-[10px]"
-  const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
 
   return (
     <PageShell
@@ -117,7 +117,7 @@ export default function ProductAlertsPage() {
       description="Each alert says what the issue is, why (the numbers) and how to fix it, using the Ascend Drafting System SOP. Based on the last 30 / 14 / 7 days."
       stats={[
         { label: "Open alerts", value: loading ? "—" : String(open.length) },
-        { label: "Critical (act now)", value: loading ? "—" : String(count("critical")) },
+        { label: "Critical (act now)", value: loading ? "—" : String(count("critical")), color: !loading && count("critical") > 0 ? "var(--red)" : undefined },
         { label: "Done", value: loading ? "—" : String(done.length) },
         { label: "Products monitored", value: loading ? "—" : String(monitored) },
       ]}
@@ -126,7 +126,7 @@ export default function ProductAlertsPage() {
         if (ctx.store) setFStore(ctx.store)
         setFSev("critical")
       }} />
-      <div className="flex flex-wrap gap-2 mb-3">
+      <FilterBar>
         <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: alerts.filter((a) => a.store === s).length }))} value={fStore} onChange={setFStoreF} />
         <FilterSelect
           label="Severity"
@@ -134,19 +134,21 @@ export default function ProductAlertsPage() {
           value={fSev}
           onChange={setFSevF}
         />
-      </div>
+      </FilterBar>
 
-      {error && <div className="text-[11px] mb-3" style={{ color: "var(--red)" }}>{error}</div>}
+      {error && <Notice tone="error">Couldn&apos;t load product data: {error}.</Notice>}
       {warnings.length > 0 && (
-        <div className="text-[10px] mb-3" style={{ color: "var(--orange)" }}>Some data didn&apos;t load, so alerts may be incomplete: {warnings.join("; ")}</div>
+        <Notice tone="warning">Some data didn&apos;t load, so alerts may be incomplete: {warnings.join("; ")}</Notice>
       )}
 
       {loading ? (
-        <div className="text-[11px] py-12 text-center" style={{ color: "var(--text-dim)" }}>Checking products against the drafting rules…</div>
+        <Loading>Checking products against the drafting rules…</Loading>
       ) : visible.length === 0 ? (
-        <div className="glass rounded-xl text-[11px] py-10 text-center" style={{ color: "var(--text-dim)" }}>
-          {done.length ? "All alerts handled." : "No alerts. Nothing crosses a drafting rule or breakeven right now."}
-        </div>
+        done.length ? (
+          <EmptyState title="All alerts handled">Done alerts come back if their numbers change.</EmptyState>
+        ) : (
+          <EmptyState title="No alerts">Nothing crosses a drafting rule or breakeven right now.</EmptyState>
+        )
       ) : (
         <div className="space-y-2">
           {visible.map((a) => {
@@ -155,18 +157,15 @@ export default function ProductAlertsPage() {
             return (
               <div key={a.id} className="glass rounded-xl px-4 py-3" style={{ borderLeft: `3px solid ${sev.color}` }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "rgba(255,255,255,0.05)", color: sev.color }}>{sev.label}</span>
+                  <Badge tone={sev.tone}>{sev.label}</Badge>
                   <span className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>{a.issue}</span>
                   <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>· {a.rule}</span>
-                  <button
-                    onClick={() => setDone(a, true)}
-                    className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors hover:brightness-125"
-                    style={{ background: "rgba(52,211,153,0.12)", color: "var(--green)", border: "1px solid rgba(52,211,153,0.25)" }}
-                    title="Hide this alert. It comes back if its numbers change."
-                  >
-                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><polyline points="20 6 9 17 4 12" /></svg>
-                    Mark done
-                  </button>
+                  <span className="ml-auto">
+                    <Button size="sm" onClick={() => setDone(a, true)} title="Hide this alert. It comes back if its numbers change.">
+                      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><polyline points="20 6 9 17 4 12" /></svg>
+                      Mark done
+                    </Button>
+                  </span>
                 </div>
                 <div className="text-[11px] mt-1" style={{ color: "var(--text)" }}>
                   <span className="inline-flex items-center gap-1 mr-1.5" style={{ color: "var(--text-muted)" }}>
@@ -177,11 +176,11 @@ export default function ProductAlertsPage() {
                 </div>
                 <div className="grid md:grid-cols-[1fr_1fr] gap-3 mt-2">
                   <div>
-                    <div className="text-[9px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--text-dim)" }}>Why</div>
+                    <SectionLabel>Why</SectionLabel>
                     {a.why.map((w, i) => <div key={i} className="text-[10px]" style={{ color: "var(--text-muted)" }}>• {w}</div>)}
                   </div>
                   <div>
-                    <div className="text-[9px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: "var(--text-dim)" }}>How to fix</div>
+                    <SectionLabel>How to fix</SectionLabel>
                     <div className="text-[10px]" style={{ color: "var(--text)" }}>{a.fix}</div>
                   </div>
                 </div>
@@ -193,18 +192,18 @@ export default function ProductAlertsPage() {
       )}
       {!loading && visibleDone.length > 0 && (
         <div className="mt-4">
-          <button onClick={() => setShowDone((x) => !x)} className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+          <Button variant="ghost" size="sm" onClick={() => setShowDone((x) => !x)}>
             {showDone ? "▾" : "▸"} Done ({visibleDone.length})
-          </button>
+          </Button>
           {showDone && (
             <div className="space-y-1.5 mt-2">
               {visibleDone.map((a) => (
-                <div key={a.id} className="rounded-lg px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div key={a.id} className="glass rounded-xl px-3 py-2 flex items-center gap-2">
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth={3}><polyline points="20 6 9 17 4 12" /></svg>
                   <span className="text-[10px] line-through" style={{ color: "var(--text-dim)" }}>
                     {a.issue} · {a.store}{a.product ? ` · ${a.product}` : ""}
                   </span>
-                  <button onClick={() => setDone(a, false)} className="ml-auto text-[10px] underline" style={{ color: "var(--text-muted)" }}>Undo</button>
+                  <span className="ml-auto"><Button variant="ghost" size="sm" onClick={() => setDone(a, false)}>Undo</Button></span>
                 </div>
               ))}
             </div>

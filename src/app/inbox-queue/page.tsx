@@ -5,7 +5,7 @@ export default function InboxQueuePage() {
   return (
     <PageShell
       title="Inbox Queue"
-      breadcrumb="Back End → Inbox Queue"
+      breadcrumb="Customer Service → Inbox Queue"
       description="Customer support tickets across all stores. Track SLA, response times and resolution."
       stats={[
         { label: "Open tickets", value: "—" },

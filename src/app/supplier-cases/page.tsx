@@ -1,12 +1,13 @@
 "use client"
 import { PageShell } from "@/components/PageShell"
+import { EmptyState } from "@/components/ui"
 
 export default function SupplierCasesPage() {
   return (
     <PageShell
       title="Supplier Cases"
       breadcrumb="Supply Chain → Supplier Cases"
-      description="Escalated supplier issues: quality disputes, missing shipments, pricing disagreements. Track case progress and resolution."
+      description="Escalated supplier issues (quality disputes, missing shipments, price disagreements) and how far each case is."
       stats={[
         { label: "Open cases", value: "—" },
         { label: "Resolved (30d)", value: "—" },
@@ -14,15 +15,10 @@ export default function SupplierCasesPage() {
         { label: "Active suppliers", value: "—" },
       ]}
     >
-      <div className="space-y-2">
-        <div className="glass rounded-xl px-4 py-3" style={{ borderLeft: "3px solid var(--orange)" }}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>Supplier A — Quality dispute on Faux Leather Blazer</div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{ background: "rgba(249,115,22,0.15)", color: "#f97316" }}>In progress</span>
-          </div>
-          <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Opened 2026-11-20. 15.6% quality refund rate. Supplier response pending — requesting replacement batch or credit.</div>
-        </div>
-      </div>
+      <EmptyState title="Not connected yet">
+        This page will list each open supplier case with its status, the problem and what we asked for (replacement batch,
+        credit). Cases aren&apos;t stored in the dashboard yet, so nothing shows here.
+      </EmptyState>
     </PageShell>
   )
 }
