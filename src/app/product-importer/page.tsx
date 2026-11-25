@@ -1,6 +1,7 @@
 "use client"
 import { useState, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { ListingWorkflow, type WorkflowStats } from "@/components/ListingWorkflow"
 
 interface ParsedListing {
   title: string
@@ -19,6 +20,7 @@ export default function ProductImporterPage() {
   const [rawResult, setRawResult] = useState("")
   const [error, setError] = useState("")
   const [copied, setCopied] = useState("")
+  const [stats, setStats] = useState<WorkflowStats | null>(null)
 
   const handleRedo = useCallback(async () => {
     if (!productInfo && !competitorUrl && !imageDesc) return
@@ -58,40 +60,18 @@ export default function ProductImporterPage() {
     <PageShell
       title="Product Importer"
       breadcrumb="Front End → Product Importer"
-      description="Import products from your saved list. Single or batch import with keyword advice and competitor pricing."
+      description="One workflow: paste product links → new listing with the Ascend SOP → GMC pre-launch check → you check before / after → Shopify draft → publish."
       stats={[
-        { label: "Saved products", value: "—" },
-        { label: "Imported this week", value: "—" },
-        { label: "Pending review", value: "—" },
-        { label: "Success rate", value: "—" },
+        { label: "Ready to check", value: stats ? String(stats.review) : "—" },
+        { label: "Approved", value: stats ? String(stats.approved) : "—" },
+        { label: "Draft in Shopify", value: stats ? String(stats.inShopify) : "—" },
+        { label: "Published today", value: stats ? String(stats.publishedToday) : "—" },
       ]}
     >
-      {/* Add new product */}
-      <div className="glass rounded-xl p-4 mb-4">
-        <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--text)" }}>Add new product</div>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="text-[10px] font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Product URL</label>
-            <input className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px]" style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }} placeholder="https://supplier.com/product..." />
-          </div>
-          <div>
-            <label className="text-[10px] font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Target store</label>
-            <select className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px]" style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}>
-              <option>Walsh & Farley</option>
-              <option>Carter & Collins</option>
-              <option>Susan & Allen</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button className="px-4 py-2 rounded-lg text-[11px] font-medium" style={{ background: "var(--accent)", color: "#fff" }}>Import</button>
-          </div>
-        </div>
-      </div>
+      <ListingWorkflow onStats={setStats} />
 
-      {/* Saved list */}
-      <div className="glass rounded-xl p-4 mb-4">
-        <div className="text-[12px] font-semibold mb-2" style={{ color: "var(--text)" }}>Saved list</div>
-        <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>No saved products yet. Add a product URL above to get started.</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider mt-6 mb-2" style={{ color: "var(--text-dim)" }}>
+        Manual tool · no product link? Paste the details instead
       </div>
 
       {/* Redo Listing (SOP) */}

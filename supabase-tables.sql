@@ -78,3 +78,26 @@ create table if not exists todos (
 alter table todos enable row level security;
 grant select, insert, update, delete on todos to service_role;
 grant usage, select on sequence todos_id_seq to service_role;
+
+-- Product listing workflow (Product Importer page): one row per product going through
+-- fetch → Ascend SOP listing → GMC check → review → Shopify draft → publish
+create table if not exists listing_jobs (
+  id bigserial primary key,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  store text not null,
+  source_url text not null,
+  status text not null default 'working',
+  before jsonb,
+  after jsonb,
+  price numeric,
+  gmc jsonb,
+  error text,
+  notes text,
+  shopify_product_id text,
+  shopify_admin_url text,
+  published_at timestamptz
+);
+alter table listing_jobs enable row level security;
+grant select, insert, update, delete on listing_jobs to service_role;
+grant usage, select on sequence listing_jobs_id_seq to service_role;
