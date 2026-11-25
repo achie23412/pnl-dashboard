@@ -114,7 +114,7 @@ async function storeDisputes(store: string, since: string) {
     const r = await gql(cfg.domain, token, `query($id: ID!) { dispute(id: $id) {
       id status type initiatedAt evidenceDueBy evidenceSentOn finalizedOn
       amount { amount currencyCode } reasonDetails { reason networkReasonCode }
-    } }`, { id: d.id })
+    } }`, { id: d.id.replace("/OrderDisputeSummary/", "/ShopifyPaymentsDispute/") })
     const x = r.data?.dispute as Record<string, unknown> | null | undefined
     if (!x) { if (r.errors?.length) detailError = r.errors[0].message; continue }
     const amount = x.amount as { amount: string; currencyCode: string } | null
