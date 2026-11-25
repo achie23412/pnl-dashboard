@@ -131,13 +131,6 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       why: `These stores had Google spend in the last 3 days. Also re-check the excluded list and remove exclusions that are back above target with sales.`,
       source: "OAK × Ascend Google Ads SOP steps 5–6: check daily, exclude every 2 days ($25 + ROAS < 1.8, or CPC > $1.50 after $5)",
     })
-    todos.push({
-      key: `publish10:${today}`,
-      priority: "normal",
-      title: `Publish 10 products per store`,
-      why: `Active Google stores: ${activeGoogle.join(", ")}.`,
-      source: "Ascend Drafting SOP: import new products as draft, publish 10 a day",
-    })
     if (new Date(today + "T00:00:00Z").getUTCDay() === 1) {
       todos.push({
         key: `drafting-weekly:${today}`,
@@ -157,14 +150,6 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       source: "Simo: 4 gates (spend >$60, total, today and yesterday net profit >20%) → double at midnight, compare over 72h",
     })
   }
-
-  todos.push({
-    key: `coach-report:${today}`,
-    priority: "normal",
-    title: "Send P&L to coach",
-    why: "Per store: date, revenue, spend, ROAS, COGS % — plus a screenshot of the full-month dashboard.",
-    source: "Coach requirement (Daily Report page)",
-  })
 
   // ── Data health
   const lr = input.lastRefresh
