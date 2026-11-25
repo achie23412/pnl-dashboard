@@ -38,13 +38,38 @@ export function commslayerTokens(): { name: string; token: string }[] {
     .map(([k, v]) => ({ name: k, token: v as string }))
 }
 
+// CommsLayer allows 60 calls a minute per token. Keep a rolling count per token (per server
+// instance) and stop at 55, so one page load never trips the limit; a real 429 stops the same way.
+const RATE_BUDGET = 55
+const calls = new Map<string, number[]>()
+export class RateLimited extends Error {
+  constructor(public retryAfter: number) {
+    super(`CommsLayer allows 60 calls a minute; the rest loads in ${retryAfter}s`)
+  }
+}
+function take(token: string) {
+  const now = Date.now()
+  const recent = (calls.get(token) || []).filter((t) => now - t < 60_000)
+  if (recent.length >= RATE_BUDGET) throw new RateLimited(Math.max(5, Math.ceil((60_000 - (now - recent[0])) / 1000)))
+  recent.push(now)
+  calls.set(token, recent)
+}
+
 export async function cl<T>(token: string, path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+  take(token)
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") q.set(k, String(v))
   const res = await fetch(`${BASE}${path}${q.toString() ? `?${q}` : ""}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     cache: "no-store",
   })
+  if (res.status === 429) {
+    const body = await res.json().catch(() => null) as { error?: { details?: { retry_after?: number } } } | null
+    const wait = Number(body?.error?.details?.retry_after || res.headers.get("retry-after")) || 60
+    // Fill the local budget so the rest of this load stops too
+    calls.set(token, Array.from({ length: RATE_BUDGET }, () => Date.now() - 60_000 + wait * 1000))
+    throw new RateLimited(Math.ceil(wait))
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(`CommsLayer ${path}: HTTP ${res.status}${res.status === 401 ? " (token missing or expired)" : res.status === 403 ? " (token lacks the scope for this)" : ""} ${body.slice(0, 120)}`)
@@ -65,7 +90,7 @@ export async function clAll<T>(token: string, path: string, params: Record<strin
   return out
 }
 
-// Run tasks with a small concurrency limit (CommsLayer rate limits aren't documented)
+// Run tasks with a small concurrency limit
 export async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length)
   let i = 0
@@ -100,4 +125,90 @@ export function priorityOf(text: string): "P1" | "P2" | "P3" {
   if (P1.test(text)) return "P1"
   if (P2.test(text)) return "P2"
   return "P3"
+}
+
+// What the messages of a conversation tell us: who wrote last, when we first replied, and the
+// customer's latest message. Cached per conversation until its last_activity_at changes.
+export type ConvDetails = { at: string; waiting: boolean; waiting_since: string | null; first_reply_at: string | null; last_customer_message: string }
+export function detailsFromMessages(at: string, msgs: ClMessage[]): ConvDetails {
+  const pub = msgs.filter((m) => !m.private && (m.message_type === "incoming" || m.message_type === "outgoing")).sort((a, b) => a.created_at.localeCompare(b.created_at))
+  const lastOut = [...pub].reverse().find((m) => m.message_type === "outgoing")
+  const incomingAfter = pub.filter((m) => m.message_type === "incoming" && (!lastOut || m.created_at > lastOut.created_at))
+  const lastIn = [...pub].reverse().find((m) => m.message_type === "incoming")
+  return {
+    at,
+    waiting: incomingAfter.length > 0,
+    waiting_since: incomingAfter[0]?.created_at || null,
+    first_reply_at: pub.find((m) => m.message_type === "outgoing")?.created_at || null,
+    last_customer_message: (lastIn?.content || "").replace(/\s+/g, " ").slice(0, 300),
+  }
+}
+
+// First-reply target from the CS playbook: 2 hours (internal standard; the websites say 24h).
+export const SLA_HOURS = 2
+
+export type InboxRow = {
+  key: string // `${account_id}:${id}`
+  account_id: number
+  id: number
+  display_id: number
+  contact_id: number
+  url: string
+  store: string | null
+  inbox: string
+  status: ClConversation["status"]
+  subject: string
+  reason: string | null
+  labels: string[]
+  customer: string | null
+  email: string | null
+  created_at: string
+  last_activity_at: string
+  // From the messages. CommsLayer allows 60 calls a minute and every conversation needs its own
+  // call, so these load in batches: details "pending" = not read yet, "known" = the browser has
+  // them cached for this last_activity_at, "fresh" = filled in below.
+  details: "fresh" | "known" | "pending"
+  msg: ConvDetails | null // the details themselves when "fresh", for the page to cache
+  contact_loaded: boolean
+  waiting_on_us: boolean
+  waiting_since: string | null // first customer message after our last reply
+  first_reply_at: string | null
+  last_customer_message: string
+  priority: "P1" | "P2" | "P3"
+  priority_source: "rule" | "manual"
+  sla_breached: boolean
+  // our notes (cs_tickets)
+  order_number: string | null
+  scenario: string | null
+  owner: string | null
+  product_title: string | null
+  complaint: boolean
+  note: string | null
+}
+
+
+// Apply message details (and the SLA/priority that depend on them) to a row. Also used by the page
+// for details it has cached.
+export function withDetails(r: InboxRow, d: ConvDetails | null, contact?: { name: string | null; email: string | null } | null): InboxRow {
+  const out = { ...r }
+  if (contact) { out.customer = contact.name || out.customer; out.email = contact.email || out.email; out.contact_loaded = true }
+  if (!d) return out
+  out.waiting_on_us = r.status === "open" && d.waiting
+  out.waiting_since = out.waiting_on_us ? d.waiting_since : null
+  out.first_reply_at = d.first_reply_at
+  out.last_customer_message = d.last_customer_message
+  if (out.subject === "(no subject)" && d.last_customer_message) out.subject = d.last_customer_message.slice(0, 90)
+  if (r.priority_source === "rule") out.priority = priorityOf([r.subject, r.reason, ...r.labels, d.last_customer_message].filter(Boolean).join(" "))
+  out.sla_breached = !!out.waiting_since && Date.now() - Date.parse(out.waiting_since) > SLA_HOURS * 3600000
+  return out
+}
+
+
+const RANK = { P1: 0, P2: 1, P3: 2 }
+// Waiting on us first, then P1→P3, then longest wait
+export function sortInbox(rows: InboxRow[]) {
+  return rows.sort((a, b) =>
+    Number(b.waiting_on_us) - Number(a.waiting_on_us) ||
+    RANK[a.priority] - RANK[b.priority] ||
+    (a.waiting_since || a.last_activity_at).localeCompare(b.waiting_since || b.last_activity_at))
 }

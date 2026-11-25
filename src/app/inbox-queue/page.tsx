@@ -7,9 +7,21 @@ import { PageShell } from "@/components/PageShell"
 import { FilterBar, PillSelect } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
-import type { InboxRow } from "@/app/api/inbox/route"
+import { withDetails, sortInbox, type InboxRow, type ConvDetails } from "@/lib/commslayer"
 
-type Data = { configured: boolean; rows?: InboxRow[]; resolvedToday?: number; slaHours?: number; errors?: string[]; fetchedAt?: string }
+type Data = { configured: boolean; rows?: InboxRow[]; resolvedToday?: number; slaHours?: number; errors?: string[]; fetchedAt?: string; pending?: number; contactsPending?: number; retryAfter?: number | null; rateLimited?: boolean; error?: string }
+type Contact = { name: string | null; email: string | null }
+
+// Message details and contacts cached in this browser, so a revisit only reads conversations that
+// changed (CommsLayer allows 60 calls a minute and each conversation needs its own call).
+const LS_MSG = "inbox-queue:details:v1"
+const LS_CONTACT = "inbox-queue:contacts:v1"
+function readLS<T>(k: string): Record<string, T> {
+  try { return JSON.parse(localStorage.getItem(k) || "{}") } catch { return {} }
+}
+function writeLS(k: string, v: unknown) {
+  try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* storage full or blocked: works without it */ }
+}
 const STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley", "LUMEGLASSES", "Blinky"]
 const field = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
@@ -34,22 +46,54 @@ export default function InboxQueuePage() {
   const [open, setOpen] = useState<string | null>(null)
   const [form, setForm] = useState<Partial<InboxRow>>({})
   const [saving, setSaving] = useState(false)
+  const [nextAt, setNextAt] = useState<number | null>(null)
+  const [, tick] = useState(0)
 
   const load = useCallback(async (fresh = false) => {
     setLoading(true)
     setError(null)
+    setNextAt(null)
     try {
-      const r = await fetch(`/api/inbox${fresh ? "?fresh=1" : ""}`, { cache: "no-store" })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
-      setData(d)
+      const msgCache = readLS<ConvDetails>(LS_MSG)
+      const contactCache = readLS<Contact>(LS_CONTACT)
+      const known = Object.fromEntries(Object.entries(msgCache).map(([k, v]) => [k, v.at]))
+      const r = await fetch("/api/inbox", { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ fresh, known, knownContacts: Object.keys(contactCache).map(Number) }) })
+      const d: Data = await r.json()
+      if (d.rateLimited) {
+        setError(d.error || "CommsLayer rate limit")
+        setNextAt(Date.now() + (d.retryAfter || 60) * 1000)
+      } else if (!r.ok) {
+        throw new Error(d.error || `HTTP ${r.status}`)
+      } else {
+        const keep: Record<string, ConvDetails> = {}
+        const keepContacts: Record<string, Contact> = {}
+        const rows = (d.rows || []).map((row) => {
+          if (row.msg) keep[row.key] = row.msg
+          else if (row.details === "known" && msgCache[row.key]) keep[row.key] = msgCache[row.key]
+          if (row.contact_loaded) keepContacts[row.contact_id] = { name: row.customer, email: row.email }
+          else if (contactCache[row.contact_id]) keepContacts[row.contact_id] = contactCache[row.contact_id]
+          const cached = row.details === "known" ? msgCache[row.key] || null : null
+          return withDetails(row, cached, row.contact_loaded ? null : contactCache[row.contact_id])
+        })
+        writeLS(LS_MSG, keep)
+        writeLS(LS_CONTACT, keepContacts)
+        setData({ ...d, rows: sortInbox(rows) })
+        if ((d.pending || d.contactsPending) && d.retryAfter) setNextAt(Date.now() + d.retryAfter * 1000 + 1000)
+      }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
+  // Next batch once CommsLayer's minute is up; a 1s tick keeps the countdown current
+  useEffect(() => {
+    if (!nextAt) return
+    const t = setTimeout(() => load(), Math.max(0, nextAt - Date.now()))
+    const i = setInterval(() => tick((n) => n + 1), 1000)
+    return () => { clearTimeout(t); clearInterval(i) }
+  }, [nextAt, load])
 
   const rows = useMemo(() => data?.rows || [], [data])
-  const stateOf = (r: InboxRow) => (r.waiting_on_us ? "waiting" : r.status === "open" ? "replied" : "pending")
+  const stateOf = (r: InboxRow) => (r.waiting_on_us ? "waiting" : r.status !== "open" ? "pending" : r.details === "pending" ? "unchecked" : "replied")
   const shown = rows.filter((r) =>
     passes(fStore, r.store || "Unknown") && passes(fPrio, r.priority) && passes(fState, stateOf(r)) &&
     (!q || [r.subject, r.customer, r.email, r.order_number, String(r.display_id)].some((x) => x?.toLowerCase().includes(q.toLowerCase()))))
@@ -103,6 +147,11 @@ export default function InboxQueuePage() {
     >
       {error && <Notice tone="error">Couldn&apos;t load the inbox: {error}.</Notice>}
       {data?.errors?.length ? <Notice tone="warning">Some data is missing: {data.errors.join(" · ")}</Notice> : null}
+      {data?.configured && (data.pending || data.contactsPending) ? (
+        <Notice tone="info">
+          Reading messages: {data.pending ? `${data.pending} of ${rows.length} conversations not checked yet` : "all conversations checked"}{data.contactsPending ? `, ${data.contactsPending} customer names to load` : ""}. CommsLayer allows 60 calls a minute, so the rest loads in batches{nextAt ? `; next batch in ${Math.max(0, Math.ceil((nextAt - Date.now()) / 1000))}s` : ""}. &quot;Waiting on us&quot; counts only checked conversations until then. This browser remembers them, so next time only changed conversations are read.
+        </Notice>
+      ) : null}
 
       <FilterBar right={<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customer, order, subject…" className="px-2.5 py-1 rounded-lg text-[10px] w-56 outline-none" style={field} />}>
         <FilterSelect label="Store" options={Array.from(new Set(rows.map((r) => r.store || "Unknown"))).map((s) => ({ value: s, count: rows.filter((r) => (r.store || "Unknown") === s).length }))} value={fStore} onChange={setFStore} />
@@ -111,6 +160,7 @@ export default function InboxQueuePage() {
           { value: "waiting", label: "Waiting on us", count: waiting.length },
           { value: "replied", label: "Replied, open", count: rows.filter((r) => stateOf(r) === "replied").length },
           { value: "pending", label: "Pending / snoozed", count: rows.filter((r) => stateOf(r) === "pending").length },
+          ...(rows.some((r) => stateOf(r) === "unchecked") ? [{ value: "unchecked", label: "Not checked yet", count: rows.filter((r) => stateOf(r) === "unchecked").length }] : []),
         ]} value={fState} onChange={setFState} />
       </FilterBar>
 
@@ -140,7 +190,7 @@ export default function InboxQueuePage() {
                       </td>
                       <td className={`${TD} text-[10px] whitespace-nowrap`} style={{ color: "var(--text-muted)" }}>{r.store || r.inbox}</td>
                       <td className={TD}><Badge tone={P_TONE[r.priority]}>{r.priority}{r.priority_source === "manual" ? " ·set" : ""}</Badge></td>
-                      <td className={`${TD} text-right tabular-nums whitespace-nowrap`} style={{ color: r.sla_breached ? "var(--red)" : r.waiting_on_us ? "#fbbf24" : "var(--text-dim)" }}>{r.waiting_on_us ? ago(r.waiting_since) : r.status === "open" ? "replied" : r.status}</td>
+                      <td className={`${TD} text-right tabular-nums whitespace-nowrap`} style={{ color: r.sla_breached ? "var(--red)" : r.waiting_on_us ? "#fbbf24" : "var(--text-dim)" }}>{r.waiting_on_us ? ago(r.waiting_since) : r.details === "pending" ? "checking…" : r.status === "open" ? "replied" : r.status}</td>
                       <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{r.owner || "—"}</td>
                     </tr>
                     {open === r.key && (
