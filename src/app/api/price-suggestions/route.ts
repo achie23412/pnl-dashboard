@@ -183,7 +183,10 @@ export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin
 
   try {
-    const catalogRes = await fetch(`${origin}/api/product-catalog?store=all`, { signal: AbortSignal.timeout(25000) })
+    const catalogRes = await fetch(`${origin}/api/product-catalog?store=all`, {
+      signal: AbortSignal.timeout(25000),
+      headers: { cookie: req.headers.get("cookie") || "" },
+    })
     if (!catalogRes.ok) {
       return NextResponse.json({ error: "Failed to fetch product catalog" }, { status: 502 })
     }
