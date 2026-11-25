@@ -112,6 +112,8 @@ export default function DailyReportPage() {
   }, [storeRows])
 
   const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
+  // Profit margin: est. profit as a share of revenue
+  const profitPct = (profit: number, revenue: number) => (revenue > 0 ? `${((profit / revenue) * 100).toFixed(1)}%` : "—")
 
   return (
     <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
@@ -210,6 +212,7 @@ export default function DailyReportPage() {
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>COGS</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Refunds</th>
                     <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }}>Est. Profit</th>
+                    <th className="px-3 py-2.5 text-right font-semibold" style={{ color: "var(--text-muted)" }} title="Est. profit ÷ revenue">Profit %</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -231,6 +234,7 @@ export default function DailyReportPage() {
                         <td className="px-3 py-2 text-right" style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
                         <td className="px-3 py-2 text-right" style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
                         <td className="px-3 py-2 text-right font-medium" style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(s.profit)}</td>
+                        <td className="px-3 py-2 text-right font-medium" style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(s.profit, s.revenue)}</td>
                       </tr>
                     )
                   })}
@@ -244,6 +248,7 @@ export default function DailyReportPage() {
                     <td className="px-3 py-2 text-right font-bold" style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: totals.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(totals.refunds)}</td>
                     <td className="px-3 py-2 text-right font-bold" style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(totals.profit)}</td>
+                    <td className="px-3 py-2 text-right font-bold" style={{ color: totals.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(totals.profit, totals.revenue)}</td>
                   </tr>
                 </tbody>
               </table>
