@@ -109,7 +109,7 @@ async function storeDisputes(store: string, since: string) {
     after = o.pageInfo.endCursor
   }
   const why = p.errors?.[0]?.message || ""
-  return { store, disputes, orders90d, source: "orders" as const, error: /access|scope|denied|permission/i.test(why) ? "dispute details need the read_shopify_payments_disputes permission" : why || null }
+  return { store, disputes, orders90d, source: "orders" as const, error: why ? `dispute details unavailable: ${why.slice(0, 220)}` : null }
 }
 
 export async function GET() {

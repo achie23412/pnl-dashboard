@@ -52,7 +52,7 @@ export default function DisputesPage() {
     await fetch("/api/disputes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ store: d.store, dispute_id: d.id, order_number: d.order_name, decision: draft.decision, evidence: draft.evidence, note: draft.note, submitted }) })
     load()
   }
-  const needsScope = stores.some((s) => s.error?.includes("read_shopify_payments_disputes"))
+  const needsScope = stores.some((s) => /access|scope|permission|denied/i.test(s.error || ""))
 
   return (
     <PageShell
