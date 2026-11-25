@@ -27,12 +27,55 @@ function shopifyLink(a: Alert) {
   return `https://admin.shopify.com/store/${cfg.domain.replace(".myshopify.com", "")}/products/${a.product_ids[0]}`
 }
 
+// "Done" is stored per alert AND its numbers: if the numbers change (e.g. the
+// product kept spending because it wasn't actually drafted), the alert returns.
+function doneKey(a: Alert): string {
+  const text = `${a.id}|${a.why.join("|")}`
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  return `alert:${a.id.slice(0, 120)}:${(h >>> 0).toString(36)}`
+}
+
 export default function ProductAlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [monitored, setMonitored] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [doneKeys, setDoneKeys] = useState<Set<string>>(new Set())
+  const [showDone, setShowDone] = useState(false)
+
+  // Done marks live in the same store as the calendar to-dos (todos table).
+  useEffect(() => {
+    fetch("/api/todos", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setDoneKeys(new Set((j.doneKeys || []) as string[])))
+      .catch(() => {})
+  }, [])
+
+  const setDone = async (a: Alert, done: boolean) => {
+    const key = doneKey(a)
+    setDoneKeys((s) => {
+      const n = new Set(s)
+      if (done) n.add(key)
+      else n.delete(key)
+      return n
+    })
+    const res = await fetch("/api/todos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auto_key: key, label: `${a.issue}: ${a.product || a.store}`, done }),
+    }).catch(() => null)
+    if (!res || !res.ok) {
+      // roll back if saving failed
+      setDoneKeys((s) => {
+        const n = new Set(s)
+        if (done) n.delete(key)
+        else n.add(key)
+        return n
+      })
+    }
+  }
   const [fStore, setFStoreF] = useState<FilterValue>(EMPTY_FILTER)
   const [fSev, setFSevF] = useState<FilterValue>(EMPTY_FILTER)
   const setFStore = (v: string) => setFStoreF({ mode: "include", values: [v] })
@@ -58,8 +101,12 @@ export default function ProductAlertsPage() {
   }, [])
 
   const stores = useMemo(() => Array.from(new Set(alerts.map((a) => a.store))).sort(), [alerts])
-  const visible = alerts.filter((a) => passes(fStore, a.store) && passes(fSev, a.severity))
-  const count = (s: Severity) => alerts.filter((a) => a.severity === s).length
+  const open = alerts.filter((a) => !doneKeys.has(doneKey(a)))
+  const done = alerts.filter((a) => doneKeys.has(doneKey(a)))
+  const matchesFilters = (a: Alert) => passes(fStore, a.store) && passes(fSev, a.severity)
+  const visible = open.filter(matchesFilters)
+  const visibleDone = done.filter(matchesFilters)
+  const count = (s: Severity) => open.filter((a) => a.severity === s).length
   const field = "bg-transparent border rounded-md px-2 py-1 text-[10px]"
   const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
 
@@ -69,9 +116,9 @@ export default function ProductAlertsPage() {
       breadcrumb="Front End → Product Alerts"
       description="Each alert says what the issue is, why (the numbers) and how to fix it, using the Ascend Drafting System SOP. Based on the last 30 / 14 / 7 days."
       stats={[
-        { label: "Active alerts", value: loading ? "—" : String(alerts.length) },
+        { label: "Open alerts", value: loading ? "—" : String(open.length) },
         { label: "Critical (act now)", value: loading ? "—" : String(count("critical")) },
-        { label: "Warnings", value: loading ? "—" : String(count("warning")) },
+        { label: "Done", value: loading ? "—" : String(done.length) },
         { label: "Products monitored", value: loading ? "—" : String(monitored) },
       ]}
     >
@@ -97,7 +144,9 @@ export default function ProductAlertsPage() {
       {loading ? (
         <div className="text-[11px] py-12 text-center" style={{ color: "var(--text-dim)" }}>Checking products against the drafting rules…</div>
       ) : visible.length === 0 ? (
-        <div className="glass rounded-xl text-[11px] py-10 text-center" style={{ color: "var(--text-dim)" }}>No alerts. Nothing crosses a drafting rule or breakeven right now.</div>
+        <div className="glass rounded-xl text-[11px] py-10 text-center" style={{ color: "var(--text-dim)" }}>
+          {done.length ? "All alerts handled." : "No alerts. Nothing crosses a drafting rule or breakeven right now."}
+        </div>
       ) : (
         <div className="space-y-2">
           {visible.map((a) => {
@@ -109,6 +158,15 @@ export default function ProductAlertsPage() {
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "rgba(255,255,255,0.05)", color: sev.color }}>{sev.label}</span>
                   <span className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>{a.issue}</span>
                   <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>· {a.rule}</span>
+                  <button
+                    onClick={() => setDone(a, true)}
+                    className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors hover:brightness-125"
+                    style={{ background: "rgba(52,211,153,0.12)", color: "var(--green)", border: "1px solid rgba(52,211,153,0.25)" }}
+                    title="Hide this alert. It comes back if its numbers change."
+                  >
+                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><polyline points="20 6 9 17 4 12" /></svg>
+                    Mark done
+                  </button>
                 </div>
                 <div className="text-[11px] mt-1" style={{ color: "var(--text)" }}>
                   <span className="inline-flex items-center gap-1 mr-1.5" style={{ color: "var(--text-muted)" }}>
@@ -133,7 +191,28 @@ export default function ProductAlertsPage() {
           })}
         </div>
       )}
+      {!loading && visibleDone.length > 0 && (
+        <div className="mt-4">
+          <button onClick={() => setShowDone((x) => !x)} className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
+            {showDone ? "▾" : "▸"} Done ({visibleDone.length})
+          </button>
+          {showDone && (
+            <div className="space-y-1.5 mt-2">
+              {visibleDone.map((a) => (
+                <div key={a.id} className="rounded-lg px-3 py-2 flex items-center gap-2" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth={3}><polyline points="20 6 9 17 4 12" /></svg>
+                  <span className="text-[10px] line-through" style={{ color: "var(--text-dim)" }}>
+                    {a.issue} · {a.store}{a.product ? ` · ${a.product}` : ""}
+                  </span>
+                  <button onClick={() => setDone(a, false)} className="ml-auto text-[10px] underline" style={{ color: "var(--text-muted)" }}>Undo</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="text-[9px] mt-4" style={{ color: "var(--text-dim)" }}>
+        Done alerts come back automatically if their numbers change (for example, a product that keeps spending after you marked it done).
         Product rules apply to Google stores (per-product spend from Google Shopping). Meta/TikTok stores get a store-level alert. Not covered yet: single-variant rule and live-date rules 2–3 (need Shopify product data), refund spikes (refunds arrive with the nightly refresh), competitor price changes.
       </div>
     </PageShell>
