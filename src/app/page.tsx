@@ -76,6 +76,24 @@ function getPreviousRange(from: string, to: string): [string, string] {
   return [prevFrom.toISOString().slice(0, 10), prevTo.toISOString().slice(0, 10)]
 }
 
+type RoasAlert = {
+  store: string
+  recentRoas: number
+  baselineRoas: number
+  breakevenRoas: number
+  drop: number
+  severity: "loss" | "thin" | "ok"
+}
+
+// loss = last 3 days below break-even ROAS (losing money)
+// thin = above break-even but less than 20% headroom
+// ok   = dropped, but still comfortably profitable
+const ALERT_TONE: Record<RoasAlert["severity"], { color: string; bg: string; border: string; label: string }> = {
+  loss: { color: "var(--red)", bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.25)", label: "below break-even, losing money" },
+  thin: { color: "var(--orange)", bg: "rgba(212,144,58,0.1)", border: "rgba(212,144,58,0.25)", label: "close to break-even" },
+  ok: { color: "#94a3b8", bg: "rgba(148,163,184,0.07)", border: "rgba(148,163,184,0.18)", label: "still profitable" },
+}
+
 export default function Dashboard() {
   const [store, setStore] = useState<StoreName>("Overall")
   const [preset, setPreset] = useState("last_30d")
@@ -387,8 +405,9 @@ export default function Dashboard() {
     const inRecent = (d: string) => d >= recentFrom && d < todayStr
     const inBaseline = (d: string) => d >= baselineFrom && d < recentFrom
 
-    const alerts: { store: string; recentRoas: number; baselineRoas: number; drop: number }[] = []
+    const alerts: RoasAlert[] = []
     const storeNames = store === "Overall" ? STORES.filter((s) => s !== "Overall") : [store]
+    const inWindow = (d: string) => d >= baselineFrom && d < todayStr
     for (const s of storeNames) {
       const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + pick(r), 0)
       const rRev = sum(revenueEur.filter((r) => r.store === s && inRecent(r.date)), (r) => r.revenue)
@@ -398,12 +417,49 @@ export default function Dashboard() {
       if (rSpend < MIN_RECENT_SPEND || bSpend <= 0) continue
       const recentRoas = rRev / rSpend
       const baselineRoas = bRev / bSpend
-      if (baselineRoas > 0 && recentRoas < baselineRoas * 0.7) {
-        alerts.push({ store: s, recentRoas, baselineRoas, drop: ((baselineRoas - recentRoas) / baselineRoas) * 100 })
-      }
+      if (!(baselineRoas > 0 && recentRoas < baselineRoas * 0.7)) continue
+
+      // Store break-even ROAS over the whole 10-day window (more stable than 3 days):
+      // COGS % (actual, else estimated per order) + transaction fee rate.
+      const wRev = revenueEur.filter((r) => r.store === s && inWindow(r.date))
+      const wCogs = cogsEur.filter((r) => r.store === s && inWindow(r.date))
+      const cogsDays = new Set(wCogs.map((r) => r.date))
+      const revTotal = sum(wRev, (r) => r.revenue)
+      const cogsTotal =
+        sum(wCogs, (r) => r.cogs) +
+        sum(wRev.filter((r) => !cogsDays.has(r.date) && AVG_COGS_PER_ORDER[s]), (r) => r.orders * estCogsPerOrderEur(s, r.date))
+      const margin = (revTotal > 0 ? cogsTotal / revTotal : 0) + (TRANSACTION_FEE_RATE[s] || 0.035)
+      const breakevenRoas = margin < 1 ? 1 / (1 - margin) : Infinity
+
+      const severity: RoasAlert["severity"] =
+        recentRoas < breakevenRoas ? "loss" : recentRoas < breakevenRoas * 1.2 ? "thin" : "ok"
+      alerts.push({
+        store: s, recentRoas, baselineRoas, breakevenRoas, severity,
+        drop: ((baselineRoas - recentRoas) / baselineRoas) * 100,
+      })
     }
-    return alerts
-  }, [revenueEur, spendEur, store, todayStr])
+    const rank = { loss: 0, thin: 1, ok: 2 }
+    return alerts.sort((a, b) => rank[a.severity] - rank[b.severity])
+  }, [revenueEur, spendEur, cogsEur, store, todayStr, rates])
+
+  // Dismissed alerts stay hidden for the rest of the day; they come back tomorrow if the drop is still there.
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])
+  const dismissKey = `roas-alerts-dismissed-${todayStr}`
+  useEffect(() => {
+    try {
+      setDismissedAlerts(JSON.parse(localStorage.getItem(dismissKey) || "[]"))
+    } catch {
+      setDismissedAlerts([])
+    }
+  }, [dismissKey])
+  const dismissAlert = (s: string) => {
+    const next = [...dismissedAlerts, s]
+    setDismissedAlerts(next)
+    try {
+      localStorage.setItem(dismissKey, JSON.stringify(next))
+    } catch {}
+  }
+  const visibleAlerts = roasAlerts.filter((a) => !dismissedAlerts.includes(a.store))
 
   const dailyPnL = useMemo((): DailyPnL[] => {
     return dailyBriefing.map((row) => ({
@@ -493,22 +549,38 @@ export default function Dashboard() {
             <KPICards data={kpi} prevData={showComparison ? prevKpi : null} includeTxnFees={includeTxnFees} />
           </div>
 
-          {roasAlerts.length > 0 && (
+          {visibleAlerts.length > 0 && (
             <div className="space-y-2 mb-4">
-              {roasAlerts.map((a) => (
-                <div
-                  key={a.store}
-                  className="rounded-xl px-4 py-2.5 flex items-center gap-2"
-                  style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
-                  </svg>
-                  <span className="text-[11px] font-medium" style={{ color: "var(--red)" }}>
-                    {a.store} ROAS down {a.drop.toFixed(0)}% — last 3 days {a.recentRoas.toFixed(2)}x vs {a.baselineRoas.toFixed(2)}x the 7 days before
-                  </span>
-                </div>
-              ))}
+              {visibleAlerts.map((a) => {
+                const tone = ALERT_TONE[a.severity]
+                const be = Number.isFinite(a.breakevenRoas) ? `${a.breakevenRoas.toFixed(2)}x` : "n/a"
+                return (
+                  <div
+                    key={a.store}
+                    className="rounded-xl pl-4 pr-2 py-2 flex items-center gap-2"
+                    style={{ background: tone.bg, border: `1px solid ${tone.border}` }}
+                  >
+                    <svg className="shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tone.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" />
+                    </svg>
+                    <span className="text-[11px] font-medium flex-1" style={{ color: tone.color }}>
+                      {a.store} ROAS down {a.drop.toFixed(0)}% — last 3 days {a.recentRoas.toFixed(2)}x vs {a.baselineRoas.toFixed(2)}x the 7 days before
+                      <span style={{ opacity: 0.75 }}> · {tone.label} (break-even {be})</span>
+                    </span>
+                    <button
+                      onClick={() => dismissAlert(a.store)}
+                      aria-label={`Dismiss ${a.store} alert`}
+                      title="Hide for today"
+                      className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-opacity opacity-60 hover:opacity-100"
+                      style={{ color: tone.color }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
 
