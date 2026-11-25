@@ -173,17 +173,117 @@ export function analyseRoasDrop(p: Props) {
 
   const isGoogle = GOOGLE_STORES.includes(p.store)
   const drop = B.roas > 0 ? (1 - R.roas / B.roas) * 100 : 0
-  const rule = isGoogle
-    ? drop >= 50
-      ? "Google Ads SOP (OAK × Ascend): a 50%+ dip means scaling the budget back 15%, and checking product exclusions ($25 spent + ROAS < 1.8)."
-      : "Google Ads SOP (OAK × Ascend): don't raise the budget until there are 2–3 days in a row on target ROAS (2.5), and check product exclusions ($25 spent + ROAS < 1.8)."
-    : "Simo's scaling rule: only double the budget when spend is over $60 and total, today and yesterday net profit are all over 20%. Below that, don't scale. Use the per-product kill rules for tests."
+  const belowBe = Number.isFinite(be) && R.roas < be
 
-  return { B, R, accountRows, days, why, status, rule }
+  // ── What to do: each step = action + the data that triggers it + where the rule comes from.
+  const fixes: Fix[] = []
+  const zeroOrderDays = days.filter((d) => d.recent && d.spend >= 30 && d.orders === 0)
+  const cpaUp = Number.isFinite(B.cpa) && Number.isFinite(R.cpa) && R.cpa > B.cpa * 1.15
+  const aovDown = B.aov > 0 && R.aov > 0 && R.aov < B.aov * 0.85
+
+  if (missingRecent.length > 0) {
+    fixes.push({
+      action: `First check whether ads ran on ${missingRecent.join(", ")}.`,
+      because: `There are no spend or revenue rows for ${missingRecent.length === 1 ? "that day" : "those days"}. If ads did run, the data hasn't synced yet and today's numbers are off, so wait for the next refresh before changing budgets.`,
+      source: "Data check (dashboard, not an SOP rule)",
+    })
+  }
+
+  if (isGoogle) {
+    if (drop >= 50) {
+      fixes.push({
+        action: "Scale the PMax budget back 15%.",
+        because: `ROAS fell ${drop.toFixed(0)}% (${B.roas.toFixed(2)}x → ${R.roas.toFixed(2)}x), which is past the 50% dip line.`,
+        source: "OAK × Ascend Google Ads SOP, step 4",
+      })
+    } else {
+      fixes.push({
+        action: "Don't raise the budget. Hold it until there are 2–3 days in a row on target ROAS (2.5).",
+        because: `Last 3 days are at ${R.roas.toFixed(2)}x${R.roas < 2.5 ? ", below the 2.5 target" : ""}.`,
+        source: "OAK × Ascend Google Ads SOP, step 4",
+      })
+    }
+    if (belowBe || cpaUp) {
+      fixes.push({
+        action:
+          "Run product exclusions: Google Ads → Products → last 30 days (and last 7), filter cost ≥ $25 and ROAS < 1.8, exclude those Item IDs in Listing groups. Also exclude CPC > $1.50 after $5 spent, unless it sells profitably. Products at 1.8–2.2: optimise first.",
+        because: belowBe
+          ? `The store is below break-even (${R.roas.toFixed(2)}x vs ${be.toFixed(2)}x), so some products are spending without enough sales.`
+          : `Cost per order rose from ${eur(B.cpa)} to ${eur(R.cpa)}.`,
+        source: "OAK × Ascend Google Ads SOP, step 5",
+      })
+      fixes.push({
+        action: "Check the store's average CPC in Google Ads. Above ~$1.50 (or above €1 store-wide for 7 days): don't scale, and talk to the coach about a domain switch.",
+        because: `Cost per order went ${Number.isFinite(B.cpa) ? eur(B.cpa) : "n/a"} → ${Number.isFinite(R.cpa) ? eur(R.cpa) : "n/a"}. The dashboard doesn't have CPC, so this needs a look in Google Ads.`,
+        source: "OAK SOP step 3 + Ascend Drafting SOP (store-wide CPC exception)",
+      })
+      fixes.push({
+        action: "Run drafting hard rules 1–5 on the store's products with the Adgain numbers (max 50 drafts per day).",
+        because: "Products that never sell keep eating spend in the shopping feed even after exclusions.",
+        source: "Ascend Drafting SOP, rules 1–5",
+      })
+    }
+    fixes.push({
+      action: "Re-check the excluded products list and remove exclusions that are back above target with sales.",
+      because: "Google attributes some sales days late, so a product excluded earlier may now be profitable.",
+      source: "OAK × Ascend Google Ads SOP, step 6",
+    })
+  } else {
+    if (belowBe) {
+      fixes.push({
+        action: "Go through every live test and apply the kill rules: $10 spent + CPC > $1 + 0 add-to-carts · $20 + 0 add-to-carts · $30 + 0 sales · $60 + fewer than 2 sales → turn it off.",
+        because: `The store is below break-even (${R.roas.toFixed(2)}x vs ${be.toFixed(2)}x) and cost per order is ${Number.isFinite(R.cpa) ? eur(R.cpa) : "n/a"}.`,
+        source: "Simo kill rules (your chosen setup)",
+      })
+    }
+    if (zeroOrderDays.length > 0) {
+      fixes.push({
+        action: `Find which campaign spent the money on ${zeroOrderDays.map((d) => d.date.slice(5)).join(", ")} in Ads Manager and check it against the $30 + 0 sales kill line.`,
+        because: zeroOrderDays.map((d) => `${d.date.slice(5)}: ${eur(d.spend)} spent, 0 orders`).join("; ") + ".",
+        source: "Simo kill rules ($30 + 0 sales)",
+      })
+    }
+    fixes.push({
+      action: belowBe
+        ? "Don't double any budget tonight."
+        : "Hold budgets. Only double at midnight when all 4 gates pass, then compare over 72h.",
+      because: belowBe
+        ? "Net profit is negative over the last 3 days, so the scale gates (net profit > 20% on total, today and yesterday) can't pass."
+        : `Still above break-even (${R.roas.toFixed(2)}x vs ${Number.isFinite(be) ? be.toFixed(2) + "x" : "n/a"}), but ROAS dropped ${drop.toFixed(0)}%.`,
+      source: "Simo scaling: spend > $60, total, today and yesterday net profit > 20% → double at midnight",
+    })
+    if (belowBe) {
+      fixes.push({
+        action: "Replace what you kill with new tests set up the standard way: 1 Sales campaign per product, $30/day CBO, 1 ad set, 2 creatives, Purchase event, broad, launch next day 8:30am.",
+        because: "Killing losers alone lowers spend; new tests are how the store finds the next winner.",
+        source: "Simo test setup (your chosen setup)",
+      })
+    }
+  }
+
+  if (aovDown) {
+    fixes.push({
+      action: "Check which products sold in the last 3 days vs the week before (Product Performance page).",
+      because: `Average order value fell ${eur(B.aov)} → ${eur(R.aov)}, so cheaper products or fewer multi-item orders made up the sales.`,
+      source: "Data check (not an SOP rule)",
+    })
+  }
+
+  if (r.orders > 0 && r.orders < 6) {
+    fixes.push({
+      action: "Look again after tomorrow's refresh before making bigger cuts beyond the rules above.",
+      because: `Only ${r.orders} order${r.orders === 1 ? "" : "s"} in ${p.recentDays} days. One more average order (${eur(R.aov)}) would lift the ${p.recentDays}-day ROAS by about +${r.spend > 0 ? (R.aov / r.spend).toFixed(2) : "?"}x.`,
+      source: "Sample size (dashboard, not an SOP rule)",
+    })
+  }
+
+  return { B, R, accountRows, days, why, status, fixes }
 }
 
+type Fix = { action: string; because: string; source: string }
+
 export function RoasAlertDetail(props: Props & { color: string }) {
-  const { B, R, accountRows, days, why, status, rule } = analyseRoasDrop(props)
+  const { B, R, accountRows, days, why, status, fixes } = analyseRoasDrop(props)
   const be = props.breakevenRoas
 
   const metric = (label: string, before: string, recent: string, change: number | null, good: "up" | "down" | "neutral") => {
@@ -214,9 +314,31 @@ export function RoasAlertDetail(props: Props & { color: string }) {
         </ul>
         <div className="mt-2.5 pt-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           <div>{status}</div>
-          <div className="mt-1" style={{ color: "var(--text-dim)" }}>{rule}</div>
         </div>
       </div>
+
+      {fixes.length > 0 && (
+        <div className="rounded-lg p-3 mb-3" style={{ background: "rgba(52,211,153,0.05)", border: "1px solid rgba(52,211,153,0.15)" }}>
+          <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--green)" }}>What to do, in this order</div>
+          <ol className="space-y-2">
+            {fixes.map((f, i) => (
+              <li key={i} className="flex gap-2.5">
+                <span
+                  className="shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold mt-[1px]"
+                  style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }}
+                >
+                  {i + 1}
+                </span>
+                <div>
+                  <div className="font-medium">{f.action}</div>
+                  <div className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Because: {f.because}</div>
+                  <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>Rule: {f.source}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.03)" }}>
