@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchShopifyRevenueAndRefunds, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSpend } from "@/lib/windsor"
-import { fetchShopifyRevenueDirect } from "@/lib/shopify-direct"
+import { fetchShopifyDirect } from "@/lib/shopify-direct"
 import { fetchShopifySessions, hasAnySessionsCredentials } from "@/lib/shopify-sessions"
 import { fetchCogs } from "@/lib/shipgoods"
 import { estimateGoogleStoreCogs } from "@/lib/launch-sheet-cogs"
@@ -23,14 +23,37 @@ export async function GET(req: NextRequest) {
 
     const errors: string[] = []
 
-    // Revenue stays on Windsor; Shopify tokens are only used for sessions (CVR)
-    // unless direct revenue is switched on explicitly.
-    // Refunds always come from Windsor (refund rows of the Shopify connector).
-    const useDirectShopify = process.env.USE_SHOPIFY_DIRECT_REVENUE === "1"
+    // Revenue, orders and refunds come straight from each store's Shopify API (no Windsor
+    // needed). A store that fails falls back to Windsor's Shopify data for that store.
+    // USE_WINDSOR_REVENUE=1 switches everything back to Windsor.
+    const useWindsorRevenue = process.env.USE_WINDSOR_REVENUE === "1"
     const revenueFetcher = async (f: string, t: string) => {
-      if (!useDirectShopify) return fetchShopifyRevenueAndRefunds(f, t)
-      const [direct, windsor] = await Promise.all([fetchShopifyRevenueDirect(f, t), fetchShopifyRevenueAndRefunds(f, t)])
-      return { revenue: direct, refunds: windsor.refunds }
+      if (useWindsorRevenue) {
+        const w = await fetchShopifyRevenueAndRefunds(f, t)
+        return { ...w, stores: null as string[] | null, notes: [] as string[] }
+      }
+      const d = await fetchShopifyDirect(f, t)
+      const notes = d.failed.map((x) => `Shopify ${x.store}: ${x.error}`)
+      let revenue = d.revenue
+      let refunds = d.refunds
+      const stores = [...d.okStores]
+      if (d.failed.length) {
+        const failed = new Set(d.failed.map((x) => x.store))
+        try {
+          const w = await fetchShopifyRevenueAndRefunds(f, t)
+          const wRev = w.revenue.filter((r) => failed.has(r.store))
+          const wRef = w.refunds.filter((r) => failed.has(r.store))
+          revenue = [...revenue, ...wRev]
+          refunds = [...refunds, ...wRef]
+          // Only replace a failed store's rows when Windsor actually has data for it
+          for (const s of Array.from(failed)) if (wRev.some((r) => r.store === s) || wRef.some((r) => r.store === s)) stores.push(s)
+          notes.push(`Windsor used for ${Array.from(failed).join(", ")}`)
+        } catch (e) {
+          notes.push(`Windsor fallback: ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
+      if (!stores.length) throw new Error(notes.join("; ") || "no store returned data")
+      return { revenue, refunds, stores, notes }
     }
 
     const [revenueResult, metaResult, tiktokResult, googleResult, cogsResult, sessionsResult] = await Promise.allSettled([
@@ -42,8 +65,11 @@ export async function GET(req: NextRequest) {
       hasAnySessionsCredentials() ? fetchShopifySessions(from, today) : Promise.resolve({ rows: [], errors: [] }),
     ])
 
-    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value.revenue : (errors.push(`Shopify${useDirectShopify ? " Direct" : ""}: ${revenueResult.reason}`), [])
+    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value.revenue : (errors.push(`Shopify revenue: ${revenueResult.reason}`), [])
     const shopifyRefunds = revenueResult.status === "fulfilled" ? revenueResult.value.refunds : null
+    // Stores whose revenue/refunds were read this run (null = all, when Windsor is the source)
+    const revenueStores = revenueResult.status === "fulfilled" ? revenueResult.value.stores : null
+    if (revenueResult.status === "fulfilled") errors.push(...revenueResult.value.notes)
     const metaSpend = metaResult.status === "fulfilled" ? metaResult.value : (errors.push(`Meta: ${metaResult.reason}`), [])
     const tiktokSpend = tiktokResult.status === "fulfilled" ? tiktokResult.value : (errors.push(`TikTok: ${tiktokResult.reason}`), [])
     const googleSpend = googleResult.status === "fulfilled" ? googleResult.value : (errors.push(`Google Ads: ${googleResult.reason}`), [])
@@ -51,8 +77,15 @@ export async function GET(req: NextRequest) {
 
     const spend = [...metaSpend, ...tiktokSpend, ...googleSpend]
 
+    if (revenueStores?.length) {
+      // Shopify dates follow each store's timezone; clear the window first so a day that now has
+      // no orders doesn't keep an old value from the previous source
+      const { error: delErr } = await db.from("daily_revenue").delete().in("store", revenueStores).gte("date", from).lte("date", today)
+      if (delErr) errors.push(`Revenue clear: ${delErr.message}`)
+    }
     if (revenue.length > 0) {
-      await db.from("daily_revenue").upsert(revenue, { onConflict: "date,store" })
+      const { error: revErr } = await db.from("daily_revenue").upsert(revenue, { onConflict: "date,store" })
+      if (revErr) errors.push(`Revenue save: ${revErr.message}`)
     }
     if (spend.length > 0) {
       await db.from("daily_spend").upsert(spend, { onConflict: "date,channel,account" })
@@ -66,7 +99,9 @@ export async function GET(req: NextRequest) {
     // Manual refunds are left alone.
     let refundRows = 0
     if (shopifyRefunds) {
-      const { error: delErr } = await db.from("refunds").delete().eq("source", "shopify").gte("date", from).lte("date", today)
+      let del = db.from("refunds").delete().eq("source", "shopify").gte("date", from).lte("date", today)
+      if (revenueStores) del = del.in("store", revenueStores)
+      const { error: delErr } = await del
       if (delErr) {
         errors.push(`Refunds delete: ${delErr.message}`)
       } else if (shopifyRefunds.length > 0) {
