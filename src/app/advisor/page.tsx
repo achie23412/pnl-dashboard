@@ -212,7 +212,7 @@ export default function AdvisorPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setDismissed((prev) => new Set([...prev, s.id]))}
+                  onClick={() => setDismissed((prev) => { const next = new Set(Array.from(prev)); next.add(s.id); return next })}
                   className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110"
                   style={{
                     background: "rgba(255,255,255,0.05)",
