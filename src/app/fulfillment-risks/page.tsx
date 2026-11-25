@@ -4,6 +4,20 @@ import { PageShell } from "@/components/PageShell"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
+interface OrderRow {
+  order_id: string
+  order_number: string
+  store: string
+  status: string
+  problem: string
+  amount: number
+  currency: string
+  created_at: string
+  updated_at: string
+  age_hours: number
+  trackings: { tracking_number: string; carrier: string; tracking_url: string; item_count: number }[]
+}
+
 interface RiskProduct {
   name: string
   variant: string
@@ -40,6 +54,8 @@ function fmtDay(iso: string) {
 export default function FulfillmentRisksPage() {
   const [products, setProducts] = useState<RiskProduct[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [orders, setOrders] = useState<OrderRow[]>([])
+  const [expandedStore, setExpandedStore] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium">("all")
@@ -53,6 +69,7 @@ export default function FulfillmentRisksPage() {
       if (!res.ok) throw new Error(data.error || "Failed")
       setProducts(data.products_at_risk || [])
       setSummary(data.summary)
+      setOrders(data.orders || [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -163,8 +180,18 @@ export default function FulfillmentRisksPage() {
                     <tr key={store} style={ROW_BORDER}>
                       <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{store}</td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{s.total}</td>
-                      <td className={`${TD} text-right tabular-nums`} style={{ color: s.issues > 0 ? "var(--red)" : "var(--text-muted)" }}>
-                        {s.issues}
+                      <td className={`${TD} text-right tabular-nums`}>
+                        {s.issues > 0 ? (
+                          <button
+                            onClick={() => setExpandedStore(expandedStore === store ? null : store)}
+                            className="underline decoration-dotted underline-offset-2 hover:decoration-solid transition-colors cursor-pointer"
+                            style={{ color: "var(--red)", background: "none", border: "none", font: "inherit" }}
+                          >
+                            {s.issues}
+                          </button>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)" }}>0</span>
+                        )}
                       </td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--green)" }}>{s.shipped}</td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: rate > 0.1 ? "var(--red)" : "var(--text-muted)" }}>
@@ -174,6 +201,58 @@ export default function FulfillmentRisksPage() {
                         <Badge tone={tone as "red" | "amber" | "green"}>{health}</Badge>
                       </td>
                     </tr>
+                    {expandedStore === store && (() => {
+                      const storeIssues = orders.filter(
+                        (o) => o.store === store && (o.status === "address_error" || o.status === "waiting_process")
+                      )
+                      return (
+                        <tr>
+                          <td colSpan={6} className="px-3 pb-3">
+                            <div className="rounded-lg p-3 mt-1" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                              <div className="text-[10px] font-medium mb-2" style={{ color: "var(--text-muted)" }}>
+                                {storeIssues.length} issue{storeIssues.length !== 1 ? "s" : ""} for {store}
+                              </div>
+                              {storeIssues.length === 0 ? (
+                                <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>No issue details available.</div>
+                              ) : (
+                                <table className="w-full text-[10px]">
+                                  <thead>
+                                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                                      <th className="text-left py-1 px-2 font-medium" style={{ color: "var(--text-dim)" }}>Order</th>
+                                      <th className="text-left py-1 px-2 font-medium" style={{ color: "var(--text-dim)" }}>Problem</th>
+                                      <th className="text-right py-1 px-2 font-medium" style={{ color: "var(--text-dim)" }}>Amount</th>
+                                      <th className="text-right py-1 px-2 font-medium" style={{ color: "var(--text-dim)" }}>Age</th>
+                                      <th className="text-left py-1 px-2 font-medium" style={{ color: "var(--text-dim)" }}>Tracking</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {storeIssues.map((o) => (
+                                      <tr key={o.order_id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                                        <td className="py-1.5 px-2 font-mono" style={{ color: "var(--text)" }}>#{o.order_number}</td>
+                                        <td className="py-1.5 px-2" style={{ color: o.status === "address_error" ? "var(--red)" : "var(--orange)" }}>
+                                          {o.problem}
+                                        </td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums" style={{ color: "var(--text)" }}>
+                                          {o.currency === "USD" ? "$" : o.currency === "GBP" ? "£" : "€"}{Math.abs(o.amount).toFixed(2)}
+                                        </td>
+                                        <td className="py-1.5 px-2 text-right tabular-nums" style={{ color: o.age_hours > 72 ? "var(--red)" : "var(--text-muted)" }}>
+                                          {o.age_hours < 24 ? `${o.age_hours}h` : `${Math.floor(o.age_hours / 24)}d`}
+                                        </td>
+                                        <td className="py-1.5 px-2" style={{ color: "var(--text-muted)" }}>
+                                          {o.trackings.length > 0
+                                            ? o.trackings.map((t) => t.carrier).join(", ")
+                                            : "—"}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })()}
                   )
                 })}
             </tbody>
