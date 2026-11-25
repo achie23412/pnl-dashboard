@@ -242,7 +242,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/season-board": "season seasonal calendar trends",
 }
 
-const DONE_PAGES = new Set(["/", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings"])
+const DONE_PAGES = new Set(["/", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -256,26 +256,31 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "FRONT END",
     items: [
-      { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
-      { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
-      { href: "/opportunities", label: "Product Opportunities", icon: <ProductsIcon /> },
-      { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
-      { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
-      { href: "/listings", label: "Listings", icon: <ListIcon /> },
-      { href: "/product-alerts", label: "Product Alerts", icon: <AlertIcon /> },
-      { href: "/gmc-scanner", label: "GMC Pre-Launch Scanner", icon: <ScannerIcon /> },
-      { href: "/season-board", label: "Season Board", icon: <SeasonIcon /> },
+      // In the order you work: find → list → check → measure → act.
+      // 1. Find products
       { href: "/competitors", label: "Competitor Tracker", icon: <CompetitorIcon /> },
+      { href: "/season-board", label: "Season Board", icon: <SeasonIcon /> },
+      { href: "/opportunities", label: "Product Opportunities", icon: <ProductsIcon /> },
+      // 2. List them
+      { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
+      { href: "/gmc-scanner", label: "GMC Pre-Launch Scanner", icon: <ScannerIcon /> },
+      { href: "/listings", label: "Listings", icon: <ListIcon /> },
+      // 3. Measure and act on what's live
+      { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
+      { href: "/product-alerts", label: "Product Alerts", icon: <AlertIcon /> },
+      { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
+      { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
     ],
   },
   {
     label: "FINANCE",
     items: [
+      // Overview first, then the money in/out, then the cost details.
       { href: "/profit-loss", label: "Profit & Loss", icon: <PLIcon /> },
-      { href: "/refund-report", label: "Refund Report", icon: <RefundReportIcon /> },
       { href: "/cashflow", label: "Cashflow & Balance", icon: <CashflowIcon /> },
-      { href: "/cogs-invoices", label: "COGS Invoices", icon: <InvoiceIcon /> },
       { href: "/supplier-costs", label: "Supplier Costs", icon: <SupplierCostIcon /> },
+      { href: "/cogs-invoices", label: "COGS Invoices", icon: <InvoiceIcon /> },
+      { href: "/refund-report", label: "Refund Report", icon: <RefundReportIcon /> },
     ],
   },
   {
