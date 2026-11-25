@@ -7,6 +7,9 @@ import {
   type OrderCostItem,
   type SGProduct,
 } from "@/lib/shipgoods"
+import { fetchQuotes, findQuote, isOverQuote, type Quote } from "@/lib/quote-sheet"
+import { STORE_SHEET_TAB } from "@/lib/constants"
+import { getServiceClient } from "@/lib/supabase"
 
 export const maxDuration = 30
 
@@ -20,11 +23,26 @@ export async function GET() {
     const thirtyAgo = new Date(now.getTime() - 30 * 86400000)
     const sevenAgo = new Date(now.getTime() - 7 * 86400000)
 
-    const [costItems, products, summary] = await Promise.all([
+    const sheetStores = Object.keys(STORE_SHEET_TAB)
+    const [costItems, products, summary, quoteLists, ownRows] = await Promise.all([
       fetchOrderCostItems(fmt(thirtyAgo), fmt(now)),
       fetchProducts(),
       fetchSummary(),
+      Promise.all(sheetStores.map((st) => fetchQuotes(st).catch(() => [] as Quote[]))),
+      // Shopify product id -> handle (from the daily catalog scan), to match quotes by STORE LINK
+      getServiceClient().from("own_products").select("store,shopify_product_id,handle").then((r) => r.data || [], () => []),
     ])
+    const quotesByStore = new Map<string, Quote[]>(sheetStores.map((st, i) => [st, quoteLists[i]]))
+    const handleOf = new Map<string, string>((ownRows as { store: string; shopify_product_id: string; handle: string | null }[]).filter((r) => r.handle).map((r) => [`${r.store}:${r.shopify_product_id}`, String(r.handle).toLowerCase()]))
+    const quoteFor = (store: string, productId: string, title: string): Quote | null => {
+      const list = quotesByStore.get(store) || []
+      const h = handleOf.get(`${store}:${productId}`)
+      if (h) {
+        const byHandle = list.find((q) => q.handle === h)
+        if (byHandle) return byHandle
+      }
+      return findQuote(list, title)
+    }
 
     // Build product quote map (current catalog prices from ShipGoods)
     const quoteMap = new Map<string, { unit_price: number; countries: string[] }>()
@@ -59,13 +77,21 @@ export async function GET() {
       amount: number
       product_total: number
       discount: number
-      items: OrderCostItem["items"]
+      items: (OrderCostItem["items"][number] & { quoted_unit: number | null })[]
       has_price_discrepancy: boolean
+      quoted_total: number | null // sum of quoted COG x qty for lines with a quote
+      quoted_lines: number
+      charged_quoted_lines: number // what ShipGoods charged for those same lines
+      quote_status: "over" | "under" | "ok" | "partial" | "no_quote" | "no_sheet"
     }> = []
 
     for (const order of costItems) {
       const store = mapStoreName(order.store_name)
       let hasDiscrepancy = false
+      let quotedTotal = 0
+      let chargedQuoted = 0
+      let quotedLines = 0
+      const lines: (OrderCostItem["items"][number] & { quoted_unit: number | null })[] = []
 
       for (const li of order.items) {
         const pKey = `${li.title}::${li.variant_title}::${store}`
@@ -93,14 +119,23 @@ export async function GET() {
           existing.last_order_date = order.bill_date
         }
 
+        // Our quote (launch sheet COG $) first; ShipGoods' own catalog price as fallback.
+        const sheetQuote = quoteFor(store, String(li.product_id), li.title)
         const qKey = `${li.product_id}::${li.variant_id}`
-        const quote = quoteMap.get(qKey)
-        if (quote) {
-          existing.quote_price = quote.unit_price
-          if (Math.abs(li.unit_cost - quote.unit_price) > 0.50) {
-            hasDiscrepancy = true
-          }
+        const catalog = quoteMap.get(qKey)
+        const quotedUnit = sheetQuote ? sheetQuote.cog_usd : null
+        if (quotedUnit != null) {
+          existing.quote_price = quotedUnit
+          quotedTotal += quotedUnit * li.quantity
+          chargedQuoted += li.unit_cost * li.quantity
+          quotedLines++
+          // Only charging MORE than quoted is a problem; less is in our favour.
+          if (isOverQuote(li.unit_cost, quotedUnit)) hasDiscrepancy = true
+        } else if (catalog) {
+          existing.quote_price = existing.quote_price ?? catalog.unit_price
+          if (isOverQuote(li.unit_cost, catalog.unit_price)) hasDiscrepancy = true
         }
+        lines.push({ ...li, quoted_unit: quotedUnit })
 
         productMap.set(pKey, existing)
       }
@@ -114,8 +149,22 @@ export async function GET() {
         amount: Math.abs(order.amount),
         product_total: order.product_total,
         discount: order.discount,
-        items: order.items,
+        items: lines,
         has_price_discrepancy: hasDiscrepancy,
+        quoted_total: quotedLines ? Math.round(quotedTotal * 100) / 100 : null,
+        quoted_lines: quotedLines,
+        charged_quoted_lines: Math.round(chargedQuoted * 100) / 100,
+        quote_status: !STORE_SHEET_TAB[store]
+          ? "no_sheet"
+          : quotedLines === 0
+            ? "no_quote"
+            : hasDiscrepancy
+              ? "over"
+              : quotedLines < order.items.length
+                ? "partial"
+                : chargedQuoted < quotedTotal - 0.5
+                  ? "under"
+                  : "ok",
       })
     }
 
