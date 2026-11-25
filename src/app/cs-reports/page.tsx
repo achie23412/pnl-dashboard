@@ -221,9 +221,10 @@ export default function CSReportsPage() {
               {weeks.map((w) => (
                 <div key={w.label} className="flex-1 flex flex-col items-center gap-1">
                   <span className="text-[9px] tabular-nums" style={{ color: "var(--text-muted)" }}>{w.n || ""}</span>
-                  <div className="w-full rounded-t flex flex-col justify-end overflow-hidden" style={{ height: `${(w.n / maxWeek) * 70}px`, background: "rgba(239,68,68,0.35)" }}>
-                    <div style={{ height: `${w.n ? (w.unlogged / w.n) * 100 : 0}%`, background: "rgba(148,163,184,0.45)" }} />
-                    <div style={{ height: `${w.n ? (w.kept / w.n) * 100 : 0}%`, background: "rgba(74,222,128,0.6)" }} />
+                  <div className="w-full rounded-t flex flex-col justify-end overflow-hidden" style={{ height: `${(w.n / maxWeek) * 70}px` }}>
+                    <div style={{ height: `${w.n ? (w.unlogged / w.n) * 100 : 0}%`, background: "#64748b" }} />
+                    <div style={{ height: `${w.n ? ((w.n - w.unlogged - w.kept) / w.n) * 100 : 0}%`, background: "#b4505a" }} />
+                    <div style={{ height: `${w.n ? (w.kept / w.n) * 100 : 0}%`, background: "#3fae6a" }} />
                   </div>
                   <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{w.label}</span>
                 </div>
