@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import { SESSION_COOKIE, verifySession } from "@/lib/session"
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
+  // Cron and competitor sync check CRON_SECRET themselves; login/me must work before logging in
   if (
     pathname.startsWith("/api/cron") ||
     pathname.startsWith("/api/auth") ||
@@ -14,8 +16,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  const session = req.cookies.get("pnl_session")
-  if (!session?.value) {
+  // The session must carry a valid signature and not be expired; the cookie existing isn't enough
+  const role = await verifySession(req.cookies.get(SESSION_COOKIE)?.value)
+  if (!role) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not logged in" }, { status: 401 })
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
