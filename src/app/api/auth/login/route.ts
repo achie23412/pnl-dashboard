@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import crypto from "crypto"
+import { ROLE_COOKIE, roleCookieValue } from "@/lib/auth-role"
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json()
@@ -20,6 +21,14 @@ export async function POST(req: NextRequest) {
   const token = crypto.randomBytes(32).toString("hex")
   const cookieStore = await cookies()
   cookieStore.set("pnl_session", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  })
+
+  cookieStore.set(ROLE_COOKIE, roleCookieValue(isOwner ? "owner" : "coach"), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

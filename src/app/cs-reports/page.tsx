@@ -131,7 +131,7 @@ export default function CSReportsPage() {
     const eur = (n: number, c: string, d: string) => (rates ? toEur(n, asCur(c), d, rates) : n)
     const list: Case[] = [
       ...refunds.map((r) => ({
-        kind: r.refund_type as "full" | "partial",
+        kind: (r.refund_type === "partial" ? "partial" : "full") as "full" | "partial",
         date: r.refund_date,
         store: r.store,
         reason: r.reason,

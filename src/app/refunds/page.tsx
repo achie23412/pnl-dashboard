@@ -10,7 +10,26 @@ import { SingleDatePicker } from "@/components/SingleDatePicker"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
 import { SHOPIFY_STORES } from "@/lib/constants"
 import { STORE_CURRENCY } from "@/lib/currency"
-import { REFUND_REASONS, GOODWILL_LADDER, reasonLabel, money, type CsRefund, type OrderLookup, type OrderItem } from "@/lib/cs-log"
+import { REFUND_REASONS, REFUND_TYPES, GOODWILL_LADDER, reasonLabel, money, type CsRefund, type OrderLookup, type OrderItem } from "@/lib/cs-log"
+import { RefundDetail } from "@/components/RefundDetail"
+
+type RType = CsRefund["refund_type"]
+const isFull = (t: string) => t !== "partial"
+const typeLabel = (t: string) => (t === "full_after_return" ? "Full after return" : t === "full" ? "Full" : "Partial")
+const APPROVAL = {
+  not_needed: null,
+  waiting: { tone: "amber", label: "Waiting for Owner" },
+  flagged: { tone: "red", label: "Threat: flagged" },
+  approved: { tone: "green", label: "Approved" },
+  rejected: { tone: "grey", label: "Rejected" },
+} as const
+const SHOPIFY = {
+  checking: { tone: "grey", label: "Checking…" },
+  refunded: { tone: "green", label: "Refunded" },
+  partial: { tone: "amber", label: "Partly refunded" },
+  not_refunded: { tone: "red", label: "Not refunded in Shopify" },
+  no_order: { tone: "grey", label: "No order link" },
+} as const
 
 const STORES = Object.keys(SHOPIFY_STORES)
 const inputCls = "w-full rounded-lg px-3 py-1.5 text-[11px] outline-none"
@@ -45,7 +64,10 @@ export default function RefundsPage() {
   const [manualItem, setManualItem] = useState("")
   const [finding, setFinding] = useState(false)
   const [findError, setFindError] = useState<string | null>(null)
-  const [type, setType] = useState<"full" | "partial">("partial")
+  const [type, setType] = useState<RType>("partial")
+  const [threat, setThreat] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
   const [reason, setReason] = useState("")
   const [note, setNote] = useState("")
   const [pct, setPct] = useState("100")
@@ -89,14 +111,36 @@ export default function RefundsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    load()
+  const runCheck = useCallback(async () => {
+    setChecking(true)
+    await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
     try {
-      setLoggedBy(localStorage.getItem("cs:name") || "")
+      localStorage.setItem("refunds:checked", String(Date.now()))
     } catch {
       // optional
     }
+    setChecking(false)
+    load()
   }, [load])
+
+  useEffect(() => {
+    load()
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => setRole(j.role)).catch(() => {})
+    try {
+      setLoggedBy(localStorage.getItem("cs:name") || "")
+      // Compare logged refunds with Shopify at most once an hour (plus a daily job).
+      if (Date.now() - Number(localStorage.getItem("refunds:checked") || 0) > 3600000) runCheck()
+    } catch {
+      runCheck()
+    }
+  }, [load, runCheck])
+
+  const decide = async (r: CsRefund, action: "approve" | "reject") => {
+    const res = await fetch(`/api/cs-log?kind=refund&id=${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, by: loggedBy || "Owner" }) })
+    const j = await res.json()
+    if (!res.ok) return setSaveMsg({ tone: "error", text: j.error || "Couldn't save the decision." })
+    setRows((x) => x.map((y) => (y.id === r.id ? j.row : y)))
+  }
 
   const findOrder = async (opts?: { store: string; id: string }) => {
     setFindError(null)
@@ -124,14 +168,17 @@ export default function RefundsPage() {
 
   // Purchase price of what's refunded = ticked items × qty × price paid.
   const purchase = useMemo(() => round2(items.filter((i) => i.picked).reduce((a, i) => a + i.price * i.refundQty, 0)), [items])
-  const base = type === "full" && order ? order.total : purchase
+  const base = isFull(type) && order ? order.total : purchase
   const suggested = round2((base * (parseFloat(pct) || 0)) / 100)
   useEffect(() => {
     if (!amountTouched) setAmount(base > 0 ? String(suggested) : "")
   }, [suggested, base, amountTouched])
   useEffect(() => {
-    if (type === "full") setPct("100")
+    if (isFull(type)) setPct("100")
   }, [type])
+  useEffect(() => {
+    if (threat && type === "partial") setType("full") // threat = refund in full at once
+  }, [threat, type])
 
   const reset = () => {
     setOrderNo("")
@@ -142,6 +189,7 @@ export default function RefundsPage() {
     setNote("")
     setPct("100")
     setType("partial")
+    setThreat(false)
     setAmount("")
     setAmountTouched(false)
     setConvo("")
@@ -179,12 +227,22 @@ export default function RefundsPage() {
           order_total: order?.total ?? null,
           items: [...picked, ...extra],
           logged_by: loggedBy,
+          threat,
         }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
       setRows((x) => [j.row, ...x])
-      setSaveMsg({ tone: "success", text: `Logged ${money(Number(j.row.amount), j.row.currency)} for ${j.row.order_number} (${reasonLabel(j.row.reason)}).` })
+      const what = `${money(Number(j.row.amount), j.row.currency)} for ${j.row.order_number}`
+      setSaveMsg({
+        tone: "success",
+        text:
+          j.row.approval_status === "waiting"
+            ? `Logged ${what}. Above €100: do NOT refund in Shopify yet, it waits for the Owner.`
+            : j.row.approval_status === "flagged"
+              ? `Logged ${what} as a threat. Refund it in full in Shopify now; the Owner is informed.`
+              : `Logged ${what}. Now refund it in Shopify; the dashboard checks it went out.`,
+      })
       reset()
     } catch (e: unknown) {
       setSaveMsg({ tone: "error", text: `Couldn't save the refund: ${e instanceof Error ? e.message : String(e)}` })
@@ -214,13 +272,67 @@ export default function RefundsPage() {
       stats={[
         { label: "Logged (30d)", value: loading ? "—" : String(last30.length) },
         { label: "Refunded (30d)", value: loading ? "—" : Object.entries(byCur).map(([c, v]) => money(v, c)).join(" · ") || "—" },
-        { label: "Full / partial (30d)", value: loading ? "—" : `${last30.filter((r) => r.refund_type === "full").length} / ${last30.filter((r) => r.refund_type === "partial").length}` },
+        { label: "Full / partial (30d)", value: loading ? "—" : `${last30.filter((r) => isFull(r.refund_type)).length} / ${last30.filter((r) => r.refund_type === "partial").length}` },
         { label: "Top reason (30d)", value: loading ? "—" : topReason ? reasonLabel(topReason[0]) : "—", sub: topReason ? `${topReason[1]} refunds` : undefined },
       ]}
+      actions={<Button onClick={runCheck} disabled={checking}>{checking ? "Checking Shopify…" : "Check Shopify now"}</Button>}
     >
       {loadError && <Notice tone="error">Couldn&apos;t load the refund log: {loadError}</Notice>}
 
-      <Panel title="Log a refund" sub="Do the refund in Shopify first, then log it here." className="mb-4">
+      {(() => {
+        const queue = rows.filter((r) => r.approval_status === "waiting" || r.approval_status === "flagged")
+        const missing = rows.filter((r) => r.shopify_status === "not_refunded")
+        return (
+          <>
+            {missing.length > 0 && (
+              <Notice tone="error">
+                {missing.length} logged refund{missing.length !== 1 ? "s were" : " was"} not refunded in Shopify: {missing.slice(0, 4).map((r) => `${r.order_number} (${r.store})`).join(", ")}
+                {missing.length > 4 ? "…" : ""}. Refund {missing.length !== 1 ? "them" : "it"} in the store or fix the log.
+              </Notice>
+            )}
+            {queue.length > 0 && (
+              <Panel
+                title={`Owner review · ${queue.length}`}
+                sub={role === "owner" ? "Refunds above €100 and threat cases. Approve before CS refunds above €100." : "Only the Owner approves or rejects. Above €100: don't refund in Shopify until it's approved."}
+                pad={false}
+                className="mb-4"
+              >
+                <table className="w-full">
+                  <tbody>
+                    {queue.map((r) => {
+                      const a = APPROVAL[r.approval_status]
+                      return (
+                        <tr key={r.id} style={ROW_BORDER}>
+                          <td className={TD} style={{ color: "var(--text)" }}>{r.order_number}</td>
+                          <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{r.store}</td>
+                          <td className={TD} style={{ color: "var(--text-muted)" }}>{reasonLabel(r.reason)} · {typeLabel(r.refund_type)}</td>
+                          <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>
+                            {money(Number(r.amount), r.currency)}{r.amount_eur != null && r.currency !== "EUR" ? ` (€${Number(r.amount_eur).toFixed(0)})` : ""}
+                          </td>
+                          <td className={TD}>{a && <Badge tone={a.tone}>{a.label}</Badge>}</td>
+                          <td className={`${TD} text-[10px]`} style={{ color: "var(--text-dim)" }}>{r.logged_by || ""}</td>
+                          <td className={`${TD} text-right whitespace-nowrap`}>
+                            {role === "owner" ? (
+                              <span className="inline-flex gap-1">
+                                <Button size="sm" variant="primary" onClick={() => decide(r, "approve")}>{r.approval_status === "flagged" ? "OK" : "Approve"}</Button>
+                                {r.approval_status === "waiting" && <Button size="sm" variant="danger" onClick={() => decide(r, "reject")}>Reject</Button>}
+                              </span>
+                            ) : (
+                              <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{role ? "Owner decides" : "Log in again as Owner to decide"}</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </Panel>
+            )}
+          </>
+        )
+      })()}
+
+      <Panel title="Log a refund" sub="Up to €100: log it, then refund it in Shopify. Above €100: log it and wait for the Owner's approval." className="mb-4">
         <div className="grid gap-3 md:grid-cols-4 mb-3">
           <Field label="Store">
             <PillSelect fullWidth value={store} onChange={(v) => { setStore(v); setOrder(null); setItems([]) }} options={STORES} placeholder="Pick store" />
@@ -286,7 +398,7 @@ export default function RefundsPage() {
 
         <div className="grid gap-3 md:grid-cols-4 mb-3">
           <Field label="Refund type">
-            <PillSelect fullWidth value={type} onChange={(v) => setType(v as "full" | "partial")} options={[{ value: "partial", label: "Partial refund" }, { value: "full", label: "Full refund" }]} />
+            <PillSelect fullWidth value={type} onChange={(v) => setType(v as RType)} options={REFUND_TYPES.map((t) => ({ value: t.value, label: t.label }))} />
           </Field>
           <Field label="Reason">
             <PillSelect fullWidth value={reason} onChange={setReason} options={REFUND_REASONS.map((r) => ({ value: r.value, label: r.label }))} placeholder="Pick reason" />
@@ -301,7 +413,7 @@ export default function RefundsPage() {
               ))}
             </div>
           </Field>
-          <Field label={`Refund amount (${currency})`} hint={base > 0 ? `${pct || 0}% of ${money(base, currency)} ${type === "full" ? "order total" : "purchase price"}` : "Find the order to calculate this, or type it."}>
+          <Field label={`Refund amount (${currency})`} hint={base > 0 ? `${pct || 0}% of ${money(base, currency)} ${isFull(type) ? "order total" : "purchase price"}` : "Find the order to calculate this, or type it."}>
             <input value={amount} onChange={(e) => { setAmount(e.target.value); setAmountTouched(true) }} className={inputCls} style={inputStyle} inputMode="decimal" />
           </Field>
         </div>
@@ -320,8 +432,22 @@ export default function RefundsPage() {
             No goodwill ladder for defects, wrong items, non-delivery or disputes: these get the full remedy (CS playbook).
           </div>
         )}
+        <label className="flex items-start gap-2 mt-3 text-[11px]" style={{ color: "var(--text)" }}>
+          <input type="checkbox" className="mt-0.5" checked={threat} onChange={(e) => setThreat(e.target.checked)} />
+          <span>
+            Customer threatens a chargeback, bank dispute or lawyer
+            <span className="block text-[10px]" style={{ color: "var(--text-dim)" }}>Then the refund is made in full at once (no waiting for approval) and the Owner is informed. Only tick it for a real threat.</span>
+          </span>
+        </label>
+        {order && order.open_disputes?.length > 0 && (
+          <div className="mt-2">
+            <Notice tone="error">
+              This order has an open bank dispute ({order.open_disputes.map((d) => d.status.toLowerCase().replace(/_/g, " ")).join(", ")}). Never refund it: the customer would be paid twice. Handle it on Disputes / Chargebacks.
+            </Notice>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 mt-3">
-          <Button variant="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Log refund"}</Button>
+          <Button variant="primary" onClick={save} disabled={saving || !!order?.open_disputes?.length}>{saving ? "Saving…" : "Log refund"}</Button>
           <Button variant="ghost" onClick={reset}>Clear</Button>
           {saveMsg && <span className="text-[11px]" style={{ color: saveMsg.tone === "success" ? "var(--green)" : "var(--red)" }}>{saveMsg.text}</span>}
         </div>
@@ -330,7 +456,7 @@ export default function RefundsPage() {
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{filtered.length} refunds</span>}>
         <FilterSelect label="Store" options={STORES} value={fStore} onChange={setFStore} />
         <FilterSelect label="Reason" options={REFUND_REASONS.map((r) => ({ value: r.value, label: r.label }))} value={fReason} onChange={setFReason} />
-        <FilterSelect label="Type" options={[{ value: "full", label: "Full" }, { value: "partial", label: "Partial" }]} value={fType} onChange={setFType} />
+        <FilterSelect label="Type" options={REFUND_TYPES.map((t) => ({ value: t.value, label: t.label }))} value={fType} onChange={setFType} />
       </FilterBar>
 
       {loading && rows.length === 0 ? (
@@ -352,7 +478,8 @@ export default function RefundsPage() {
                 <th className={`${TH} text-left`}>Reason</th>
                 <th className={`${TH} text-right`}>%</th>
                 <th className={`${TH} text-right`}>Amount</th>
-                <th className={`${TH} text-left`}>Conversation</th>
+                <th className={`${TH} text-left`}>Approval</th>
+                <th className={`${TH} text-left`}>Shopify</th>
               </tr>
             </thead>
             <tbody>
@@ -365,31 +492,37 @@ export default function RefundsPage() {
                     <td className={`${TD} max-w-[240px] truncate`} style={{ color: "var(--text-muted)" }}>
                       {r.items.length ? r.items.map((i) => `${i.qty}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join(", ") : "—"}
                     </td>
-                    <td className={TD}><Badge tone={r.refund_type === "full" ? "red" : "amber"}>{r.refund_type === "full" ? "Full" : "Partial"}</Badge></td>
+                    <td className={TD}><Badge tone={isFull(r.refund_type) ? "red" : "amber"}>{typeLabel(r.refund_type)}</Badge></td>
                     <td className={TD} style={{ color: "var(--text)" }}>{reasonLabel(r.reason)}</td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{r.percentage != null ? `${r.percentage}%` : "—"}</td>
-                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>{money(Number(r.amount), r.currency)}</td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>
+                      {money(Number(r.amount), r.currency)}
+                      {r.amount_eur != null && r.currency !== "EUR" && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>€{Number(r.amount_eur).toFixed(2)}</span>}
+                    </td>
+                    <td className={TD}>{APPROVAL[r.approval_status] ? <Badge tone={APPROVAL[r.approval_status]!.tone}>{APPROVAL[r.approval_status]!.label}</Badge> : <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>not needed</span>}</td>
                     <td className={TD}>
-                      {r.conversation_url ? (
-                        <a href={r.conversation_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="underline text-[10px]" style={{ color: "var(--accent)" }}>Open</a>
-                      ) : (
-                        <span style={{ color: "var(--text-dim)" }}>—</span>
-                      )}
+                      {SHOPIFY[r.shopify_status] && <Badge tone={SHOPIFY[r.shopify_status].tone}>{SHOPIFY[r.shopify_status].label}</Badge>}
+                      {r.shopify_status === "refunded" && r.shopify_refunded_at && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{fmtDay(r.shopify_refunded_at.slice(0, 10))}</span>}
                     </td>
                   </tr>
                   {openId === r.id && (
                     <tr>
-                      <td colSpan={9} className="px-3 pb-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <td colSpan={10} className="px-3 pb-3" style={{ background: "rgba(255,255,255,0.015)" }}>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] pt-2" style={{ color: "var(--text-muted)" }}>
                           {r.items.map((i, k) => (
                             <span key={k}>{i.qty}× {i.title}{i.variant ? ` · ${i.variant}` : ""} {i.price ? `@ ${money(i.price, r.currency)}` : ""}</span>
                           ))}
                           {r.order_total != null && <span>Order total {money(Number(r.order_total), r.currency)}</span>}
                           {r.customer_email && <span>{r.customer_email}</span>}
                           {r.logged_by && <span>Logged by {r.logged_by}</span>}
-                          {r.reason_note && <span>Note: {r.reason_note}</span>}
-                          <Button size="sm" variant="danger" onClick={() => remove(r.id)}>Delete</Button>
+                          {r.conversation_url && <a href={r.conversation_url} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent)" }}>Conversation</a>}
                         </div>
+                        <RefundDetail
+                          row={r}
+                          by={loggedBy}
+                          onChange={(nr) => setRows((x) => x.map((y) => (y.id === nr.id ? nr : y)))}
+                          onDelete={() => remove(r.id)}
+                        />
                       </td>
                     </tr>
                   )}

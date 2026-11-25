@@ -45,6 +45,7 @@ export interface OrderLookup {
   financial_status: string
   items: OrderItem[]
   admin_url: string
+  open_disputes: { status: string; type: string }[]
 }
 
 export interface CsRefund {
@@ -56,7 +57,7 @@ export interface CsRefund {
   shopify_order_id: string | null
   customer_email: string | null
   conversation_url: string | null
-  refund_type: "full" | "partial"
+  refund_type: "full" | "partial" | "full_after_return"
   reason: string
   reason_note: string | null
   percentage: number | null
@@ -65,7 +66,31 @@ export interface CsRefund {
   order_total: number | null
   items: OrderItem[]
   logged_by: string | null
+  amount_eur: number | null
+  threat: boolean
+  approval_status: "not_needed" | "waiting" | "flagged" | "approved" | "rejected"
+  approved_by: string | null
+  approved_at: string | null
+  shopify_status: "checking" | "refunded" | "partial" | "not_refunded" | "no_order"
+  shopify_refunded: number | null
+  shopify_refunded_at: string | null
+  shopify_checked_at: string | null
+  attachments: { path: string; name: string; type: string; size: number; uploaded_at: string; by: string | null }[]
 }
+
+export interface RefundHistory {
+  id: number
+  changed_at: string
+  changed_by: string | null
+  action: string
+  changes: Record<string, unknown>
+}
+
+export const REFUND_TYPES = [
+  { value: "partial", label: "Partial refund" },
+  { value: "full", label: "Full refund" },
+  { value: "full_after_return", label: "Full refund after return" },
+] as const
 
 export interface CsStoreCredit {
   id: number

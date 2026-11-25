@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { SHOPIFY_STORES } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
 import type { OrderLookup, OrderItem } from "@/lib/cs-log"
+import { openDisputes } from "@/lib/refund-control"
 
 export const dynamic = "force-dynamic"
 
@@ -61,6 +62,7 @@ export async function GET(req: Request) {
       financial_status: o.financial_status,
       items,
       admin_url: `https://admin.shopify.com/store/${cfg.domain.replace(".myshopify.com", "")}/orders/${o.id}`,
+      open_disputes: await openDisputes(store, String(o.id)).catch(() => []),
     }
     return NextResponse.json(out)
   } catch (e: unknown) {

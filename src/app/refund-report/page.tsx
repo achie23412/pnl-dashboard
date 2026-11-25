@@ -92,7 +92,7 @@ export default function RefundReportPage() {
       const x = m.get(r.reason) || { n: 0, eur: 0, full: 0 }
       x.n += 1
       x.eur += eur(Number(r.amount) || 0, r.store, r.refund_date)
-      if (r.refund_type === "full") x.full += 1
+      if (r.refund_type !== "partial") x.full += 1
       m.set(r.reason, x)
     }
     return Array.from(m.entries()).sort((a, b) => b[1].n - a[1].n)
