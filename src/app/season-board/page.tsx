@@ -20,7 +20,7 @@ type DbKeyword = { country: string; keyword: string; category: string | null; mo
 type Suggestion = { id: number; created_at: string; keyword: string; country: string; category: string | null; why: string | null; status: string; note: string | null; decided_at: string | null }
 type CatalogProduct = { product_name: string; store: string; units_sold: number; sales_revenue: number; ad_spend: number | null; roas: number | null; be_roas: number | null; product_ids?: string[] }
 type StoreSummary = { store: string; revenue: number; ad_spend: number; roas: number | null; be_roas: number | null }
-type SeasonData = { keywords: DbKeyword[]; suggestions: Suggestion[]; titles: { store: string; title: string }[]; stores: string[]; updatedAt: string }
+type SeasonData = { hidden?: number; keywords: DbKeyword[]; suggestions: Suggestion[]; titles: { store: string; title: string }[]; stores: string[]; updatedAt: string }
 type Tone = "red" | "green" | "amber" | "blue" | "grey" | "accent"
 
 type Row = DbKeyword & { t: Timing; covered: { store: string; n: number }[]; status: Status; category: string }
@@ -169,7 +169,7 @@ export default function SeasonBoardPage() {
       const res = await fetch("/api/season", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "upload", country, rows: parsed.rows, replace, source: /trends/i.test(file.name) ? "keyword_planner+trends" : "keyword_planner" }) })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`)
-      setMsg(`Saved ${d.saved} keywords for ${country}.`)
+      setMsg(`Saved ${d.saved} keywords for ${country}${d.skipped ? `; left out ${d.skipped} brand or non-clothing searches` : ""}.`)
       await load()
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     setBusy(false)
@@ -248,7 +248,7 @@ export default function SeasonBoardPage() {
 
       {fromTrends && (
         <Notice tone="info">
-          Estimated months: the Google Ads accounts only get rounded averages from Keyword Planner, so each keyword&apos;s average volume (Keyword Planner) is spread over the year with the Google Trends pattern of its main clothing term (e.g. &quot;wool coat&quot;, &quot;maxi dress&quot;), last 12 months, per country. US: a shared April–May jump across almost all US clothing searches was removed and replaced by the UK&apos;s shared pattern. Timing is reliable per clothing type; exact numbers are estimates.
+          Estimated months: the Google Ads accounts only get rounded averages from Keyword Planner, so each keyword&apos;s average volume (Keyword Planner) is spread over the year with the Google Trends pattern of its main clothing term (e.g. &quot;wool coat&quot;, &quot;maxi dress&quot;), last 12 months, per country. US: a shared April–May jump across almost all US clothing searches was removed and replaced by the UK&apos;s shared pattern. Timing is reliable per clothing type; exact numbers are estimates (Keyword Planner rounds volumes to 50 / 500 / 5K / 50K / 500K for these accounts).{data?.hidden ? ` ${data.hidden} brand or non-clothing searches are hidden.` : ""}
         </Notice>
       )}
 

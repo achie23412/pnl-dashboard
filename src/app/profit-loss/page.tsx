@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { FilterSelect, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
@@ -58,7 +59,8 @@ const xr = (n: number | null) => (n === null ? "" : `${n.toFixed(2)}x`)
 
 export default function ProfitLossPage() {
   const thisMonth = new Date().toISOString().slice(0, 7)
-  const [scope, setScope] = useState("google")
+  // Default = the 3 Google stores (the profit sheet). "all" = every store with data.
+  const [storeF, setStoreF] = useState<FilterValue>({ mode: "include", values: SHEET_STORES })
   const [month, setMonth] = useState(thisMonth)
   const [raw, setRaw] = useState<Raw | null>(null)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
@@ -116,7 +118,14 @@ export default function ProfitLossPage() {
     return m
   }, [raw, rates])
 
-  const storesInScope = scope === "google" ? SHEET_STORES : scope === "all" ? ALL_STORES : [scope]
+  // Store list comes from the data, so a new store shows up here without a code change
+  const dataStores = useMemo(() => {
+    const seen = new Set<string>()
+    byStoreDay.forEach((_, k) => seen.add(k.split("|")[0]))
+    const known = ALL_STORES.filter((s) => seen.has(s))
+    return [...known, ...Array.from(seen).filter((s) => !ALL_STORES.includes(s)).sort()]
+  }, [byStoreDay])
+  const storesInScope = (dataStores.length ? dataStores : ALL_STORES).filter((s) => passes(storeF, s))
 
   const lineFor = (stores: string[], inDate: (d: string) => boolean): Line => {
     let total = empty()
@@ -193,7 +202,8 @@ export default function ProfitLossPage() {
   )
 
   const t = monthTotal
-  const scopeLabel = scope === "google" ? "Google stores" : scope === "all" ? "all stores" : scope
+  const isGoogle = storeF.mode === "include" && storeF.values.length === SHEET_STORES.length && SHEET_STORES.every((s) => storeF.values.includes(s))
+  const scopeLabel = !storeF.values.length ? "all stores" : isGoogle ? "Google stores" : storesInScope.length <= 2 ? storesInScope.join(" + ") : `${storesInScope.length} stores`
 
   return (
     <PageShell
@@ -211,15 +221,11 @@ export default function ProfitLossPage() {
       ]}
     >
       <FilterBar>
-        <PillSelect
+        <FilterSelect
           label="Stores"
-          value={scope}
-          onChange={setScope}
-          options={[
-            { value: "google", label: "Google stores (profit sheet)" },
-            { value: "all", label: "All 5 stores" },
-            ...ALL_STORES.map((s) => ({ value: s })),
-          ]}
+          options={(dataStores.length ? dataStores : ALL_STORES).map((st) => ({ value: st, label: SHEET_STORES.includes(st) ? `${st} (Google)` : st }))}
+          value={storeF}
+          onChange={setStoreF}
         />
         <PillSelect
           label="Month"

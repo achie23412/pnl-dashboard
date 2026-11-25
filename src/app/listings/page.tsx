@@ -1,14 +1,13 @@
 "use client"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
-import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
-import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
+import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, SectionLabel } from "@/components/ui"
 import type { LiveListing } from "@/app/api/listings/route"
 
 const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
 const FILTERS = [
-  { key: "all", label: "All" },
   { key: "critical", label: "Must fix" },
   { key: "warning", label: "Tips only" },
   { key: "ok", label: "No issues" },
@@ -90,7 +89,7 @@ export default function ListingsPage() {
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [store, setStore] = useState<FilterValue>(EMPTY_FILTER)
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("critical")
+  const [filter, setFilter] = useState<FilterValue>({ mode: "include", values: ["critical"] })
   const [q, setQ] = useState("")
   const [open, setOpen] = useState<string | null>(null)
   const [limit, setLimit] = useState(100)
@@ -110,7 +109,7 @@ export default function ListingsPage() {
         if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
         setData(d)
         const hasCritical = (d.listings as LiveListing[]).some((l) => l.issues.some((i) => i.level === "critical"))
-        if (!hasCritical) setFilter("warning")
+        if (!hasCritical) setFilter({ mode: "include", values: ["warning"] })
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
@@ -139,12 +138,15 @@ export default function ListingsPage() {
   }, [inStore])
 
   const rows = inStore
-    .filter((l) =>
-      filter === "all" ? true
-      : filter === "critical" ? crit(l)
-      : filter === "warning" ? !crit(l) && l.issues.length > 0
-      : filter === "ok" ? l.issues.length === 0
-      : l.variants > 0 && l.inStock === 0)
+    .filter((l) => {
+      const kinds = [
+        crit(l) ? "critical" : null,
+        !crit(l) && l.issues.length > 0 ? "warning" : null,
+        l.issues.length === 0 ? "ok" : null,
+        l.variants > 0 && l.inStock === 0 ? "soldout" : null,
+      ]
+      return passesAny(filter, kinds)
+    })
     .filter((l) => !q || l.title.toLowerCase().includes(q.toLowerCase()) || l.handle.includes(q.toLowerCase()))
     .sort((a, b) => Number(crit(b)) - Number(crit(a)) || b.issues.length - a.issues.length)
 
@@ -252,15 +254,20 @@ export default function ListingsPage() {
           >
             <FilterSelect
               label="Store"
-              options={STORES.map((s) => ({ value: s, count: all.filter((l) => l.store === s).length }))}
+              options={Array.from(new Set([...STORES, ...all.map((l) => l.store)])).filter((s) => all.some((l) => l.store === s)).map((s) => ({ value: s, count: all.filter((l) => l.store === s).length }))}
               value={store}
               onChange={(v) => { setStore(v); setLimit(100) }}
             />
-            <PillSelect
+            <FilterSelect
               label="Show"
+              options={[
+                { value: "critical", label: "Must fix", count: stats.critical },
+                { value: "warning", label: "Tips only", count: stats.warning },
+                { value: "ok", label: "No issues", count: inStore.filter((l) => l.issues.length === 0).length },
+                { value: "soldout", label: "Sold out", count: stats.soldOut },
+              ]}
               value={filter}
-              onChange={(v) => { setFilter(v as (typeof FILTERS)[number]["key"]); setLimit(100) }}
-              options={FILTERS.map((f) => ({ value: f.key, label: f.label }))}
+              onChange={(v) => { setFilter(v); setLimit(100) }}
             />
           </FilterBar>
 

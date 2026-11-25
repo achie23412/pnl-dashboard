@@ -1,7 +1,8 @@
 "use client"
 import { useState } from "react"
 import { PageShell } from "@/components/PageShell"
-import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { FilterBar } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, EmptyState } from "@/components/ui"
 
 type Priority = "high" | "medium" | "low"
@@ -103,11 +104,11 @@ const CATEGORY_LABEL: Record<Category, string> = {
 const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
 
 export default function AdvisorPage() {
-  const [filter, setFilter] = useState<Priority | "all">("all")
+  const [filter, setFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
   const visible = SUGGESTIONS.filter(
-    (s) => !dismissed.has(s.id) && (filter === "all" || s.priority === filter)
+    (s) => !dismissed.has(s.id) && passes(filter, s.priority)
   )
   const highCount = SUGGESTIONS.filter((s) => !dismissed.has(s.id) && s.priority === "high").length
   const medCount = SUGGESTIONS.filter((s) => !dismissed.has(s.id) && s.priority === "medium").length
@@ -125,16 +126,15 @@ export default function AdvisorPage() {
       ]}
     >
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{visible.length} suggestion{visible.length !== 1 ? "s" : ""}</span>}>
-        <PillSelect
+        <FilterSelect
           label="Priority"
-          value={filter}
-          onChange={(v) => setFilter(v as Priority | "all")}
           options={[
-            { value: "all", label: "all", count: highCount + medCount + lowCount },
             { value: "high", label: "High", count: highCount },
             { value: "medium", label: "Medium", count: medCount },
             { value: "low", label: "Low", count: lowCount },
           ]}
+          value={filter}
+          onChange={setFilter}
         />
       </FilterBar>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { categoryOf, timing, MONTHS, COUNTRY_STORES, indexTitles, coveredBy } from "@/lib/season-keywords"
 import { liveTitles } from "@/lib/live-titles"
+import { isFashionKeyword, titleWordSet } from "@/lib/fashion-words"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -32,9 +33,11 @@ export async function GET(req: NextRequest) {
       const today = new Date()
       const events: { date: string; label: string; type: "prep" | "launch"; note: string; store?: string }[] = []
       for (const country of Object.keys(COUNTRY_STORES)) {
-        const list = kws.filter((k) => k.country === country)
+        const live = (await liveTitles(COUNTRY_STORES[country])).map((t) => t.title)
+        const words = titleWordSet(live)
+        const list = kws.filter((k) => k.country === country && isFashionKeyword(k.keyword, words))
         if (!list.length) continue
-        const titles = indexTitles((await liveTitles(COUNTRY_STORES[country])).map((t) => t.title))
+        const titles = indexTitles(live)
         for (let i = 0; i < 12; i++) {
           const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + i, 1))
           const m = d.getUTCMonth()
@@ -57,9 +60,13 @@ export async function GET(req: NextRequest) {
       liveTitles(COUNTRY_STORES[country] || []),
     ])
     if (sug.error) throw new Error(sug.error.message)
+    // Only clothing searches: drops brand and off-topic keywords (src/lib/fashion-words.ts)
+    const words = titleWordSet(titles.map((t) => t.title))
+    const clean = kws.filter((k) => isFashionKeyword(k.keyword, words))
     return NextResponse.json({
       country,
-      keywords: kws,
+      keywords: clean,
+      hidden: kws.length - clean.length,
       updatedAt: kws.reduce((a, k) => (k.uploaded_at > a ? k.uploaded_at : a), ""),
       suggestions: sug.data || [],
       stores: COUNTRY_STORES[country] || [],
@@ -79,8 +86,11 @@ export async function POST(req: NextRequest) {
     if (body.action === "upload") {
       const country = String(body.country || "")
       if (!COUNTRY_STORES[country]) throw new Error("Unknown country")
-      const rows = (body.rows || []) as { keyword: string; months: number[]; avg: number }[]
-      if (!rows.length) throw new Error("No keywords in the file")
+      const all = (body.rows || []) as { keyword: string; months: number[]; avg: number }[]
+      if (!all.length) throw new Error("No keywords in the file")
+      const words = titleWordSet((await liveTitles(COUNTRY_STORES[country])).map((t) => t.title))
+      const rows = all.filter((r) => isFashionKeyword(String(r.keyword), words))
+      if (!rows.length) throw new Error("No clothing keywords in the file")
       if (body.replace) await db.from("season_keywords").delete().eq("country", country)
       const now = new Date().toISOString()
       for (let i = 0; i < rows.length; i += 500) {
@@ -97,7 +107,7 @@ export async function POST(req: NextRequest) {
         const { error } = await db.from("season_keywords").upsert(chunk, { onConflict: "country,keyword" })
         if (error) throw new Error(error.message)
       }
-      return NextResponse.json({ ok: true, saved: rows.length })
+      return NextResponse.json({ ok: true, saved: rows.length, skipped: all.length - rows.length })
     }
     if (body.action === "suggest") {
       if (!body.keyword || !body.country) throw new Error("keyword and country required")

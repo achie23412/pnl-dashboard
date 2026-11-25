@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useCallback } from "react"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { PageShell } from "@/components/PageShell"
 import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
-import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 
 interface Keyword {
   k: string
@@ -82,7 +82,7 @@ export default function KeywordsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<FilterValue>(EMPTY_FILTER)
-  const [trendFilter, setTrendFilter] = useState("")
+  const [trendFilter, setTrendFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [minVol, setMinVol] = useState(0)
   const [minWords, setMinWords] = useState(2)
   const [sortCol, setSortCol] = useState<SortCol>("uk")
@@ -106,8 +106,9 @@ export default function KeywordsPage() {
       if (!passes(category, d.c)) return false
       if (minVol && d.uk < minVol && d.us < minVol) return false
       if (minWords > 1 && d.k.trim().split(/\s+/).length < minWords) return false
-      if (trendFilter === "rising" && d.tu <= 10 && d.ta <= 10) return false
-      if (trendFilter === "falling" && d.tu >= -10 && d.ta >= -10) return false
+      const rising = d.tu > 10 || d.ta > 10
+      const falling = d.tu < -10 || d.ta < -10
+      if (!passesAny(trendFilter, [rising ? "rising" : null, falling ? "falling" : null, !rising && !falling ? "flat" : null])) return false
       return true
     })
     result.sort((a, b) => {
@@ -168,11 +169,11 @@ export default function KeywordsPage() {
           onChange={(e) => setSearch(e.target.value)}
         />
         <FilterSelect label="Category" options={CATEGORIES.map((c) => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} value={category} onChange={setCategory} />
-        <PillSelect
+        <FilterSelect
           label="Trend"
+          options={[{ value: "rising", label: "Rising" }, { value: "falling", label: "Falling" }, { value: "flat", label: "Flat" }]}
           value={trendFilter}
           onChange={setTrendFilter}
-          options={[{ value: "", label: "all" }, { value: "rising", label: "Rising only" }, { value: "falling", label: "Falling only" }]}
         />
         <PillSelect
           label="Min volume"

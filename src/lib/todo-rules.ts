@@ -38,6 +38,8 @@ export type TodoInput = {
   rates: EurRates
   hasSessions: boolean
   lastRefresh: { status: string; error: string | null; completed_at: string | null; started_at?: string | null } | null
+  // Season Board: latest keyword upload per country (US / UK / IE), null = never uploaded
+  seasonUpdated?: Record<string, string | null>
 }
 
 export function buildAutoTodos(input: TodoInput): AutoTodo[] {
@@ -222,6 +224,25 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       source: "P&L dashboard setup",
       fix: "Per store, create a Shopify custom app with read_reports (and read_orders / write_products for product data and imports) and add SHOPIFY_TOKEN_<STORE> in Vercel.",
       href: null,
+    })
+  }
+
+  // Season Board keyword data goes stale: search patterns shift, new styles appear.
+  // Refresh every 3 months (Keyword Planner volumes + Google Trends monthly pattern).
+  const SEASON_STORE: Record<string, string> = { US: "Susan & Allen", UK: "Carter & Collins", IE: "Walsh & Farley" }
+  for (const [country, at] of Object.entries(input.seasonUpdated || {})) {
+    const ageDays = at ? (Date.parse(today + "T12:00:00Z") - Date.parse(at)) / 86400000 : Infinity
+    if (ageDays <= 90) continue
+    todos.push({
+      key: `season-refresh:${country}:${today.slice(0, 7)}`,
+      priority: "normal",
+      store: SEASON_STORE[country],
+      title: at ? `Refresh Season Board keywords (${country})` : `Add Season Board keywords (${country})`,
+      why: at ? `Keyword data for ${country} is ${Math.round(ageDays)} days old (last upload ${at.slice(0, 10)}). Seasons and styles shift, so the list-by and push dates drift.` : `There is no keyword data for ${country}, so the Season Board can't time listings for ${SEASON_STORE[country]}.`,
+      source: "Season Board (Dashboard Guide §7)",
+      fix: `Ask Claude "refresh the Season Board keywords for ${country}": it pulls Keyword Planner ideas (winter + summer seed words, last 12 months) and the Google Trends pattern per clothing type, then re-uploads. Or upload a Keyword Planner export yourself on the Season Board.`,
+      href: "/season-board",
+      hrefLabel: "Season Board",
     })
   }
 

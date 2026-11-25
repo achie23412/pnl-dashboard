@@ -1,10 +1,10 @@
 "use client"
-import { PillSelect, FilterBar } from "@/components/PillSelect"
+import { FilterBar } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { PageShell } from "@/components/PageShell"
 import { Panel, Badge, Notice, Loading, TH, TD, ROW_BORDER } from "@/components/ui"
 import { useEffect, useState, useMemo } from "react"
 import { STORES, STORE_COLORS } from "@/lib/constants"
-import type { StoreName } from "@/lib/constants"
 import { STORE_CURRENCY } from "@/lib/currency"
 import { DatePicker } from "@/components/DatePicker"
 import { FixBanner } from "@/components/FixBanner"
@@ -65,7 +65,7 @@ export default function ProductPerformancePage() {
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [store, setStore] = useState<StoreName>("Overall")
+  const [store, setStore] = useState<FilterValue>(EMPTY_FILTER)
   const [sortKey, setSortKey] = useState<SortKey>("revenue")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [dataErrors, setDataErrors] = useState<string[]>([])
@@ -138,7 +138,7 @@ export default function ProductPerformancePage() {
   }, [dateFrom, dateTo])
 
   const filtered = useMemo(() => {
-    let list = store === "Overall" ? products : products.filter((p) => p.store === store)
+    let list = products.filter((p) => passes(store, p.store))
     // products with sales, plus products with ad spend but no sales (ROAS 0)
     list = list.filter((p) => p.units_sold > 0 || (p.ad_spend || 0) > 0)
 
@@ -212,7 +212,7 @@ export default function ProductPerformancePage() {
       <FixBanner onApply={(ctx) => {
         if (ctx.store) {
           const match = STORES.find((s) => s === ctx.store)
-          if (match) setStore(match)
+          if (match) setStore({ mode: "include", values: [match] })
         }
         setSortKey("spend")
         setSortDir("desc")
@@ -242,7 +242,7 @@ export default function ProductPerformancePage() {
               </thead>
               <tbody>
                 {storeSummaries
-                  .filter((s) => store === "Overall" || s.store === store)
+                  .filter((s) => passes(store, s.store))
                   .map((s) => {
                     const above = s.roas != null && s.be_roas != null ? s.roas >= s.be_roas : null
                     return (
@@ -272,11 +272,11 @@ export default function ProductPerformancePage() {
 
       {/* Store filter */}
       <FilterBar>
-        <PillSelect
+        <FilterSelect
           label="Store"
+          options={Array.from(new Set([...storeSummaries.map((x) => x.store), ...products.map((x) => x.store)])).map((st) => ({ value: st, count: products.filter((x) => x.store === st).length }))}
           value={store}
-          onChange={(v) => setStore(v as StoreName)}
-          options={STORES.map((s) => ({ value: s, label: s === "Overall" ? "all stores" : s }))}
+          onChange={setStore}
         />
       </FilterBar>
 

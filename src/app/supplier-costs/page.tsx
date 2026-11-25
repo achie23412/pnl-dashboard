@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
-import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue, passesAny } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
@@ -69,7 +69,7 @@ export default function SupplierCostsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [filterStore, setFilterStore] = useState<FilterValue>(EMPTY_FILTER)
-  const [filterAlerts, setFilterAlerts] = useState("all")
+  const [filterAlerts, setFilterAlerts] = useState<FilterValue>(EMPTY_FILTER)
   const [sortBy, setSortBy] = useState<"qty" | "cogs" | "variance" | "cogs_pct">("qty")
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -97,10 +97,8 @@ export default function SupplierCostsPage() {
   const filtered = products
     .filter((p) => {
       if (!passes(filterStore, p.store)) return false
-      if (filterAlerts === "price" && !p.price_alert) return false
-      if (filterAlerts === "negotiate" && !p.negotiation_alert) return false
-      if (filterAlerts === "cogs" && !p.cogs_alert) return false
-      if (filterAlerts === "any" && !p.price_alert && !p.negotiation_alert && !p.cogs_alert) return false
+      const kinds = [p.cogs_alert ? "cogs" : null, p.price_alert ? "price" : null, p.negotiation_alert ? "negotiate" : null, !p.price_alert && !p.negotiation_alert && !p.cogs_alert ? "none" : null]
+      if (!passesAny(filterAlerts, kinds)) return false
       return true
     })
     .sort((a, b) => {
@@ -177,17 +175,16 @@ export default function SupplierCostsPage() {
         }
       >
         <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
-        <PillSelect
-          label="Show"
+        <FilterSelect
+          label="Alerts"
+          options={[
+            { value: "cogs", label: "COGS% out of range" },
+            { value: "price", label: "Price mismatch" },
+            { value: "negotiate", label: "Volume discount" },
+            { value: "none", label: "No alerts" },
+          ]}
           value={filterAlerts}
           onChange={setFilterAlerts}
-          options={[
-            { value: "all", label: "All products" },
-            { value: "any", label: "With alerts" },
-            { value: "cogs", label: "COGS% out of range" },
-            { value: "price", label: "Price mismatches" },
-            { value: "negotiate", label: "Volume discount" },
-          ]}
         />
         <PillSelect
           label="Sort"

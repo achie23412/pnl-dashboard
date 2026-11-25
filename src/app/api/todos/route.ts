@@ -19,6 +19,12 @@ export async function GET() {
     db.from("refresh_log").select("status,error,completed_at").order("id", { ascending: false }).limit(1),
     db.from("todos").select("*").order("created_at", { ascending: true }),
   ])
+  // Latest Season Board keyword upload per country (for the 3-monthly refresh reminder)
+  const seasonUpdated: Record<string, string | null> = {}
+  await Promise.all(["US", "UK", "IE"].map(async (c) => {
+    const { data } = await db.from("season_keywords").select("uploaded_at").eq("country", c).order("uploaded_at", { ascending: false }).limit(1)
+    seasonUpdated[c] = data?.[0]?.uploaded_at || null
+  }))
 
   if (todos.error) {
     return NextResponse.json({ error: `todos table: ${todos.error.message}` }, { status: 500 })
@@ -33,6 +39,7 @@ export async function GET() {
     rates,
     hasSessions: (ses.data || []).length > 0,
     lastRefresh: log.data?.[0] || null,
+    seasonUpdated,
   })
 
   const rows = todos.data || []
