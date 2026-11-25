@@ -20,7 +20,7 @@ import type {
   RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData,
   RefundRow, StoreKPI, DailyBriefingRow, CogsConfidence,
 } from "@/lib/types"
-import { STORE_CURRENCY, COGS_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
+import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
 import { getCached, setCache } from "@/lib/cache"
 import { getDateRange } from "@/lib/date-range"
@@ -131,7 +131,7 @@ export default function Dashboard() {
     [revenue, rates],
   )
   const spendEur = useMemo(
-    () => spend.map((r) => ({ ...r, spend: toEur(r.spend, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
+    () => spend.map((r) => ({ ...r, spend: toEur(r.spend, AD_SPEND_CURRENCY, r.date, rates) })),
     [spend, rates],
   )
   const cogsEur = useMemo(

@@ -17,6 +17,10 @@ export const STORE_CURRENCY: Record<string, Currency> = {
 // Shipgoods costs and AVG_COGS_PER_ORDER are in USD
 export const COGS_CURRENCY: Currency = "USD"
 
+// All ad accounts (Google, Meta, TikTok) are billed in EUR (checked in Windsor 2026-11-25),
+// so daily_spend is already EUR and must NOT be converted from the store currency.
+export const AD_SPEND_CURRENCY: Currency = "EUR"
+
 // Units of foreign currency per 1 EUR, used if the rate API is unreachable
 const FALLBACK: Record<Exclude<Currency, "EUR">, number> = { USD: 1.11, GBP: 0.835 }
 

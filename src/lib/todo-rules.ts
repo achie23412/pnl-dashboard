@@ -2,7 +2,7 @@
 // Every task carries `why` (the numbers that triggered it), `source` (which rule it comes from),
 // `fix` (what to do) and `href` (the dashboard page where you do it).
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
-import { STORE_CURRENCY, COGS_CURRENCY, toEur, type EurRates } from "@/lib/currency"
+import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, toEur, type EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow } from "@/lib/types"
 
 export type AutoTodo = {
@@ -50,7 +50,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
   const inWindow = (d: string) => d >= baselineFrom && d < today
 
   const rev = input.revenue.map((r) => ({ ...r, revenue: toEur(r.revenue, STORE_CURRENCY[r.store] || "EUR", r.date, rates) }))
-  const spend = input.spend.map((r) => ({ ...r, spend: toEur(r.spend, STORE_CURRENCY[r.store] || "EUR", r.date, rates) }))
+  const spend = input.spend.map((r) => ({ ...r, spend: toEur(r.spend, AD_SPEND_CURRENCY, r.date, rates) }))
   const cogs = input.cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) }))
   const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + pick(r), 0)
 

@@ -5,7 +5,7 @@
 // Everything in EUR (ECB daily rates). Windsor history is limited to 30 days.
 import { fetchWindsor } from "@/lib/windsor"
 import { SHOPIFY_ACCOUNT_MAP } from "@/lib/constants"
-import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, type Currency } from "@/lib/currency"
+import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, fetchEurRates, toEur, type Currency } from "@/lib/currency"
 import { getServiceClient } from "@/lib/supabase"
 import { selectAll } from "@/lib/opportunity-db"
 
@@ -176,7 +176,7 @@ export async function buildCashflow(): Promise<CashflowData> {
   }
 
   // Outgoing: ad spend (store currency), COGS (USD), refunds (store currency).
-  for (const r of spend) dayRow(r.date).ad_spend += toEur(Number(r.spend) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates)
+  for (const r of spend) dayRow(r.date).ad_spend += toEur(Number(r.spend) || 0, AD_SPEND_CURRENCY, r.date, rates)
   for (const r of cogs) dayRow(r.date).cogs += toEur(Number(r.cogs) || 0, COGS_CURRENCY, r.date, rates)
   for (const r of refunds) dayRow(r.date).refunds += toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates)
 
