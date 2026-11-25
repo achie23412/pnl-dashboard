@@ -176,6 +176,7 @@ export default function CogsInvoicesPage() {
                   Discount
                 </th>
                 <th className={`${TH} text-right`} style={{ color: "var(--text-dim)" }}
+                  title="What ShipGoods charged for items that have a quote. Full invoice total shown below when different."
                 >
                   Charged
                 </th>
@@ -316,7 +317,18 @@ export default function CogsInvoicesPage() {
                       className={`${TD} text-right tabular-nums font-medium`}
                       style={{ color: "var(--text)" }}
                     >
-                      {usd(inv.amount)}
+                      {inv.charged_quoted_lines != null && inv.quoted_total != null ? (
+                        <>
+                          {usd(inv.charged_quoted_lines)}
+                          {Math.abs(inv.charged_quoted_lines - inv.amount) > 0.01 && (
+                            <div className="text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>
+                              of {usd(inv.amount)} invoice
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        usd(inv.amount)
+                      )}
                     </td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
                       {inv.quoted_total != null ? usd(inv.quoted_total) : "—"}
