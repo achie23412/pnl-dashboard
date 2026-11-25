@@ -6,7 +6,7 @@ import { buildKeywords, checkStores, cleanDomain, MARKETS, type MarketCode } fro
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
 
-const cachedKeywords = unstable_cache((m: MarketCode) => buildKeywords(m), ["competitor-finder-v3"], { revalidate: 3600 })
+const cachedKeywords = unstable_cache((m: MarketCode) => buildKeywords(m), ["competitor-finder-v4"], { revalidate: 3600 })
 
 // GET ?market=US → ranked keywords for that market
 export async function GET(req: Request) {

@@ -185,7 +185,7 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
   filtered.sort((a, b) => b.score - a.score)
   let productsInMarket = 0
   titlesByDomain.forEach((t) => (productsInMarket += t.length))
-  return { keywords: filtered.slice(0, 400), competitorsInMarket: inMarket.size, plannerCount: planner.length, productsScanned: products.length, productsInMarket }
+  return { keywords: filtered, competitorsInMarket: inMarket.size, plannerCount: planner.length, productsScanned: products.length, productsInMarket }
 }
 
 // ── Store check: is a found domain a Shopify store, and do we track it already?
