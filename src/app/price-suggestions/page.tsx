@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
+import { STORE_CURRENCY } from "@/lib/currency"
+
+const CURRENCY_SIGN: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" }
 
 interface Metrics {
   roas: number
@@ -116,6 +119,8 @@ export default function PriceSuggestionsPage() {
   })
 
   const eur = (n: number) => `€${n.toFixed(2)}`
+  // Prices are in the store's own currency (S&A/Lumé USD, C&C GBP); ad spend is always EUR
+  const money = (n: number, store: string) => `${CURRENCY_SIGN[STORE_CURRENCY[store] || "EUR"] || "€"}${n.toFixed(2)}`
 
   const cogsColor = (pct: number) => {
     if (pct >= 28 && pct <= 32) return "#4ade80"
@@ -243,8 +248,8 @@ export default function PriceSuggestionsPage() {
                     <td className="px-3 py-2.5">
                       <span className="px-2 py-0.5 rounded-full text-[9px] font-medium" style={{ background: rb.bg, color: rb.text }}>{s.rule}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{eur(s.current_price)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-medium" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>{eur(s.suggested_price)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono" style={{ color: "var(--text)" }}>{money(s.current_price, s.store)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-medium" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>{money(s.suggested_price, s.store)}</td>
                     <td className="px-3 py-2.5 text-right font-mono" style={{ color: s.change_pct > 0 ? "#4ade80" : "#60a5fa" }}>
                       {s.change_pct > 0 ? "+" : ""}{s.change_pct}%
                     </td>
