@@ -11,19 +11,12 @@ const FILTERS = [
   { key: "ok", label: "No issues" },
   { key: "soldout", label: "Sold out" },
 ] as const
-const input = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
+const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
 type Data = {
   fetchedAt: string
   stores: { store: string; domain: string; count: number; error: string | null }[]
   listings: LiveListing[]
-}
-
-// Auto-fixable issue types
-const AUTO_FIX_TYPES: Record<string, string> = {
-  "repeated_words": "Title: Repeated word",
-  "colour_in_title": "Title: Colour in the title",
-  "size_in_title": "Title: Size in the title",
 }
 
 function detectFixType(issueKey: string): string | null {
@@ -78,6 +71,16 @@ function computeFixedTitle(title: string, fixType: string): string {
   }
 }
 
+type PendingFix = {
+  store: string
+  productId: number
+  oldTitle: string
+  newTitle: string
+  fixType: string
+  image: string | null
+  checked: boolean
+}
+
 type FixStatus = "idle" | "fixing" | "done" | "error"
 
 export default function ListingsPage() {
@@ -89,9 +92,13 @@ export default function ListingsPage() {
   const [open, setOpen] = useState<string | null>(null)
   const [limit, setLimit] = useState(100)
   const [openIssue, setOpenIssue] = useState<string | null>(null)
-  const [fixStatus, setFixStatus] = useState<Record<string, FixStatus>>({})
-  const [fixResults, setFixResults] = useState<Record<string, { ok: number; failed: number; errors: string[] }>>({})
   const [fixedProducts, setFixedProducts] = useState<Set<string>>(new Set())
+
+  // Confirmation modal state
+  const [pendingFixes, setPendingFixes] = useState<PendingFix[]>([])
+  const [showModal, setShowModal] = useState(false)
+  const [pushing, setPushing] = useState(false)
+  const [pushResult, setPushResult] = useState<{ ok: number; failed: number; errors: string[] } | null>(null)
 
   useEffect(() => {
     fetch("/api/listings", { cache: "no-store" })
@@ -115,7 +122,6 @@ export default function ListingsPage() {
     soldOut: inStore.filter((l) => l.variants > 0 && l.inStock === 0).length,
   }
 
-  // Most common problems with affected products
   const topIssues = useMemo(() => {
     const m: Record<string, { count: number; level: string; fix: string; products: LiveListing[] }> = {}
     for (const l of inStore) for (const i of l.issues) {
@@ -139,33 +145,55 @@ export default function ListingsPage() {
     .filter((l) => !q || l.title.toLowerCase().includes(q.toLowerCase()) || l.handle.includes(q.toLowerCase()))
     .sort((a, b) => Number(crit(b)) - Number(crit(a)) || b.issues.length - a.issues.length)
 
-  const fixAll = useCallback(async (issueKey: string, products: LiveListing[]) => {
+  // Open confirmation modal for bulk fix
+  const requestFixAll = useCallback((issueKey: string, products: LiveListing[]) => {
     const fixType = detectFixType(issueKey)
     if (!fixType) return
-
-    setFixStatus((s) => ({ ...s, [issueKey]: "fixing" }))
-
-    const fixes = products
+    const fixes: PendingFix[] = products
       .filter((p) => !fixedProducts.has(`${p.store}-${p.id}`))
-      .map((p) => ({
-        store: p.store,
-        productId: p.id,
-        fixType,
-        newTitle: computeFixedTitle(p.title, fixType),
-      }))
-      .filter((f) => f.newTitle !== f.store) // only send if title actually changed
+      .map((p) => {
+        const newTitle = computeFixedTitle(p.title, fixType)
+        return { store: p.store, productId: p.id, oldTitle: p.title, newTitle, fixType, image: p.image, checked: newTitle !== p.title }
+      })
+      .filter((f) => f.oldTitle !== f.newTitle)
+    if (fixes.length === 0) return
+    setPendingFixes(fixes)
+    setPushResult(null)
+    setShowModal(true)
+  }, [fixedProducts])
 
-    if (fixes.length === 0) {
-      setFixStatus((s) => ({ ...s, [issueKey]: "done" }))
-      setFixResults((r) => ({ ...r, [issueKey]: { ok: 0, failed: 0, errors: ["All products already fixed"] } }))
-      return
-    }
+  // Open confirmation modal for single fix
+  const requestFixSingle = useCallback((l: LiveListing, fixType: string) => {
+    const newTitle = computeFixedTitle(l.title, fixType)
+    if (newTitle === l.title) return
+    setPendingFixes([{ store: l.store, productId: l.id, oldTitle: l.title, newTitle, fixType, image: l.image, checked: true }])
+    setPushResult(null)
+    setShowModal(true)
+  }, [])
+
+  // Toggle a fix in the modal
+  const toggleFix = (idx: number) => {
+    setPendingFixes((prev) => prev.map((f, i) => i === idx ? { ...f, checked: !f.checked } : f))
+  }
+  const toggleAll = (checked: boolean) => {
+    setPendingFixes((prev) => prev.map((f) => ({ ...f, checked })))
+  }
+
+  // Confirm and push to Shopify
+  const confirmAndPush = useCallback(async () => {
+    const toFix = pendingFixes.filter((f) => f.checked)
+    if (toFix.length === 0) return
+
+    setPushing(true)
+    setPushResult(null)
 
     try {
       const res = await fetch("/api/listings/fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fixes }),
+        body: JSON.stringify({
+          fixes: toFix.map((f) => ({ store: f.store, productId: f.productId, fixType: f.fixType, newTitle: f.newTitle })),
+        }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`)
@@ -178,37 +206,19 @@ export default function ListingsPage() {
       })
 
       const errors = (result.results || []).filter((r: { ok: boolean }) => !r.ok).map((r: { error?: string; store: string }) => `${r.store}: ${r.error}`)
-      setFixResults((r) => ({ ...r, [issueKey]: { ok: result.summary.ok, failed: result.summary.failed, errors } }))
-      setFixStatus((s) => ({ ...s, [issueKey]: result.summary.failed > 0 ? "error" : "done" }))
-    } catch (e) {
-      setFixStatus((s) => ({ ...s, [issueKey]: "error" }))
-      setFixResults((r) => ({ ...r, [issueKey]: { ok: 0, failed: 0, errors: [e instanceof Error ? e.message : String(e)] } }))
-    }
-  }, [fixedProducts])
+      setPushResult({ ok: result.summary.ok, failed: result.summary.failed, errors })
 
-  const fixSingle = useCallback(async (l: LiveListing, fixType: string) => {
-    const key = `single-${l.store}-${l.id}`
-    setFixStatus((s) => ({ ...s, [key]: "fixing" }))
-
-    const newTitle = computeFixedTitle(l.title, fixType)
-    try {
-      const res = await fetch("/api/listings/fix", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fixes: [{ store: l.store, productId: l.id, fixType, newTitle }] }),
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`)
-
-      const ok = result.results?.[0]?.ok
-      if (ok) {
-        setFixedProducts((prev) => { const next = new Set(prev); next.add(`${l.store}-${l.id}`); return next })
+      if (result.summary.failed === 0) {
+        setTimeout(() => setShowModal(false), 1500)
       }
-      setFixStatus((s) => ({ ...s, [key]: ok ? "done" : "error" }))
-    } catch {
-      setFixStatus((s) => ({ ...s, [key]: "error" }))
+    } catch (e) {
+      setPushResult({ ok: 0, failed: toFix.length, errors: [e instanceof Error ? e.message : String(e)] })
+    } finally {
+      setPushing(false)
     }
-  }, [])
+  }, [pendingFixes])
+
+  const checkedCount = pendingFixes.filter((f) => f.checked).length
 
   return (
     <PageShell
@@ -253,7 +263,7 @@ export default function ListingsPage() {
                 border: "1px solid rgba(255,255,255,0.06)",
               }}>{f.label}</button>
             ))}
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="ml-auto px-3 py-1.5 rounded-lg text-[11px] w-[200px]" style={input} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="ml-auto px-3 py-1.5 rounded-lg text-[11px] w-[200px]" style={inputStyle} />
           </div>
 
           {/* Most common problems — clickable */}
@@ -267,13 +277,10 @@ export default function ListingsPage() {
                   const isOpen = openIssue === k
                   const fixType = detectFixType(k)
                   const canAutoFix = !!fixType
-                  const status = fixStatus[k] || "idle"
-                  const result = fixResults[k]
                   const unfixedProducts = v.products.filter((p) => !fixedProducts.has(`${p.store}-${p.id}`))
 
                   return (
                     <div key={k} className="rounded-lg overflow-hidden" style={{ background: "rgba(255,255,255,0.03)" }}>
-                      {/* Problem header — clickable */}
                       <button
                         onClick={() => setOpenIssue(isOpen ? null : k)}
                         className="w-full px-3 py-2 text-[11px] text-left flex items-center gap-2 hover:bg-white/[0.02] transition-colors"
@@ -284,29 +291,19 @@ export default function ListingsPage() {
                         <span className="text-[10px] shrink-0" style={{ color: "var(--text-dim)" }}>{isOpen ? "▲" : "▼"}</span>
                       </button>
 
-                      {/* Expanded: affected products + fix button */}
                       {isOpen && (
                         <div className="px-3 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
                           <div className="text-[10px] mt-2 mb-2" style={{ color: "var(--text-dim)" }}>Fix: {v.fix}</div>
 
-                          {/* Fix all button */}
                           {canAutoFix && unfixedProducts.length > 0 && (
                             <div className="mb-2">
                               <button
-                                onClick={(e) => { e.stopPropagation(); fixAll(k, unfixedProducts) }}
-                                disabled={status === "fixing"}
-                                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
+                                onClick={(e) => { e.stopPropagation(); requestFixAll(k, unfixedProducts) }}
+                                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:brightness-110"
                                 style={{ background: "rgba(99,102,241,0.2)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.3)" }}
                               >
-                                {status === "fixing" ? "Fixing…" : status === "done" ? "Fixed!" : `Fix all ${unfixedProducts.length} products`}
+                                Review & fix {unfixedProducts.length} products
                               </button>
-                              {result && (
-                                <span className="ml-2 text-[10px]" style={{ color: result.failed > 0 ? "#f87171" : "#34d399" }}>
-                                  {result.ok > 0 && `${result.ok} fixed`}
-                                  {result.failed > 0 && ` · ${result.failed} failed`}
-                                  {result.errors.length > 0 && result.errors[0].includes("token") && " (needs write_products scope)"}
-                                </span>
-                              )}
                             </div>
                           )}
                           {canAutoFix && unfixedProducts.length === 0 && v.products.length > 0 && (
@@ -315,13 +312,10 @@ export default function ListingsPage() {
                             </div>
                           )}
 
-                          {/* Affected products list */}
                           <div className="space-y-1 max-h-[300px] overflow-y-auto">
                             {v.products.map((p) => {
                               const pKey = `${p.store}-${p.id}`
                               const isFixed = fixedProducts.has(pKey)
-                              const singleKey = `single-${pKey}`
-                              const singleStatus = fixStatus[singleKey] || "idle"
                               const preview = fixType ? computeFixedTitle(p.title, fixType) : null
                               const changed = preview && preview !== p.title
 
@@ -346,28 +340,17 @@ export default function ListingsPage() {
                                   <div className="flex items-center gap-1 shrink-0">
                                     {canAutoFix && !isFixed && changed && (
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); fixSingle(p, fixType!) }}
-                                        disabled={singleStatus === "fixing"}
+                                        onClick={(e) => { e.stopPropagation(); requestFixSingle(p, fixType!) }}
                                         className="px-2 py-0.5 rounded text-[9px] font-semibold"
-                                        style={{
-                                          background: singleStatus === "done" ? "rgba(52,211,153,0.15)" : "rgba(99,102,241,0.15)",
-                                          color: singleStatus === "done" ? "#34d399" : singleStatus === "error" ? "#f87171" : "#a5b4fc",
-                                        }}
+                                        style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
                                       >
-                                        {singleStatus === "fixing" ? "…" : singleStatus === "done" ? "Done" : singleStatus === "error" ? "Failed" : "Fix"}
+                                        Fix
                                       </button>
                                     )}
                                     {isFixed && (
                                       <span className="text-[9px] font-semibold" style={{ color: "#34d399" }}>Fixed</span>
                                     )}
-                                    <a
-                                      href={p.adminUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="px-2 py-0.5 rounded text-[9px]"
-                                      style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}
-                                    >
+                                    <a href={p.adminUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="px-2 py-0.5 rounded text-[9px]" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}>
                                       Shopify
                                     </a>
                                   </div>
@@ -426,8 +409,6 @@ export default function ListingsPage() {
                               i.field === "Title" && i.message.includes("Colour in the title") ? "colour_in_title" :
                               i.field === "Title" && i.message.includes("Size in the title") ? "size_in_title" :
                               null
-                            const singleKey = `single-${l.store}-${l.id}-${idx}`
-                            const singleStatus = fixStatus[`single-${l.store}-${l.id}`] || "idle"
                             const preview = issueFixType ? computeFixedTitle(l.title, issueFixType) : null
                             const changed = preview && preview !== l.title
 
@@ -435,9 +416,7 @@ export default function ListingsPage() {
                               <li key={idx} className="flex gap-2">
                                 <span style={{ color: i.level === "critical" ? "#f87171" : "#facc15" }}>{i.level === "critical" ? "●" : "○"}</span>
                                 <div className="flex-1">
-                                  <div>
-                                    <b>{i.field}:</b> {i.message}
-                                  </div>
+                                  <div><b>{i.field}:</b> {i.message}</div>
                                   <div style={{ color: "var(--text-muted)" }}>
                                     How to fix: {i.fix} <span style={{ color: "var(--text-dim)" }}>({i.source})</span>
                                   </div>
@@ -445,12 +424,11 @@ export default function ListingsPage() {
                                     <div className="flex items-center gap-2 mt-1">
                                       <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>→ <span style={{ color: "#34d399" }}>{preview}</span></span>
                                       <button
-                                        onClick={() => fixSingle(l, issueFixType)}
-                                        disabled={singleStatus === "fixing"}
+                                        onClick={() => requestFixSingle(l, issueFixType)}
                                         className="px-2 py-0.5 rounded text-[9px] font-semibold"
                                         style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
                                       >
-                                        {singleStatus === "fixing" ? "Fixing…" : singleStatus === "done" ? "Done" : "Fix this"}
+                                        Review & fix
                                       </button>
                                     </div>
                                   )}
@@ -478,10 +456,119 @@ export default function ListingsPage() {
 
           <div className="text-[10px] mt-3" style={{ color: "var(--text-dim)" }}>
             Live = published on the online store (read from each store&apos;s public product feed, cached 15 min; loaded {new Date(data.fetchedAt).toLocaleTimeString()}).
-            Auto-fix works for: repeated words, colour in title, size in title. These update the Shopify title via the Admin API (needs a token with write_products scope).
-            Other issues link to Shopify for manual editing.
+            Auto-fix works for: repeated words, colour in title, size in title. Every fix opens a review modal first — nothing pushes to Shopify without your confirmation.
           </div>
         </>
+      )}
+
+      {/* ═══ CONFIRMATION MODAL ═══ */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div className="w-full max-w-2xl rounded-2xl overflow-hidden" style={{ background: "var(--surface, #1a1b2e)", border: "1px solid rgba(255,255,255,0.1)" }}>
+            {/* Header */}
+            <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[16px]" style={{ background: "rgba(99,102,241,0.2)" }}>
+                🔧
+              </div>
+              <div className="flex-1">
+                <div className="text-[14px] font-bold" style={{ color: "var(--text)" }}>Review title changes</div>
+                <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+                  {pendingFixes.length} product{pendingFixes.length !== 1 ? "s" : ""} · uncheck any you don&apos;t want to change
+                </div>
+              </div>
+              <button onClick={() => { setShowModal(false); setPushResult(null) }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10" style={{ color: "var(--text-dim)" }}>
+                ✕
+              </button>
+            </div>
+
+            {/* Select all / none */}
+            <div className="px-5 py-2 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <label className="flex items-center gap-2 text-[11px] cursor-pointer" style={{ color: "var(--text-muted)" }}>
+                <input
+                  type="checkbox"
+                  checked={checkedCount === pendingFixes.length}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                  className="rounded"
+                  style={{ accentColor: "#6366f1" }}
+                />
+                Select all ({checkedCount}/{pendingFixes.length})
+              </label>
+            </div>
+
+            {/* Changes list */}
+            <div className="px-5 py-3 space-y-2 max-h-[400px] overflow-y-auto">
+              {pendingFixes.map((f, idx) => (
+                <label
+                  key={`${f.store}-${f.productId}`}
+                  className="flex items-start gap-3 rounded-lg px-3 py-2 cursor-pointer transition-colors hover:bg-white/[0.02]"
+                  style={{
+                    background: f.checked ? "rgba(99,102,241,0.06)" : "rgba(255,255,255,0.01)",
+                    border: `1px solid ${f.checked ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.05)"}`,
+                    opacity: f.checked ? 1 : 0.5,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={f.checked}
+                    onChange={() => toggleFix(idx)}
+                    className="mt-1 shrink-0 rounded"
+                    style={{ accentColor: "#6366f1" }}
+                  />
+                  {f.image ? (
+                    <img src={`${f.image}${f.image.includes("?") ? "&" : "?"}width=64`} alt="" className="w-8 h-8 rounded-md object-cover shrink-0 mt-0.5" loading="lazy" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-md shrink-0 mt-0.5" style={{ background: "rgba(255,255,255,0.05)" }} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+                      <span style={{ textDecoration: "line-through", opacity: 0.6 }}>{f.oldTitle}</span>
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{ color: "#34d399" }}>
+                      → {f.newTitle}
+                    </div>
+                    <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>{f.store}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Result banner */}
+            {pushResult && (
+              <div className="px-5 py-2">
+                <div className="rounded-lg px-3 py-2 text-[11px]" style={{
+                  background: pushResult.failed > 0 ? "rgba(248,113,113,0.1)" : "rgba(52,211,153,0.1)",
+                  color: pushResult.failed > 0 ? "#f87171" : "#34d399",
+                }}>
+                  {pushResult.ok > 0 && `${pushResult.ok} title${pushResult.ok !== 1 ? "s" : ""} updated on Shopify. `}
+                  {pushResult.failed > 0 && `${pushResult.failed} failed. `}
+                  {pushResult.errors.length > 0 && pushResult.errors.slice(0, 3).join(" · ")}
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="px-5 py-4 flex items-center gap-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                onClick={() => { setShowModal(false); setPushResult(null) }}
+                className="px-4 py-2 rounded-lg text-[12px] font-medium"
+                style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAndPush}
+                disabled={pushing || checkedCount === 0}
+                className="px-5 py-2 rounded-lg text-[12px] font-bold transition-all hover:brightness-110 disabled:opacity-40"
+                style={{ background: "#6366f1", color: "#fff" }}
+              >
+                {pushing ? "Pushing to Shopify…" : `Confirm & push ${checkedCount} change${checkedCount !== 1 ? "s" : ""}`}
+              </button>
+              <div className="ml-auto text-[10px]" style={{ color: "var(--text-dim)" }}>
+                Changes go live on Shopify immediately
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </PageShell>
   )
