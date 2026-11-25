@@ -33,7 +33,9 @@ interface Opportunity {
   priority_reason: string | null
   evidence_score: number | null
   commercial_score: number | null
-  evidence: Evidence[]
+  evidence?: Evidence[] // only in the detail response (loaded when a card opens)
+  competitor_domains?: string[]
+  first_source_url?: string | null
   competitor_count: number
   observations: string[]
   inferences: string[]
@@ -125,6 +127,27 @@ export default function OpportunitiesPage() {
   const [open, setOpen] = useState<number | null>(null)
   const [bulkStore, setBulkStore] = useState("")
 
+  const CACHE_KEY = "opportunities:v2"
+  const applyData = (json: { opportunities?: Opportunity[]; jobs?: ImportJob[]; patterns?: { label: string; detail: string }[]; scan?: typeof scanInfo }) => {
+    setOpps(json.opportunities || [])
+    setJobs(json.jobs || [])
+    setPatterns(json.patterns || [])
+    setScanInfo(json.scan || null)
+  }
+  // Show the last loaded list right away (this browser only), then refresh.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      if (raw) {
+        applyData(JSON.parse(raw))
+        setLoading(false)
+      }
+    } catch {
+      // storage unavailable: load normally
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/opportunities", { cache: "no-store" })
@@ -133,10 +156,12 @@ export default function OpportunitiesPage() {
         setSetupNeeded(!!json.setup_needed)
         throw new Error(json.error || `HTTP ${res.status}`)
       }
-      setOpps(json.opportunities || [])
-      setJobs(json.jobs || [])
-      setPatterns(json.patterns || [])
-      setScanInfo(json.scan || null)
+      applyData(json)
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(json))
+      } catch {
+        // quota exceeded: caching is optional
+      }
       setError(null)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -238,7 +263,7 @@ export default function OpportunitiesPage() {
     const uniq = (xs: (string | null | undefined)[]) => Array.from(new Set(xs.filter(Boolean) as string[])).sort()
     return {
       markets: uniq(opps.flatMap((o) => o.markets)),
-      competitors: uniq(opps.flatMap((o) => o.evidence.map((e) => e.competitor_domain))),
+      competitors: uniq(opps.flatMap((o) => o.competitor_domains || [])),
       categories: uniq(opps.map((o) => o.category)),
       seasons: uniq([...opps.map((o) => o.event_label || o.season), ...opps.map((o) => o.season), fSeason !== "all" ? fSeason : null]),
     }
@@ -252,7 +277,7 @@ export default function OpportunitiesPage() {
           tabStatuses.includes(o.status) &&
           (fStore === "all" || (fStore === "none" ? !o.target_store : o.target_store === fStore)) &&
           (fMarket === "all" || o.markets.includes(fMarket)) &&
-          (fCompetitor === "all" || o.evidence.some((e) => e.competitor_domain === fCompetitor)) &&
+          (fCompetitor === "all" || (o.competitor_domains || []).includes(fCompetitor)) &&
           (fCategory === "all" || o.category === fCategory) &&
           (fSeason === "all" || (o.event_label || o.season) === fSeason || o.season === fSeason) &&
           (fPriority === "all" || o.priority === fPriority),
@@ -434,17 +459,22 @@ function OpportunityCard(props: {
   const { o, job, patch } = props
   const [notes, setNotes] = useState(o.notes || "")
   const [history, setHistory] = useState<HistoryRow[] | null>(null)
+  const [detail, setDetail] = useState<Opportunity | null>(null)
   useEffect(() => setNotes(o.notes || ""), [o.notes])
   useEffect(() => {
     if (!props.expanded) return
-    fetch(`/api/opportunities/${o.id}`).then((r) => r.json()).then((j) => setHistory(j.history || []))
+    fetch(`/api/opportunities/${o.id}`).then((r) => r.json()).then((j) => {
+      setHistory(j.history || [])
+      if (j.opportunity) setDetail(j.opportunity)
+    })
   }, [props.expanded, o.id, o.status])
 
   const tz = (o.target_store && STORE_TZ[o.target_store]) || "UTC"
   const daysLeft = o.launch_by ? daysBetween(todayIn(tz), o.launch_by) : null
   const go = (status: OppStatus, extra: Record<string, unknown> = {}) => patch(o.id, { status, ...extra })
   const missing = missingChecks(o.adapt_checks)
-  const sourceUrl = o.source_url || o.evidence[0]?.url
+  const evidence = detail?.evidence || o.evidence || []
+  const sourceUrl = o.source_url || o.first_source_url || evidence[0]?.url
   const lockedStore = ["queued", "importing", "imported", "adapting", "ready_for_review", "ready_to_publish"].includes(o.status)
 
   return (
@@ -583,7 +613,10 @@ function OpportunityCard(props: {
                 </tr>
               </thead>
               <tbody>
-                {o.evidence.map((e) => (
+                {evidence.length === 0 && (
+                  <tr><td colSpan={6} className="py-2" style={{ color: "var(--text-dim)" }}>Loading sources…</td></tr>
+                )}
+                {evidence.map((e) => (
                   <tr key={e.key} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="py-1 pr-2">
                       <input
