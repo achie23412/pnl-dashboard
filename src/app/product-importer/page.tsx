@@ -5,6 +5,7 @@ import { PageShell } from "@/components/PageShell"
 import { PillSelect } from "@/components/PillSelect"
 import { ListingWorkflow, type WorkflowStats } from "@/components/ListingWorkflow"
 import { KopyImporter } from "@/components/KopyImporter"
+import { GmcScanner } from "@/components/GmcScanner"
 import { Panel, Badge, Button, Notice } from "@/components/ui"
 
 interface ParsedListing {
@@ -18,6 +19,7 @@ const TABS = [
   { key: "listings", label: "New listings", desc: "Paste links → AI listing → GMC check → Shopify" },
   { key: "import", label: "Quick import", desc: "Bulk import products as drafts (Kopy-style)" },
   { key: "ai", label: "AI listing tool", desc: "Generate a listing from product details" },
+  { key: "gmc", label: "GMC check", desc: "Check any product link against Google's rules" },
 ] as const
 type Tab = typeof TABS[number]["key"]
 
@@ -34,6 +36,11 @@ export default function ProductImporterPage() {
   const [copied, setCopied] = useState("")
   const [stats, setStats] = useState<WorkflowStats | null>(null)
   const [fromOpportunity, setFromOpportunity] = useState<{ id: number; title: string; adminUrl: string | null } | null>(null)
+
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    if (t && TABS.some((x) => x.key === t)) setTab(t as Tab)
+  }, [])
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("opportunity")
@@ -98,7 +105,7 @@ export default function ProductImporterPage() {
     <PageShell
       title="Product Importer"
       breadcrumb="Front End → Product Importer"
-      description="Import and list products across your stores."
+      description="Import products, write the listing, check it against Google Merchant Center rules, then send it to Shopify."
       stats={[
         { label: "Ready to check", value: stats ? String(stats.review) : "—" },
         { label: "Approved", value: stats ? String(stats.approved) : "—" },
@@ -127,6 +134,9 @@ export default function ProductImporterPage() {
 
       {/* New Listings tab */}
       {tab === "listings" && <ListingWorkflow onStats={setStats} />}
+
+      {/* GMC check tab */}
+      {tab === "gmc" && <GmcScanner />}
 
       {/* Quick Import tab */}
       {tab === "import" && <KopyImporter />}

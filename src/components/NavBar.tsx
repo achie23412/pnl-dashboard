@@ -235,7 +235,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/calendar": "events todo to-do tasks must do season holiday black friday shipping cutoff",
   "/product-performance": "products roas breakeven be roas margin cogs winners date",
   "/opportunities": "competitor products launch season approve research trends new products",
-  "/product-importer": "import kopy listing redo listing gmc draft shopify",
+  "/product-importer": "import kopy listing redo listing gmc pre-launch scanner merchant center check draft shopify",
   "/product-alerts": "draft drafting sop rules kill exclude alerts problems fix",
   "/competitors": "competitor tracker trendtrack stores visits trustpilot",
   "/price-suggestions": "price pricing markup",
@@ -263,7 +263,6 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/opportunities", label: "Product Opportunities", icon: <ProductsIcon /> },
       // 2. List them
       { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
-      { href: "/gmc-scanner", label: "GMC Pre-Launch Scanner", icon: <ScannerIcon /> },
       { href: "/listings", label: "Listings", icon: <ListIcon /> },
       // 3. Measure and act on what's live
       { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
