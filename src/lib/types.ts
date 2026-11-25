@@ -41,6 +41,8 @@ export interface RefundRow {
   amount: number
 }
 
+export type CogsConfidence = "actual" | "partial" | "estimated"
+
 export interface KPIData {
   revenue: number
   spend: number
@@ -55,6 +57,8 @@ export interface KPIData {
   cvr: number | null
   refundAmount: number
   refundRate: number
+  breakevenRoas: number
+  cogsConfidence: CogsConfidence
 }
 
 export interface StoreKPI {

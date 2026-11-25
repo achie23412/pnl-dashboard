@@ -16,10 +16,11 @@ import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES } from "@/lib/constant
 import type { StoreName } from "@/lib/constants"
 import type {
   RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData,
-  RefundRow, StoreKPI, DailyBriefingRow,
+  RefundRow, StoreKPI, DailyBriefingRow, CogsConfidence,
 } from "@/lib/types"
 import { STORE_CURRENCY, COGS_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
+import { getCached, setCache } from "@/lib/cache"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,6 +94,23 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
+      const cached = getCached<{
+        rev: RevenueRow[]; sp: SpendRow[]; cg: CogsRow[];
+        ses: SessionsRow[]; ref: RefundRow[]; lr: string | null; rt: EurRates
+      }>("hub-data")
+
+      if (cached) {
+        setRevenue(cached.rev)
+        setSpend(cached.sp)
+        setCogs(cached.cg)
+        setSessions(cached.ses)
+        setRefunds(cached.ref)
+        setLastRefresh(cached.lr)
+        setRates(cached.rt)
+        setLoading(false)
+        return
+      }
+
       setLoading(true)
       const [{ data: rev }, { data: sp }, { data: cg }, { data: log }, { data: ses }, { data: ref }] = await Promise.all([
         supabase.from("daily_revenue").select("*").order("date"),
@@ -102,17 +120,24 @@ export default function Dashboard() {
         supabase.from("daily_sessions").select("*").order("date"),
         supabase.from("refunds").select("date,store,amount").order("date"),
       ])
-      setSessions((ses as SessionsRow[]) || [])
       const revRows = (rev as RevenueRow[]) || []
+      const spRows = (sp as SpendRow[]) || []
       const cogsRows = (cg as CogsRow[]) || []
+      const sesRows = (ses as SessionsRow[]) || []
+      const refRows = (ref as RefundRow[]) || []
+      const lr = log?.[0]?.completed_at || null
       const firstDate = [revRows[0]?.date, cogsRows[0]?.date].filter(Boolean).sort()[0]
       const today = new Date().toISOString().slice(0, 10)
-      setRates(await fetchEurRates(firstDate || today, today))
+      const rt = await fetchEurRates(firstDate || today, today)
+
+      setCache("hub-data", { rev: revRows, sp: spRows, cg: cogsRows, ses: sesRows, ref: refRows, lr, rt })
+      setSessions(sesRows)
       setRevenue(revRows)
-      setSpend((sp as SpendRow[]) || [])
+      setSpend(spRows)
       setCogs(cogsRows)
-      setRefunds((ref as RefundRow[]) || [])
-      if (log && log.length > 0) setLastRefresh(log[0].completed_at)
+      setRefunds(refRows)
+      setLastRefresh(lr)
+      setRates(rt)
       setLoading(false)
     }
     load()
@@ -121,6 +146,10 @@ export default function Dashboard() {
   const revenueEur = useMemo(
     () => revenue.map((r) => ({ ...r, revenue: toEur(r.revenue, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
     [revenue, rates],
+  )
+  const spendEur = useMemo(
+    () => spend.map((r) => ({ ...r, spend: toEur(r.spend, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
+    [spend, rates],
   )
   const cogsEur = useMemo(
     () => cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) })),
@@ -141,16 +170,16 @@ export default function Dashboard() {
 
     return {
       revenue: revenueEur.filter((r) => inRange(r.date) && inStore(r.store)),
-      spend: spend.filter((r) => inRange(r.date) && inStore(r.store)),
+      spend: spendEur.filter((r) => inRange(r.date) && inStore(r.store)),
       cogs: cogsEur.filter((r) => inRange(r.date) && inStore(r.store)),
       sessions: sessions.filter((r) => inRange(r.date) && inStore(r.store)),
       refunds: refunds.filter((r) => inRange(r.date) && inStore(r.store)),
       prevRevenue: revenueEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
-      prevSpend: spend.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+      prevSpend: spendEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
       prevCogs: cogsEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
       prevRefunds: refunds.filter((r) => inPrevRange(r.date) && inStore(r.store)),
     }
-  }, [revenueEur, spend, cogsEur, sessions, refunds, dateFrom, dateTo, prevFrom, prevTo, store])
+  }, [revenueEur, spendEur, cogsEur, sessions, refunds, dateFrom, dateTo, prevFrom, prevTo, store])
 
   function computeKPI(
     rev: typeof filtered.revenue,
@@ -189,6 +218,21 @@ export default function Dashboard() {
       .filter((r) => sessionDays.has(`${r.date}|${r.store}`))
       .reduce((s, r) => s + r.orders, 0)
 
+    const cogsPercent = totalRevenue > 0 ? (totalCogs / totalRevenue) * 100 : 0
+    let weightedTxnRate = 0
+    if (totalRevenue > 0) {
+      for (const r of rev) {
+        weightedTxnRate += (r.revenue / totalRevenue) * (TRANSACTION_FEE_RATE[r.store] || 0.035)
+      }
+    }
+    const margin = cogsPercent / 100 + weightedTxnRate
+    const breakevenRoas = margin < 1 ? 1 / (1 - margin) : 0
+
+    const cogsConfidence: CogsConfidence =
+      actualCogs > 0 && estCogs === 0 ? "actual"
+      : actualCogs > 0 && estCogs > 0 ? "partial"
+      : "estimated"
+
     return {
       revenue: totalRevenue,
       spend: totalSpend,
@@ -198,11 +242,13 @@ export default function Dashboard() {
       profit,
       orders: totalOrders,
       roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
-      cogsPercent: totalRevenue > 0 ? (totalCogs / totalRevenue) * 100 : 0,
+      cogsPercent,
       sessions: totalSessions,
       cvr: totalSessions > 0 ? (ordersWithSessions / totalSessions) * 100 : null,
       refundAmount: totalRefundAmount,
       refundRate: totalRevenue > 0 ? (totalRefundAmount / totalRevenue) * 100 : 0,
+      breakevenRoas,
+      cogsConfidence,
     }
   }
 
@@ -323,6 +369,39 @@ export default function Dashboard() {
       })
   }, [filtered, includeTxnFees, rates, todayStr])
 
+  const roasAlerts = useMemo(() => {
+    if (dailyBriefing.length < 2) return []
+    const sorted = [...dailyBriefing].sort((a, b) => b.date.localeCompare(a.date))
+    const today = sorted[0]
+    const prev = sorted[1]
+    if (!prev || prev.roas === 0) return []
+    const alerts: { store: string; todayRoas: number; prevRoas: number; drop: number }[] = []
+
+    if (store === "Overall") {
+      const storeNames = STORES.filter((s) => s !== "Overall")
+      for (const s of storeNames) {
+        const sRevToday = filtered.revenue.filter((r) => r.store === s && r.date === today.date)
+        const sSpendToday = filtered.spend.filter((r) => r.store === s && r.date === today.date)
+        const sRevPrev = filtered.revenue.filter((r) => r.store === s && r.date === prev.date)
+        const sSpendPrev = filtered.spend.filter((r) => r.store === s && r.date === prev.date)
+        const tRev = sRevToday.reduce((a, r) => a + r.revenue, 0)
+        const tSpend = sSpendToday.reduce((a, r) => a + r.spend, 0)
+        const pRev = sRevPrev.reduce((a, r) => a + r.revenue, 0)
+        const pSpend = sSpendPrev.reduce((a, r) => a + r.spend, 0)
+        const tRoas = tSpend > 0 ? tRev / tSpend : 0
+        const pRoas = pSpend > 0 ? pRev / pSpend : 0
+        if (pRoas > 0 && tRoas < pRoas * 0.7 && tSpend > 10) {
+          alerts.push({ store: s, todayRoas: tRoas, prevRoas: pRoas, drop: ((pRoas - tRoas) / pRoas) * 100 })
+        }
+      }
+    } else {
+      if (today.roas < prev.roas * 0.7 && today.spend > 10) {
+        alerts.push({ store, todayRoas: today.roas, prevRoas: prev.roas, drop: ((prev.roas - today.roas) / prev.roas) * 100 })
+      }
+    }
+    return alerts
+  }, [dailyBriefing, filtered, store])
+
   const dailyPnL = useMemo((): DailyPnL[] => {
     return dailyBriefing.map((row) => ({
       date: row.date,
@@ -376,9 +455,24 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
+          {rates.fallback && (
+            <div
+              className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2"
+              style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span className="text-[11px] font-medium" style={{ color: "var(--orange)" }}>
+                ECB rate service unreachable — using fallback rates (€1 = $1.11 / £0.835). Amounts may differ slightly from actual.
+              </span>
+            </div>
+          )}
+
           <div className="mb-5">
             <div className="flex items-center justify-end gap-1.5 mb-2.5">
-              <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }}>Transaction fees (3.5%)</span>
+              <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }}>Transaction fees</span>
               <button
                 onClick={() => setIncludeTxnFees(!includeTxnFees)}
                 className="relative w-7 h-4 rounded-full transition-all"
@@ -395,6 +489,25 @@ export default function Dashboard() {
             </div>
             <KPICards data={kpi} prevData={showComparison ? prevKpi : null} includeTxnFees={includeTxnFees} />
           </div>
+
+          {roasAlerts.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {roasAlerts.map((a) => (
+                <div
+                  key={a.store}
+                  className="rounded-xl px-4 py-2.5 flex items-center gap-2"
+                  style={{ background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.2)" }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
+                  </svg>
+                  <span className="text-[11px] font-medium" style={{ color: "var(--red)" }}>
+                    {a.store} ROAS dropped {a.drop.toFixed(0)}% — {a.prevRoas.toFixed(2)}x → {a.todayRoas.toFixed(2)}x
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {store === "Overall" && storeKPIs.length > 0 && (
             <div className="mb-5">

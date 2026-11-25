@@ -1,7 +1,8 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { createClient } from "@supabase/supabase-js"
 
 function Icon({ d, size = 14 }: { d: string; size?: number }) {
   return (
@@ -227,7 +228,7 @@ interface NavSection {
   collapsible?: boolean
 }
 
-const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor"])
+const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -326,6 +327,23 @@ function StoreSelector() {
 export function NavBar() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [showAll, setShowAll] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<string | null>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    const sb = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
+    sb.from("refresh_log")
+      .select("completed_at")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data?.[0]?.completed_at) setLastRefresh(data[0].completed_at)
+      })
+  }, [])
 
   if (pathname === "/login") return null
 
@@ -334,11 +352,33 @@ export function NavBar() {
   }
 
   return (
+    <>
+      {/* Mobile hamburger */}
+      <button
+        className="fixed top-3 left-3 z-[60] w-9 h-9 rounded-lg flex items-center justify-center md:hidden"
+        style={{ background: "rgba(8,11,22,0.85)", border: "1px solid rgba(255,255,255,0.1)" }}
+        onClick={() => setMobileOpen(!mobileOpen)}
+      >
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth={2} strokeLinecap="round">
+          {mobileOpen
+            ? <><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></>
+            : <><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></>}
+        </svg>
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
     <aside
-      className="fixed top-0 left-0 bottom-0 z-50 flex flex-col"
+      className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col transition-transform md:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{
         width: "var(--sidebar-w)",
-        background: "rgba(8,11,22,0.85)",
+        background: "rgba(8,11,22,0.95)",
         backdropFilter: "blur(24px)",
         borderRight: "1px solid rgba(255,255,255,0.06)",
       }}
@@ -368,72 +408,86 @@ export function NavBar() {
 
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}>
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.label || "bottom"}>
-            {section.label && (
-              <div
-                className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-0.5 mt-2 cursor-pointer select-none flex items-center justify-between"
-                style={{ color: "var(--text-dim)" }}
-                onClick={() => section.label && toggleSection(section.label)}
-              >
-                {section.label}
-                {section.items.length > 3 && (
-                  <svg
-                    width={8}
-                    height={8}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    style={{
-                      transform: collapsed[section.label] ? "rotate(-90deg)" : "rotate(0deg)",
-                      transition: "transform 0.15s",
-                    }}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                )}
-              </div>
-            )}
-            {!collapsed[section.label] &&
-              section.items.map((item) => {
-                const active = pathname === item.href
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all mb-px relative overflow-hidden"
-                    style={{
-                      background: active ? "rgba(255,255,255,0.07)" : "transparent",
-                      color: active ? "#fff" : "var(--text-muted)",
-                    }}
-                  >
-                    {active && (
-                      <div
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-3 rounded-full"
-                        style={{ background: "#6366f1" }}
-                      />
-                    )}
-                    <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
-                    <span className="truncate">{item.label}</span>
-                    {!DONE_PAGES.has(item.href) && (
-                      <span className="shrink-0 text-[7px] opacity-50" style={{ color: "var(--text-dim)" }}>
-                        (not done yet)
-                      </span>
-                    )}
-                    {item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                        style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-          </div>
-        ))}
+        {NAV_SECTIONS.map((section) => {
+          const items = showAll ? section.items : section.items.filter(i => DONE_PAGES.has(i.href))
+          if (items.length === 0) return null
+          return (
+            <div key={section.label || "bottom"}>
+              {section.label && (
+                <div
+                  className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-0.5 mt-2 cursor-pointer select-none flex items-center justify-between"
+                  style={{ color: "var(--text-dim)" }}
+                  onClick={() => section.label && toggleSection(section.label)}
+                >
+                  {section.label}
+                  {items.length > 3 && (
+                    <svg
+                      width={8}
+                      height={8}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      style={{
+                        transform: collapsed[section.label] ? "rotate(-90deg)" : "rotate(0deg)",
+                        transition: "transform 0.15s",
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  )}
+                </div>
+              )}
+              {!collapsed[section.label] &&
+                items.map((item) => {
+                  const active = pathname === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all mb-px relative overflow-hidden"
+                      style={{
+                        background: active ? "rgba(255,255,255,0.07)" : "transparent",
+                        color: active ? "#fff" : "var(--text-muted)",
+                      }}
+                    >
+                      {active && (
+                        <div
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-3 rounded-full"
+                          style={{ background: "#6366f1" }}
+                        />
+                      )}
+                      <span style={{ opacity: active ? 1 : 0.5 }}>{item.icon}</span>
+                      <span className="truncate">{item.label}</span>
+                      {!DONE_PAGES.has(item.href) && (
+                        <span className="shrink-0 text-[7px] opacity-50" style={{ color: "var(--text-dim)" }}>
+                          (not done yet)
+                        </span>
+                      )}
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span
+                          className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444" }}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+            </div>
+          )
+        })}
+
+        {/* Show all / show live toggle */}
+        <button
+          onClick={() => setShowAll(p => !p)}
+          className="w-full text-[9px] font-medium px-2.5 py-2 mt-1 rounded-lg text-left transition-colors"
+          style={{ color: "var(--text-dim)", background: "transparent" }}
+        >
+          {showAll ? "← Show live pages only" : `Show all pages (${NAV_SECTIONS.reduce((n, s) => n + s.items.filter(i => !DONE_PAGES.has(i.href)).length, 0)} more)`}
+        </button>
       </nav>
 
       <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
@@ -450,8 +504,17 @@ export function NavBar() {
         >
           <div className="text-[10px] font-semibold mb-0.5" style={{ color: "var(--text-muted)" }}>5 Stores Active</div>
           All amounts in EUR
+          {lastRefresh && (
+            <div className="mt-1 flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#34d399" }} />
+              <span>
+                Last refresh: {new Date(lastRefresh).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </aside>
+    </>
   )
 }

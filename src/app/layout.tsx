@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <NavBar />
-        <div style={{ marginLeft: "var(--sidebar-w)" }}>{children}</div>
+        <div className="md:ml-[200px]">{children}</div>
       </body>
     </html>
   )

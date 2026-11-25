@@ -122,8 +122,14 @@ export function KPICards({
   includeTxnFees?: boolean
 }) {
   const profitColor = data.profit >= 0 ? "var(--green)" : "var(--red)"
-  const roasColor = data.roas >= 2.5 ? "var(--green)" : data.roas >= 1 ? "var(--orange)" : "var(--red)"
+  const be = data.breakevenRoas
+  const roasColor = be > 0 && data.roas >= be ? "var(--green)" : data.roas >= 1 ? "var(--orange)" : "var(--red)"
   const refundColor = data.refundRate <= 3 ? "var(--green)" : data.refundRate <= 5 ? "var(--orange)" : "var(--red)"
+
+  const confColor = data.cogsConfidence === "actual" ? "var(--green)"
+    : data.cogsConfidence === "partial" ? "var(--orange)" : "var(--red)"
+  const confLabel = data.cogsConfidence === "actual" ? "ShipGoods"
+    : data.cogsConfidence === "partial" ? "Partial" : "Estimated"
   const estLabel =
     data.estCogs > 0
       ? ` · <span style="color:var(--orange)">~€${fmt(data.estCogs)} est.</span>`
@@ -156,7 +162,9 @@ export function KPICards({
         title="ROAS"
         icon={ICONS.roas}
         value={`${data.roas.toFixed(2)}x`}
-        sub={data.roas >= 2.5 ? "Healthy" : data.roas >= 1 ? "Break-even zone" : "Below break-even"}
+        sub={be > 0
+          ? `BE: ${be.toFixed(2)}x · ${data.roas >= be ? "Above breakeven" : data.roas >= 1 ? "Break-even zone" : "Below break-even"}`
+          : data.roas >= 1 ? "Break-even zone" : "Below break-even"}
         valueColor={roasColor}
         accentColor={roasColor === "var(--green)" ? "#34d399" : roasColor === "var(--orange)" ? "#D4903A" : "#f87171"}
         delta={<Delta current={data.roas} previous={prevData?.roas ?? null} />}
@@ -174,7 +182,7 @@ export function KPICards({
         title="COGS"
         icon={ICONS.cogs}
         value={`€${fmt(data.cogs + data.estCogs)}`}
-        sub={`${data.cogsPercent.toFixed(1)}% of rev${estLabel}`}
+        sub={`${data.cogsPercent.toFixed(1)}% of rev · <span style="color:${confColor}">${confLabel}</span>${estLabel}`}
         valueColor="var(--orange)"
         accentColor="#D4903A"
       />

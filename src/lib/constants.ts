@@ -88,11 +88,11 @@ export const STORE_MARKET: Record<string, string> = {
 }
 
 export const TRANSACTION_FEE_RATE: Record<string, number> = {
-  LUMEGLASSES: 0.035,
-  Blinky: 0.035,
-  "Walsh & Farley": 0.035,
-  "Carter & Collins": 0.035,
-  "Susan & Allen": 0.035,
+  LUMEGLASSES: 0.029,
+  Blinky: 0.029,
+  "Walsh & Farley": 0.029,
+  "Carter & Collins": 0.039,
+  "Susan & Allen": 0.039,
 }
 
 export const DATE_PRESETS = [
