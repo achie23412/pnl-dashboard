@@ -35,7 +35,10 @@ const STORES: Record<string, string[]> = {
 const PUBLISH_PER_DAY = 10 // Ascend Drafting SOP
 const PIPELINE: OppStatus[] = ["approved", "queued", "importing", "imported", "adapting", "ready_for_review", "ready_to_publish"]
 const TARGET_ROAS = 2.5 // OAK Google Ads SOP
-const EXCLUDE = /^(general|home)/i
+// The Google stores sell fashion: other scanned categories (gifts, toys, garden, gadgets…) are left out
+const NON_FASHION = /^(general|home|gifts?|toys?|garden|gadgets?|pets?|crafts?|auto|beauty|health|kitchen|electronics|office|sports? equipment)\b/i
+const FASHION = /coat|jacket|knit|cardigan|sweater|jumper|dress|top|shirt|blouse|trouser|pant|jean|shoe|boot|sneaker|loafer|sandal|heel|bag|skirt|short|suit|blazer|hoodie|sweat|jumpsuit|lounge|activewear|set|accessor|scarf|hat|belt|jewel|outerwear|vest|waistcoat|lingerie|swim/i
+const isFashion = (c: string) => !NON_FASHION.test(c) && FASHION.test(c)
 
 type CatPlan = {
   category: string
@@ -158,7 +161,7 @@ export function UploadPlanner({ opps, onApply }: { opps: PlannerOpp[]; onApply: 
                       </tr>
                     </thead>
                     <tbody>
-                      {plan.cats.map((c) => (
+                      {plan.cats.filter((c) => c.slots > 0).map((c) => (
                         <tr key={c.category} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", opacity: c.slots ? 1 : 0.5 }}>
                           <td className="py-1.5 pr-2 font-medium">{c.category}</td>
                           <td className="py-1.5 px-2 text-right font-bold" style={{ color: c.slots ? "#34d399" : "var(--text-dim)" }}>{c.slots}</td>
@@ -170,6 +173,14 @@ export function UploadPlanner({ opps, onApply }: { opps: PlannerOpp[]; onApply: 
                       ))}
                     </tbody>
                   </table>
+                  {plan.cats.some((c) => c.slots === 0) && (
+                    <div className="mt-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
+                      Not picked this time (weaker demand or results): {plan.cats.filter((c) => c.slots === 0).map((c) => `${c.category} (${c.candidates})`).join(", ")}
+                    </div>
+                  )}
+                  <div className="mt-1 text-[10px]" style={{ color: "var(--text-dim)" }}>
+                    Your sales per product come from Shipgoods fulfilment data; spend from Google Ads per product. Rules: ROAS ≥ 2.5 (OAK target) → more, spend with no sales → fewer, no live products in a category → small boost, a category above 30% of the store → less, max 40% of the batch per category.
+                  </div>
                 </div>
               )}
 
@@ -212,7 +223,7 @@ function makePlan(a: { opps: PlannerOpp[]; store: string; days: number; today: s
     (o.status === "new" || o.status === "under_review") &&
     (o.target_store === store || (!o.target_store && o.markets.some((m) => markets.includes(m)))) &&
     !o.catalogue_match &&
-    o.category && !EXCLUDE.test(o.category) &&
+    !!o.category && isFashion(o.category) &&
     (o.priority === "high" || o.priority === "medium"),
   )
   const available = cands.length
