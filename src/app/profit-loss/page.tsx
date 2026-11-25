@@ -49,8 +49,8 @@ function finish(r: Row, fees: { mb: number; txn: number }): Line {
 }
 
 const monthLabel = (m: string) => new Date(m + "-01T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" })
-const eur = (n: number) => (Math.abs(n) < 0.005 ? "–" : `€${n.toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
-const eur0 = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
+const eur = (n: number) => (Math.abs(n) < 0.005 ? "–" : `${n < 0 ? "−" : ""}€${Math.abs(n).toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+const eur0 = (n: number) => `${n < 0 ? "−" : ""}€${Math.abs(Math.round(n)).toLocaleString("en-IE")}`
 const pct = (n: number | null) => (n === null ? "" : `${n.toFixed(1)}%`)
 const xr = (n: number | null) => (n === null ? "" : `${n.toFixed(2)}x`)
 
