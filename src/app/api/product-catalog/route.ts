@@ -297,6 +297,8 @@ interface CatalogProduct {
   // Breakeven ROAS = 1 / (1 - COGS% - transaction fee %), from this product's
   // COGS per unit (converted to store currency) and its average selling price.
   be_roas: number | null
+  // Shopify product ids in the store (empty when unknown)
+  product_ids: string[]
 }
 
 interface StoreContext {
@@ -437,6 +439,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       ad_spend: adSpend,
       roas: adSpend != null && adSpend > 0 ? s.revenue / adSpend : null,
       be_roas: beRoas(cogsUsd, s.qty, s.revenue, ctx),
+      product_ids: s.productIds,
     })
   }
 
@@ -474,6 +477,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       ad_spend: null,
       roas: null,
       be_roas: null,
+      product_ids: [],
     })
   }
 
@@ -511,6 +515,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
         ad_spend: null,
         roas: null,
         be_roas: null,
+        product_ids: [],
       })
     }
   }
@@ -549,6 +554,8 @@ interface StoreSummary {
   roas: number | null
   be_roas: number | null // from product COGS% in this period + transaction fees
   product_level_spend: boolean // true when per-product spend exists (Google)
+  spend_threshold: number // drafting SOP threshold: €30 in store currency
+  currency: string
 }
 
 export async function GET(req: Request) {
@@ -633,6 +640,7 @@ export async function GET(req: Request) {
           ad_spend: spend,
           roas: 0,
           be_roas: null,
+          product_ids: [productId],
         })
       })
     }
@@ -658,6 +666,8 @@ export async function GET(req: Request) {
       roas: adSpend > 0 ? revenue / adSpend : null,
       be_roas: margin != null && margin > 0 ? 1 / margin : null,
       product_level_spend: ctx.productSpend != null,
+      spend_threshold: Math.round(30 * perEur(STORE_CURRENCY[s] || "EUR") * 100) / 100,
+      currency: STORE_CURRENCY[s] || "EUR",
     })
   })
 

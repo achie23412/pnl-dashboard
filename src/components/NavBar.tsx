@@ -228,7 +228,7 @@ interface NavSection {
   collapsible?: boolean
 }
 
-const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer"])
+const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
