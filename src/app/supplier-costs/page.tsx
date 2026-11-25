@@ -142,21 +142,21 @@ export default function SupplierCostsPage() {
         <Panel title={`${alertCount} ${alertCount !== 1 ? "products need" : "product needs"} action`} sub="Click a label to show only those products." className="mb-4">
           <div className="flex flex-wrap gap-2">
             {cogsAlerts > 0 && (
-              <button type="button" onClick={() => setFilterAlerts("cogs")}>
+              <button type="button" onClick={() => setFilterAlerts({ mode: "include", values: ["cogs"] })}>
                 <Badge tone="red">
                   {summary?.cogs_above_32 ?? 0} above 32% · {summary?.cogs_below_28 ?? 0} below 28%: review pricing
                 </Badge>
               </button>
             )}
             {priceAlerts > 0 && (
-              <button type="button" onClick={() => setFilterAlerts("price")}>
+              <button type="button" onClick={() => setFilterAlerts({ mode: "include", values: ["price"] })}>
                 <Badge tone="amber">
                   {priceAlerts} price mismatch{priceAlerts !== 1 ? "es" : ""}: ask the supplier
                 </Badge>
               </button>
             )}
             {negotiateAlerts > 0 && (
-              <button type="button" onClick={() => setFilterAlerts("negotiate")}>
+              <button type="button" onClick={() => setFilterAlerts({ mode: "include", values: ["negotiate"] })}>
                 <Badge tone="blue">
                   {negotiateAlerts} product{negotiateAlerts !== 1 ? "s" : ""}: ask for a volume discount
                 </Badge>
