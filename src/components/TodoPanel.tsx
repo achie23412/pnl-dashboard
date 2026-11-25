@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import type { AutoTodo } from "@/lib/todo-rules"
 import { calendarAction } from "@/lib/todo-actions"
+import { SingleDatePicker } from "@/components/SingleDatePicker"
 
 export type CustomTodo = {
   id: number
@@ -262,14 +263,7 @@ export function TodoPanel({ events, onCustomChange }: Props) {
                 className="flex-1 min-w-[160px] px-3 py-1.5 rounded-lg text-[11px]"
                 style={inputStyle}
               />
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="px-2 py-1.5 rounded-lg text-[11px]"
-                style={inputStyle}
-                aria-label="Due date (optional)"
-              />
+              <SingleDatePicker value={form.date} onChange={(date) => setForm({ ...form, date })} />
               <select
                 value={form.store}
                 onChange={(e) => setForm({ ...form, store: e.target.value })}

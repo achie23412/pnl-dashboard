@@ -4,6 +4,7 @@ import Link from "next/link"
 import { runCompetitorScan, type ScanProgress } from "@/lib/competitor-scan"
 import { ADAPT_CHECKS, TARGET_STORES, daysBetween, todayIn, missingChecks, type OppStatus } from "@/lib/opportunity-engine"
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
+import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 import { FixBanner } from "@/components/FixBanner"
 
 interface Evidence {
@@ -117,12 +118,15 @@ export default function OpportunitiesPage() {
   const [scanning, setScanning] = useState(false)
 
   const [tab, setTab] = useState("review")
-  const [fStore, setFStore] = useState("all")
-  const [fMarket, setFMarket] = useState("all")
-  const [fCompetitor, setFCompetitor] = useState("all")
-  const [fCategory, setFCategory] = useState("all")
-  const [fSeason, setFSeason] = useState("all")
-  const [fPriority, setFPriority] = useState("all")
+  const [fStore, setFStoreF] = useState<FilterValue>(EMPTY_FILTER)
+  const [fMarket, setFMarket] = useState<FilterValue>(EMPTY_FILTER)
+  const [fCompetitor, setFCompetitor] = useState<FilterValue>(EMPTY_FILTER)
+  const [fCategory, setFCategory] = useState<FilterValue>(EMPTY_FILTER)
+  const [fSeason, setFSeasonF] = useState<FilterValue>(EMPTY_FILTER)
+  const [fPriority, setFPriority] = useState<FilterValue>(EMPTY_FILTER)
+  // Deep links (?store=, ?season=) set a single included value.
+  const setFStore = (v: string) => setFStoreF({ mode: "include", values: [v] })
+  const setFSeason = (v: string) => setFSeasonF({ mode: "include", values: [v] })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [bulkStore, setBulkStore] = useState("")
@@ -265,7 +269,7 @@ export default function OpportunitiesPage() {
       markets: uniq(opps.flatMap((o) => o.markets)),
       competitors: uniq(opps.flatMap((o) => o.competitor_domains || [])),
       categories: uniq(opps.map((o) => o.category)),
-      seasons: uniq([...opps.map((o) => o.event_label || o.season), ...opps.map((o) => o.season), fSeason !== "all" ? fSeason : null]),
+      seasons: uniq([...opps.map((o) => o.event_label || o.season), ...opps.map((o) => o.season), ...fSeason.values]),
     }
   }, [opps, fSeason])
 
@@ -275,12 +279,12 @@ export default function OpportunitiesPage() {
       opps.filter(
         (o) =>
           tabStatuses.includes(o.status) &&
-          (fStore === "all" || (fStore === "none" ? !o.target_store : o.target_store === fStore)) &&
-          (fMarket === "all" || o.markets.includes(fMarket)) &&
-          (fCompetitor === "all" || (o.competitor_domains || []).includes(fCompetitor)) &&
-          (fCategory === "all" || o.category === fCategory) &&
-          (fSeason === "all" || (o.event_label || o.season) === fSeason || o.season === fSeason) &&
-          (fPriority === "all" || o.priority === fPriority),
+          passes(fStore, o.target_store || "none") &&
+          passesAny(fMarket, o.markets) &&
+          passesAny(fCompetitor, o.competitor_domains || []) &&
+          passes(fCategory, o.category) &&
+          passesAny(fSeason, [o.event_label || o.season, o.season]) &&
+          passes(fPriority, o.priority),
       ),
     [opps, tabStatuses, fStore, fMarket, fCompetitor, fCategory, fSeason, fPriority],
   )
@@ -374,21 +378,12 @@ export default function OpportunitiesPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-3">
-        {[
-          { v: fStore, set: setFStore, label: "Store", opts: [...STORE_NAMES, "none"] },
-          { v: fMarket, set: setFMarket, label: "Market", opts: options.markets },
-          { v: fCompetitor, set: setFCompetitor, label: "Competitor", opts: options.competitors },
-          { v: fCategory, set: setFCategory, label: "Category", opts: options.categories },
-          { v: fSeason, set: setFSeason, label: "Season/event", opts: options.seasons },
-          { v: fPriority, set: setFPriority, label: "Priority", opts: ["high", "medium", "low"] },
-        ].map((f) => (
-          <select key={f.label} className={field} style={border} value={f.v} onChange={(e) => f.set(e.target.value)}>
-            <option value="all">{f.label}: all</option>
-            {f.opts.map((o) => (
-              <option key={o} value={o}>{o === "none" ? "No store chosen" : o}</option>
-            ))}
-          </select>
-        ))}
+        <FilterSelect label="Store" options={[...STORE_NAMES.map((s) => ({ value: s })), { value: "none", label: "No store chosen" }]} value={fStore} onChange={setFStoreF} />
+        <FilterSelect label="Market" options={options.markets} value={fMarket} onChange={setFMarket} />
+        <FilterSelect label="Competitor" options={options.competitors} value={fCompetitor} onChange={setFCompetitor} />
+        <FilterSelect label="Category" options={options.categories} value={fCategory} onChange={setFCategory} />
+        <FilterSelect label="Season/event" options={options.seasons} value={fSeason} onChange={setFSeasonF} />
+        <FilterSelect label="Priority" options={[{ value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} value={fPriority} onChange={setFPriority} />
       </div>
 
       {/* Bulk bar */}

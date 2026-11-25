@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { FixBanner } from "@/components/FixBanner"
 import { SHOPIFY_STORES, STORE_COLORS } from "@/lib/constants"
 import { buildAlerts, type Alert, type Severity, type StoreWindow, type WindowProduct } from "@/lib/product-alerts"
@@ -32,8 +33,10 @@ export default function ProductAlertsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [fStore, setFStore] = useState("all")
-  const [fSev, setFSev] = useState<"all" | Severity>("all")
+  const [fStore, setFStoreF] = useState<FilterValue>(EMPTY_FILTER)
+  const [fSev, setFSevF] = useState<FilterValue>(EMPTY_FILTER)
+  const setFStore = (v: string) => setFStoreF({ mode: "include", values: [v] })
+  const setFSev = (v: Severity) => setFSevF({ mode: "include", values: [v] })
 
   // Deep link from the calendar to-do list: /product-alerts?store=<name>
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function ProductAlertsPage() {
   }, [])
 
   const stores = useMemo(() => Array.from(new Set(alerts.map((a) => a.store))).sort(), [alerts])
-  const visible = alerts.filter((a) => (fStore === "all" || a.store === fStore) && (fSev === "all" || a.severity === fSev))
+  const visible = alerts.filter((a) => passes(fStore, a.store) && passes(fSev, a.severity))
   const count = (s: Severity) => alerts.filter((a) => a.severity === s).length
   const field = "bg-transparent border rounded-md px-2 py-1 text-[10px]"
   const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
@@ -77,16 +80,13 @@ export default function ProductAlertsPage() {
         setFSev("critical")
       }} />
       <div className="flex flex-wrap gap-2 mb-3">
-        <select className={field} style={border} value={fStore} onChange={(e) => setFStore(e.target.value)}>
-          <option value="all">Store: all</option>
-          {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className={field} style={border} value={fSev} onChange={(e) => setFSev(e.target.value as "all" | Severity)}>
-          <option value="all">Severity: all</option>
-          <option value="critical">Critical</option>
-          <option value="warning">Warning</option>
-          <option value="info">Info</option>
-        </select>
+        <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: alerts.filter((a) => a.store === s).length }))} value={fStore} onChange={setFStoreF} />
+        <FilterSelect
+          label="Severity"
+          options={(["critical", "warning", "info"] as Severity[]).map((s) => ({ value: s, label: SEV[s].label, count: count(s) }))}
+          value={fSev}
+          onChange={setFSevF}
+        />
       </div>
 
       {error && <div className="text-[11px] mb-3" style={{ color: "var(--red)" }}>{error}</div>}

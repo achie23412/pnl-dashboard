@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { PageShell } from "@/components/PageShell"
 import { FixBanner } from "@/components/FixBanner"
 import { SHOPIFY_STORES, STORE_COLORS } from "@/lib/constants"
@@ -167,8 +168,11 @@ export default function ProductRulesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [fStore, setFStore] = useState("all")
-  const [fVerdict, setFVerdict] = useState<"all" | Verdict>("all")
+  const [fStore, setFStoreF] = useState<FilterValue>(EMPTY_FILTER)
+  const [fVerdict, setFVerdictF] = useState<FilterValue>(EMPTY_FILTER)
+  // Single-value setters (chips, Fix banner) on top of the multi-select filters.
+  const setFStore = (v: string) => setFStoreF(v === "all" ? EMPTY_FILTER : { mode: "include", values: [v] })
+  const setFVerdict = (v: "all" | Verdict) => setFVerdictF(v === "all" ? EMPTY_FILTER : { mode: "include", values: [v] })
   const [sortKey, setSortKey] = useState<SortKey>("verdict")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -198,7 +202,7 @@ export default function ProductRulesPage() {
   const stores = useMemo(() => Array.from(new Set(products.map((p) => p.store))).sort(), [products])
   const visible = useMemo(() => {
     let list = products.filter(
-      (p) => (fStore === "all" || p.store === fStore) && (fVerdict === "all" || p.verdict === fVerdict)
+      (p) => passes(fStore, p.store) && passes(fVerdict, p.verdict)
     )
     list.sort((a, b) => {
       let cmp = 0
@@ -266,7 +270,7 @@ export default function ProductRulesPage() {
           {(["draft", "review", "live", "scale", "new"] as Verdict[]).map((v) => {
             const c = count(v)
             const meta = VERDICT_META[v]
-            const active = fVerdict === v
+            const active = fVerdict.mode === "include" && fVerdict.values.length === 1 && fVerdict.values[0] === v
             return (
               <button
                 key={v}
@@ -289,18 +293,18 @@ export default function ProductRulesPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-3">
-        <select className={field} style={border} value={fStore} onChange={(e) => setFStore(e.target.value)}>
-          <option value="all">Store: all</option>
-          {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className={field} style={border} value={fVerdict} onChange={(e) => setFVerdict(e.target.value as "all" | Verdict)}>
-          <option value="all">Status: all</option>
-          <option value="draft">Draft</option>
-          <option value="review">Review</option>
-          <option value="live">Live</option>
-          <option value="scale">Scale</option>
-          <option value="new">New</option>
-        </select>
+        <FilterSelect
+          label="Store"
+          options={stores.map((s) => ({ value: s, count: products.filter((p) => p.store === s).length }))}
+          value={fStore}
+          onChange={setFStoreF}
+        />
+        <FilterSelect
+          label="Status"
+          options={(["draft", "review", "live", "scale", "new"] as Verdict[]).map((v) => ({ value: v, label: VERDICT_META[v].label, count: count(v) }))}
+          value={fVerdict}
+          onChange={setFVerdictF}
+        />
         <div className="ml-auto text-[10px]" style={{ color: "var(--text-dim)" }}>
           {visible.length} of {products.length} products
         </div>

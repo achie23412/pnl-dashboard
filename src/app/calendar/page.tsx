@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { TodoPanel, type CustomTodo } from "@/components/TodoPanel"
 import { HARDCODED_EVENTS } from "@/lib/calendar-hardcoded"
+import { SingleDatePicker } from "@/components/SingleDatePicker"
 
 type CalendarEvent = {
   id?: string
@@ -139,13 +140,7 @@ export default function CalendarPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
             <div>
               <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Date *</label>
-              <input
-                type="date"
-                value={addForm.date}
-                onChange={(e) => setAddForm({ ...addForm, date: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
-              />
+              <SingleDatePicker value={addForm.date} onChange={(date) => setAddForm({ ...addForm, date })} align="left" fullWidth allowEmpty={false} placeholder="Pick a date" />
             </div>
             <div>
               <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Label *</label>
