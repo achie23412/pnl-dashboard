@@ -440,6 +440,29 @@ export default function TeamHubPage() {
             </>
           )}
 
+          {/* OnlineJobs.ph Timeproof */}
+          <Panel title="OnlineJobs.ph Timeproof">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                  Cross-check hours with OnlineJobs.ph time tracking screenshots and activity proof.
+                </div>
+              </div>
+              <a
+                href="https://www.onlinejobs.ph/timeproof"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors hover:brightness-110"
+                style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }}
+              >
+                Open Timeproof
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6 3H3.5A1.5 1.5 0 002 4.5v8A1.5 1.5 0 003.5 14h8a1.5 1.5 0 001.5-1.5V10m-4-7h4.5m0 0V7.5m0-4.5L8 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </a>
+            </div>
+          </Panel>
+
           <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>
             Data from Hubstaff API, cached 5 minutes. Activity % = active input time / tracked time.
           </div>
