@@ -67,6 +67,10 @@ async function runGeneration(job: Job, fetchBefore: boolean, notes?: string) {
   const db = getServiceClient()
   try {
     const before = fetchBefore || !job.before ? await fetchSourceProduct(job.source_url) : job.before
+    if (before !== job.before) {
+      // Save "before" right away so it shows even if writing the listing fails
+      await db.from("listing_jobs").update({ before, price: job.price ?? before.price }).eq("id", job.id)
+    }
     const after = await generateListing(before, job.store, notes ?? job.notes ?? undefined)
     const price = job.price ?? before.price
     const gmc = gmcFor(before, after, price)
