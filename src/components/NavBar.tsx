@@ -241,9 +241,10 @@ const SEARCH_WORDS: Record<string, string> = {
   "/keyword-maker": "competitor finder keyword maker search google shopping find new stores research",
   "/price-suggestions": "price pricing markup",
   "/season-board": "season seasonal calendar trends",
+  "/drafting-system": "draft drafting sop rules kill remove offline adgain roas threshold aov weekly cleanup",
 }
 
-const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker"])
+const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker", "/drafting-system"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -270,6 +271,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
       { href: "/product-alerts", label: "Product Alerts", icon: <AlertIcon /> },
       { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
+      { href: "/drafting-system", label: "Drafting System", icon: <RulesIcon /> },
       { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
     ],
   },
