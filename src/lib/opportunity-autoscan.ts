@@ -80,7 +80,7 @@ export interface AutoScanResult {
   blocked: number // failures with HTTP 429/403 (Shopify bot protection)
   remaining: number // competitors not scanned in the last 24h
   own: string[]
-  recompute: { created: number; updated: number; resurfaced: number; total: number } | null
+  recompute: { created: number; updated: number; resurfaced: number; removed: number; total: number } | null
   error?: string
 }
 

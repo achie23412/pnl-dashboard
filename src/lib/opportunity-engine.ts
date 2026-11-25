@@ -545,15 +545,13 @@ function fmtPrice(n: number | null, cur: string | null, assumed: boolean): strin
   return `${cur || "?"} ${n.toFixed(2)}${assumed ? " (currency assumed)" : ""}`
 }
 
-// An opportunity needs at least one of: listed by 2+ competitors, a best-seller
-// slot, or a seasonal new listing (last 30 days). Single random listings are noise.
-export function qualifies(c: Cluster, today: string): boolean {
+// An opportunity needs a pattern: listed by 2+ competitors, or a top-5 spot in
+// a competitor's best-seller collection. A single new listing is noise.
+export const TOP_BESTSELLER_RANK = 5
+export function qualifies(c: Cluster, _today: string): boolean {
   const comps = new Set(c.items.map((i) => i.p.competitor_domain))
   if (comps.size >= 2) return true
-  if (c.items.some((i) => i.p.bestseller_rank != null && i.p.bestseller_rank <= 20)) return true
-  const newest = c.items.map((i) => i.p.published_at || i.p.first_seen).sort().pop() || ""
-  const seasonal = detectSeason(c.sig) != null
-  return seasonal && newest.slice(0, 10) >= addDays(today, -30)
+  return c.items.some((i) => i.p.bestseller_rank != null && i.p.bestseller_rank <= TOP_BESTSELLER_RANK)
 }
 
 export function clusterKey(c: Cluster): string {

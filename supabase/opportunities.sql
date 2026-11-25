@@ -124,6 +124,12 @@ create table if not exists competitor_scan_state (
   products_read integer
 );
 
+-- API access: this project doesn't grant new tables to the API roles
+-- automatically. Server (service_role) reads and writes; browser (anon) reads.
+grant select, insert, update, delete on competitor_products, own_products, opportunities, opportunity_history, import_jobs, competitor_scan_state to service_role;
+grant usage, select on all sequences in schema public to service_role;
+grant select on competitor_products, own_products, opportunities, opportunity_history, import_jobs, competitor_scan_state to anon;
+
 -- RLS: dashboard reads with the anon key; all writes go through API routes
 -- that use the service key.
 alter table competitor_products enable row level security;

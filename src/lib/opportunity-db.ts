@@ -46,6 +46,7 @@ export interface OppRow {
   competitor_count: number
   competitor_count_at_decision: number | null
   target_store: string | null
+  notes: string | null
 }
 
 export async function addHistory(db: Db, opportunityId: number, from: string | null, to: string | null, note: string) {
@@ -70,13 +71,13 @@ export async function setStatus(db: Db, id: number, to: OppStatus, note: string,
 
 // Rebuild opportunities from the latest scan. Existing rows keep their status,
 // notes and store choice; only evidence, scores and timing are refreshed.
-export async function recomputeOpportunities(db: Db): Promise<{ created: number; updated: number; resurfaced: number; total: number }> {
+export async function recomputeOpportunities(db: Db): Promise<{ created: number; updated: number; resurfaced: number; removed: number; total: number }> {
   const since = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 86400000).toISOString().slice(0, 10)
   const [products, own, events, existing] = await Promise.all([
     selectAll<CompetitorProduct>(db, "competitor_products", "*", (q) => q.gte("last_seen", since)),
     selectAll<OwnProduct>(db, "own_products", "store,shopify_product_id,title,product_type"),
     loadEvents(db),
-    selectAll<OppRow>(db, "opportunities", "id,cluster_key,status,evidence,competitor_count,competitor_count_at_decision,target_store"),
+    selectAll<OppRow>(db, "opportunities", "id,cluster_key,status,evidence,competitor_count,competitor_count_at_decision,target_store,notes"),
   ])
   const drafts = buildOpportunities({ products, own, events })
   let resurfaced = 0
@@ -153,5 +154,13 @@ export async function recomputeOpportunities(db: Db): Promise<{ created: number;
   for (let i = 0; i < history.length; i += 500) {
     await db.from("opportunity_history").insert(history.slice(i, i + 500))
   }
-  return { created: inserts.length, updated: updates.length, resurfaced, total: drafts.length }
+
+  // Untouched "new" items that no longer qualify (product gone, pattern faded)
+  // are removed so the list stays current. Anything you acted on stays.
+  const stale = existing.filter((e) => !claimed.has(e.id) && e.status === "new" && !(e.notes || "").trim()).map((e) => e.id)
+  for (let i = 0; i < stale.length; i += 200) {
+    const { error } = await db.from("opportunities").delete().in("id", stale.slice(i, i + 200))
+    if (error) throw new Error(error.message)
+  }
+  return { created: inserts.length, updated: updates.length, resurfaced, removed: stale.length, total: drafts.length }
 }
