@@ -8,7 +8,7 @@ interface Product {
   units_sold: number
   sales_revenue: number
   ad_spend: number
-  roas: number
+  roas: number | null
   be_roas: number | null
   cogs_usd: number | null
 }
@@ -144,8 +144,8 @@ export default function SeasonBoardPage() {
 
   const risingProducts = useMemo(() => {
     return [...products]
-      .filter(p => p.roas > 2.5 && p.units_sold >= 3 && p.ad_spend > 20)
-      .sort((a, b) => b.roas - a.roas)
+      .filter(p => (p.roas ?? 0) > 2.5 && p.units_sold >= 3 && p.ad_spend > 20)
+      .sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
       .slice(0, 5)
   }, [products])
 
@@ -153,11 +153,11 @@ export default function SeasonBoardPage() {
     return [...products]
       .filter(p => {
         if (p.ad_spend < 20) return false
-        if (p.be_roas && p.roas < p.be_roas && p.roas > 0) return true
-        if (p.roas > 0 && p.roas < 1.5 && p.units_sold <= 1) return true
+        if (p.be_roas && p.roas != null && p.roas < p.be_roas && p.roas > 0) return true
+        if (p.roas != null && p.roas > 0 && p.roas < 1.5 && p.units_sold <= 1) return true
         return false
       })
-      .sort((a, b) => a.roas - b.roas)
+      .sort((a, b) => (a.roas ?? 0) - (b.roas ?? 0))
       .slice(0, 5)
   }, [products])
 
@@ -168,8 +168,8 @@ export default function SeasonBoardPage() {
   const storeStats = useMemo(() => {
     return activeStores.map(s => {
       const storeProducts = products.filter(p => p.store === s.store)
-      const winners = storeProducts.filter(p => p.roas > 2.5 && p.units_sold >= 2).length
-      const losers = storeProducts.filter(p => p.be_roas !== null && p.roas < p.be_roas && p.ad_spend > 20).length
+      const winners = storeProducts.filter(p => (p.roas ?? 0) > 2.5 && p.units_sold >= 2).length
+      const losers = storeProducts.filter(p => p.be_roas !== null && p.roas != null && p.roas < p.be_roas && p.ad_spend > 20).length
       const totalProducts = storeProducts.filter(p => p.units_sold > 0).length
 
       let budgetAdvice = "Hold"
@@ -298,7 +298,7 @@ export default function SeasonBoardPage() {
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] font-mono font-medium" style={{ color: "#4ade80" }}>{p.roas.toFixed(2)}x</div>
+                        <div className="text-[11px] font-mono font-medium" style={{ color: "#4ade80" }}>{(p.roas ?? 0).toFixed(2)}x</div>
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{eur(p.ad_spend)} spent</div>
                       </div>
                     </div>
@@ -324,7 +324,7 @@ export default function SeasonBoardPage() {
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] font-mono font-medium" style={{ color: "#f87171" }}>{p.roas.toFixed(2)}x</div>
+                        <div className="text-[11px] font-mono font-medium" style={{ color: "#f87171" }}>{(p.roas ?? 0).toFixed(2)}x</div>
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>BE: {p.be_roas?.toFixed(2) || "—"}x</div>
                       </div>
                     </div>
@@ -350,7 +350,7 @@ export default function SeasonBoardPage() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <div className="text-[10px] font-mono" style={{ color: "var(--text)" }}>{eur(p.sales_revenue)}</div>
-                      <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.units_sold} sold · {p.roas.toFixed(1)}x</div>
+                      <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.units_sold} sold · {(p.roas ?? 0).toFixed(1)}x</div>
                     </div>
                   </div>
                 ))}
