@@ -41,6 +41,17 @@ interface StoreRow {
   cogs: number
   refunds: number
   profit: number
+  spendByChannel: Record<string, number>
+}
+
+interface AdPerfRow {
+  store: string
+  channel: string
+  spend: number
+  clicks: number
+  impressions: number
+  ctr: number
+  cpc: number
 }
 
 export default function DailyReportPage() {
@@ -50,6 +61,7 @@ export default function DailyReportPage() {
   const [cogs, setCogs] = useState<CogsRow[]>([])
   const [refunds, setRefunds] = useState<RefundRow[]>([])
   const [sessions, setSessions] = useState<{ store: string; sessions: number }[]>([])
+  const [adPerf, setAdPerf] = useState<AdPerfRow[]>([])
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
@@ -75,6 +87,11 @@ export default function DailyReportPage() {
       setRefunds((ref as RefundRow[]) || [])
       setSessions((ses as { store: string; sessions: number }[]) || [])
       setRates(await fetchEurRates(date, date))
+      // Fetch ad performance (clicks, impressions, CTR, CPC) from Windsor
+      fetch(`/api/ad-performance?date=${date}`)
+        .then((r) => r.ok ? r.json() : { rows: [] })
+        .then((d) => setAdPerf(d.rows || []))
+        .catch(() => setAdPerf([]))
       setLoading(false)
     }
     load()
@@ -109,7 +126,13 @@ export default function DailyReportPage() {
       const storeSessions = ses.length ? ses.reduce((sum, r) => sum + r.sessions, 0) : null
       const cvr = storeSessions && storeSessions > 0 ? (totalOrders / storeSessions) * 100 : null
 
-      return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit }
+      const spendByChannel: Record<string, number> = {}
+      for (const r of sp) {
+        const ch = r.channel || "Other"
+        spendByChannel[ch] = (spendByChannel[ch] || 0) + r.spend
+      }
+
+      return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit, spendByChannel }
     }).filter((s) => s.revenue > 0 || s.spend > 0)
   }, [revenue, spend, cogs, refunds, sessions, rates, date])
 
@@ -231,7 +254,14 @@ export default function DailyReportPage() {
                             {s.sessions !== null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{s.sessions.toLocaleString("en-IE")} sess.</span>}
                           </td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: s.roas >= 2.5 ? "var(--green)" : s.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{s.roas.toFixed(2)}x</td>
-                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(s.spend)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
+                            {fmt(s.spend)}
+                            {Object.keys(s.spendByChannel).length > 1 && (
+                              <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>
+                                {Object.entries(s.spendByChannel).sort(([,a],[,b]) => b - a).map(([ch, v]) => `${ch} ${fmt(v)}`).join(" · ")}
+                              </span>
+                            )}
+                          </td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
                           <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(s.profit)}</td>
@@ -260,6 +290,76 @@ export default function DailyReportPage() {
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                 All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone
+              </div>
+            </Panel>
+          )}
+
+          {/* Ad Performance breakdown */}
+          {adPerf.length > 0 && (
+            <Panel title="Ad Performance" pad={false}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", color: "var(--text-dim)" }}>
+                      <th className={`${TH} text-left`}>Store</th>
+                      <th className={`${TH} text-left`}>Platform</th>
+                      <th className={`${TH} text-right`}>Spend</th>
+                      <th className={`${TH} text-right`}>Clicks</th>
+                      <th className={`${TH} text-right`}>Impressions</th>
+                      <th className={`${TH} text-right`}>CTR</th>
+                      <th className={`${TH} text-right`}>CPC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adPerf
+                      .sort((a, b) => b.spend - a.spend)
+                      .map((r) => (
+                        <tr key={`${r.store}|${r.channel}`} style={ROW_BORDER} className="hover:bg-white/[0.02] transition-colors">
+                          <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{r.store}</td>
+                          <td className={TD}>
+                            <Badge tone={r.channel === "Google" ? "blue" : r.channel === "Meta" ? "accent" : "amber"}>
+                              {r.channel}
+                            </Badge>
+                          </td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(r.spend)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{r.clicks.toLocaleString("en-IE")}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{r.impressions.toLocaleString("en-IE")}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: r.ctr >= 2 ? "var(--green)" : r.ctr >= 1 ? "var(--text)" : "var(--orange)" }}>
+                            {r.ctr.toFixed(2)}%
+                          </td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: r.cpc <= 0.5 ? "var(--green)" : r.cpc <= 1 ? "var(--text)" : "var(--red)" }}>
+                            €{r.cpc.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    {/* Totals row */}
+                    {(() => {
+                      const totalSpend = adPerf.reduce((s, r) => s + r.spend, 0)
+                      const totalClicks = adPerf.reduce((s, r) => s + r.clicks, 0)
+                      const totalImpressions = adPerf.reduce((s, r) => s + r.impressions, 0)
+                      const totalCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
+                      const totalCpc = totalClicks > 0 ? totalSpend / totalClicks : 0
+                      return (
+                        <tr style={{ borderTop: "2px solid rgba(255,255,255,0.1)" }}>
+                          <td className={`${TD} font-bold`} style={{ color: "var(--text)" }}>Total</td>
+                          <td className={TD}></td>
+                          <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totalSpend)}</td>
+                          <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text)" }}>{totalClicks.toLocaleString("en-IE")}</td>
+                          <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text)" }}>{totalImpressions.toLocaleString("en-IE")}</td>
+                          <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totalCtr >= 2 ? "var(--green)" : totalCtr >= 1 ? "var(--text)" : "var(--orange)" }}>
+                            {totalCtr.toFixed(2)}%
+                          </td>
+                          <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totalCpc <= 0.5 ? "var(--green)" : totalCpc <= 1 ? "var(--text)" : "var(--red)" }}>
+                            €{totalCpc.toFixed(2)}
+                          </td>
+                        </tr>
+                      )
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                Clicks, impressions, CTR and CPC from Windsor.ai · All ad spend in EUR · Data cached for 5 min
               </div>
             </Panel>
           )}
