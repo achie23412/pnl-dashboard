@@ -87,9 +87,9 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
         priority: "high",
         title: isGoogle
           ? drop >= 50
-            ? `${s}: scale the Google budget back 15% and run product exclusions`
-            : `${s}: below break-even — run product exclusions, don't raise budget`
-          : `${s}: below break-even — no scaling, apply the kill rules to every test`,
+            ? `${s}: cut 15%, run exclusions`
+            : `${s}: run exclusions, hold budget`
+          : `${s}: kill bad tests, no scaling`,
         why: numbers,
         source: isGoogle
           ? "OAK × Ascend Google Ads SOP: 50%+ dip → scale back 15%; exclude products with $25 spent + ROAS < 1.8"
@@ -100,7 +100,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
         key: `roas-drop:${s}:${today}`,
         store: s,
         priority: "normal",
-        title: `${s}: ROAS dropped ${drop.toFixed(0)}% but still profitable — hold budget`,
+        title: `${s}: ROAS −${drop.toFixed(0)}%, hold budget`,
         why: numbers,
         source: isGoogle
           ? "OAK × Ascend Google Ads SOP: only scale after 2–3 days in a row on target ROAS (2.5)"
@@ -115,7 +115,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
         key: `winners:${s}:${block}`,
         store: s,
         priority: "normal",
-        title: `${s}: add new winners to the winner campaign`,
+        title: `${s}: add to winner campaign`,
         why: `Spend is ${eur(rSpend / 3)}/day over the last 3 days (threshold ~250/day).`,
         source: "OAK × Ascend Google Ads SOP step 7: ROAS ≥ 2.2, ≥ 3 conversions in 14 days; add new winners every 4 days",
       })
@@ -127,14 +127,14 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
     todos.push({
       key: `exclusions:${today}`,
       priority: "normal",
-      title: `Check Google Ads product exclusions (${activeGoogle.join(", ")})`,
+      title: `Run product exclusions (${activeGoogle.join(", ")})`,
       why: `These stores had Google spend in the last 3 days. Also re-check the excluded list and remove exclusions that are back above target with sales.`,
       source: "OAK × Ascend Google Ads SOP steps 5–6: check daily, exclude every 2 days ($25 + ROAS < 1.8, or CPC > $1.50 after $5)",
     })
     todos.push({
       key: `publish10:${today}`,
       priority: "normal",
-      title: `Publish 10 new products per Google store`,
+      title: `Publish 10 products per store`,
       why: `Active Google stores: ${activeGoogle.join(", ")}.`,
       source: "Ascend Drafting SOP: import new products as draft, publish 10 a day",
     })
@@ -142,7 +142,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       todos.push({
         key: `drafting-weekly:${today}`,
         priority: "high",
-        title: `Weekly drafting cleanup for each Google store`,
+        title: `Monday draft cleanup (Google stores)`,
         why: `It's Monday. Use the Adgain numbers; first matching rule decides; log product, date and rule number.`,
         source: "Ascend Drafting SOP: review rules 6–11 weekly, hard rules 1–5 any day, max 50 drafts per store per day",
       })
@@ -152,7 +152,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
     todos.push({
       key: `simo-midnight:${today}`,
       priority: "normal",
-      title: `Midnight scale check for Meta tests (${activeMeta.join(", ")})`,
+      title: `Midnight scale check (${activeMeta.join(", ")})`,
       why: `These stores had Meta/TikTok spend in the last 3 days.`,
       source: "Simo: 4 gates (spend >$60, total, today and yesterday net profit >20%) → double at midnight, compare over 72h",
     })
@@ -161,7 +161,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
   todos.push({
     key: `coach-report:${today}`,
     priority: "normal",
-    title: "Send the daily P&L report to the coach",
+    title: "Send P&L to coach",
     why: "Per store: date, revenue, spend, ROAS, COGS % — plus a screenshot of the full-month dashboard.",
     source: "Coach requirement (Daily Report page)",
   })
@@ -174,7 +174,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       todos.push({
         key: `refresh-errors:${today}`,
         priority: lr.status === "error" ? "high" : "normal",
-        title: lr.status === "error" ? "Data refresh failed — numbers may be stale" : "Data refresh had errors",
+        title: lr.status === "error" ? "Data refresh failed" : "Data refresh had errors",
         why: (lr.error || "No error text").slice(0, 220),
         source: "refresh_log (last run)",
       })
@@ -182,7 +182,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       todos.push({
         key: `refresh-stale:${today}`,
         priority: "high",
-        title: "Data refresh didn't run in the last 26 hours",
+        title: "Data refresh stale (26h+)",
         why: lr.completed_at ? `Last completed run: ${lr.completed_at.slice(0, 16).replace("T", " ")} UTC.` : "No completed run found.",
         source: "refresh_log (daily cron ~07:00 Amsterdam)",
       })
@@ -192,7 +192,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
     todos.push({
       key: "cvr-tokens",
       priority: "normal",
-      title: "Add Shopify read_reports tokens in Vercel so CVR works",
+      title: "Add Shopify tokens for CVR",
       why: "The daily_sessions table is still empty, so conversion rate can't be calculated.",
       source: "P&L dashboard setup",
     })
