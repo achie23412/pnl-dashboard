@@ -228,7 +228,7 @@ interface NavSection {
   collapsible?: boolean
 }
 
-const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance"])
+const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -244,6 +244,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
       { href: "/product-performance", label: "Product Performance", icon: <PerfIcon /> },
+      { href: "/opportunities", label: "Product Opportunities", icon: <ProductsIcon /> },
       { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
       { href: "/product-importer", label: "Product Importer", icon: <ImportIcon /> },
       { href: "/listings", label: "Listings", icon: <ListIcon /> },

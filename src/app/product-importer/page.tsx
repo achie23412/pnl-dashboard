@@ -1,7 +1,9 @@
 "use client"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
+import Link from "next/link"
 import { PageShell } from "@/components/PageShell"
 import { ListingWorkflow, type WorkflowStats } from "@/components/ListingWorkflow"
+import { KopyImporter } from "@/components/KopyImporter"
 
 interface ParsedListing {
   title: string
@@ -21,6 +23,34 @@ export default function ProductImporterPage() {
   const [error, setError] = useState("")
   const [copied, setCopied] = useState("")
   const [stats, setStats] = useState<WorkflowStats | null>(null)
+  const [fromOpportunity, setFromOpportunity] = useState<{ id: number; title: string; adminUrl: string | null } | null>(null)
+
+  // Arriving from Product Opportunities (?opportunity=<id>): prefill Redo Listing
+  // with the imported product's source data, URL and store.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("opportunity")
+    if (!id) return
+    fetch(`/api/opportunities/${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const o = j.opportunity
+        if (!o) return
+        const job = (j.jobs || []).find((x: { status: string }) => x.status === "imported") || (j.jobs || [])[0]
+        const snap = job?.source_snapshot
+        const lines = [
+          `Title: ${snap?.title || o.title}`,
+          o.category ? `Category: ${[o.gender, o.category].filter(Boolean).join(" ")}` : "",
+          snap?.options?.length ? `Options: ${snap.options.map((x: { name: string; values: string[] }) => `${x.name}: ${x.values.join(", ")}`).join(" | ")}` : "",
+          snap?.body_text ? `Source description (rewrite, do not copy): ${snap.body_text}` : "",
+        ].filter(Boolean)
+        setProductInfo(lines.join("\n"))
+        setCompetitorUrl(job?.source_url || o.source_url || o.evidence?.[0]?.url || "")
+        if (o.target_store) setStore(o.target_store)
+        setFromOpportunity({ id: o.id, title: o.title, adminUrl: job?.admin_url || null })
+        setTimeout(() => document.getElementById("redo-listing")?.scrollIntoView({ behavior: "smooth" }), 300)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleRedo = useCallback(async () => {
     if (!productInfo && !competitorUrl && !imageDesc) return
@@ -71,11 +101,23 @@ export default function ProductImporterPage() {
       <ListingWorkflow onStats={setStats} />
 
       <div className="text-[10px] font-semibold uppercase tracking-wider mt-6 mb-2" style={{ color: "var(--text-dim)" }}>
+        Approved Product Opportunities · import queue and Kopy-style import
+      </div>
+      <KopyImporter />
+
+      <div className="text-[10px] font-semibold uppercase tracking-wider mt-6 mb-2" style={{ color: "var(--text-dim)" }}>
         Manual tool · no product link? Paste the details instead
       </div>
 
       {/* Redo Listing (SOP) */}
-      <div className="glass rounded-xl p-4 mb-4">
+      <div id="redo-listing" className="glass rounded-xl p-4 mb-4">
+        {fromOpportunity && (
+          <div className="rounded-lg px-3 py-2 mb-3 text-[10px]" style={{ background: "rgba(99,102,241,0.12)", color: "var(--text)" }}>
+            Adapting <b>{fromOpportunity.title}</b> (opportunity #{fromOpportunity.id}).
+            {fromOpportunity.adminUrl && <> Draft: <a href={fromOpportunity.adminUrl} target="_blank" rel="noreferrer" className="underline">open in Shopify</a>.</>}{" "}
+            Paste the results into the draft, then tick the listing checks on <Link href="/opportunities" className="underline">Product Opportunities</Link>.
+          </div>
+        )}
         <div className="flex items-center gap-2 mb-2">
           <div className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Redo Listing — Ascend SOP</div>
           <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>AI</span>
