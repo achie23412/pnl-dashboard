@@ -4,6 +4,7 @@ import Link from "next/link"
 import { runCompetitorScan, type ScanProgress } from "@/lib/competitor-scan"
 import { ADAPT_CHECKS, TARGET_STORES, daysBetween, todayIn, missingChecks, type OppStatus } from "@/lib/opportunity-engine"
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
+import { FixBanner } from "@/components/FixBanner"
 
 interface Evidence {
   key: string
@@ -291,6 +292,8 @@ export default function OpportunitiesPage() {
           </button>
         </div>
       </div>
+
+      <FixBanner />
 
       {scan && (
         <div className="glass rounded-xl px-4 py-2.5 mb-4 text-[11px]" style={{ color: "var(--text-muted)" }}>

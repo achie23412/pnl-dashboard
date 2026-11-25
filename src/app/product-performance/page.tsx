@@ -4,6 +4,7 @@ import { STORES, STORE_COLORS } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
 import { STORE_CURRENCY } from "@/lib/currency"
 import { DatePicker } from "@/components/DatePicker"
+import { FixBanner } from "@/components/FixBanner"
 import { getDateRange } from "@/lib/date-range"
 
 interface CatalogProduct {
@@ -195,6 +196,15 @@ export default function ProductPerformancePage() {
           }}
         />
       </div>
+
+      <FixBanner onApply={(ctx) => {
+        if (ctx.store) {
+          const match = STORES.find((s) => s === ctx.store)
+          if (match) setStore(match)
+        }
+        setSortKey("spend")
+        setSortDir("desc")
+      }} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">

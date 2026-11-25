@@ -235,7 +235,7 @@ export function TodoPanel({ events, onCustomChange }: Props) {
                     </button>
                     {m.href && !m.done && (
                       <Link
-                        href={m.href}
+                        href={`${m.href}${m.href.includes("?") ? "&" : "?"}fix_title=${encodeURIComponent(m.title)}&fix_why=${encodeURIComponent(m.why)}&fix_action=${encodeURIComponent(m.fix)}&fix_source=${encodeURIComponent(m.source)}${m.store ? `&fix_store=${encodeURIComponent(m.store)}` : ""}`}
                         className="text-[10px] font-semibold whitespace-nowrap px-2 py-1 rounded-md"
                         style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
                         title={m.hrefLabel ? `Open ${m.hrefLabel}` : "Open"}

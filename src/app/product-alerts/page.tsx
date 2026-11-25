@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { SHOPIFY_STORES, STORE_COLORS } from "@/lib/constants"
 import { buildAlerts, type Alert, type Severity, type StoreWindow, type WindowProduct } from "@/lib/product-alerts"
 
@@ -36,7 +37,8 @@ export default function ProductAlertsPage() {
 
   // Deep link from the calendar to-do list: /product-alerts?store=<name>
   useEffect(() => {
-    const st = new URLSearchParams(window.location.search).get("store")
+    const sp = new URLSearchParams(window.location.search)
+    const st = sp.get("store") || sp.get("fix_store")
     if (st) setFStore(st)
   }, [])
 
@@ -70,6 +72,10 @@ export default function ProductAlertsPage() {
         { label: "Products monitored", value: loading ? "—" : String(monitored) },
       ]}
     >
+      <FixBanner onApply={(ctx) => {
+        if (ctx.store) setFStore(ctx.store)
+        setFSev("critical")
+      }} />
       <div className="flex flex-wrap gap-2 mb-3">
         <select className={field} style={border} value={fStore} onChange={(e) => setFStore(e.target.value)}>
           <option value="all">Store: all</option>

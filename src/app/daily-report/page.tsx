@@ -5,6 +5,7 @@ import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE
 import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, FALLBACK_RATES } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow, RefundRow } from "@/lib/types"
+import { FixBanner } from "@/components/FixBanner"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -121,6 +122,8 @@ export default function DailyReportPage() {
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>Daily Report</h1>
       </div>
+
+      <FixBanner />
 
       {/* Date picker */}
       <div className="flex items-center gap-3 mb-3">

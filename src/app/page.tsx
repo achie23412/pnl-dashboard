@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { StoreTabs } from "@/components/StoreTabs"
 import { DatePicker } from "@/components/DatePicker"
+import { FixBanner } from "@/components/FixBanner"
 import { KPICards } from "@/components/KPICards"
 import { StoreComparison } from "@/components/StoreComparison"
 import { DailyTable } from "@/components/DailyTable"
@@ -462,6 +463,13 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      <FixBanner onApply={(ctx) => {
+        if (ctx.store) {
+          const match = STORES.find((s) => s === ctx.store)
+          if (match) setStore(match)
+        }
+      }} />
 
       <div className="mb-4">
         <StoreTabs active={store} onChange={setStore} />
