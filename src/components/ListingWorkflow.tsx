@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { checkListing, isReady, type GmcIssue } from "@/lib/gmc-check"
 import type { SourceProduct, GeneratedListing } from "@/lib/listing-workflow"
+import { PillSelect } from "@/components/PillSelect"
 
 export type Job = {
   id: number
@@ -132,9 +133,7 @@ export function ListingWorkflow({ onStats }: { onStats?: (s: WorkflowStats) => v
           style={input}
         />
         <div className="flex flex-wrap gap-2">
-          <select value={store} onChange={(e) => setStore(e.target.value)} className="px-3 py-2 rounded-lg text-[11px]" style={input} aria-label="Target store">
-            {STORES.map((s) => <option key={s}>{s}</option>)}
-          </select>
+          <PillSelect label="Store" value={store} onChange={setStore} options={STORES} />
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

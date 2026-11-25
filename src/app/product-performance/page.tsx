@@ -1,4 +1,5 @@
 "use client"
+import { PillSelect } from "@/components/PillSelect"
 import { useEffect, useState, useMemo } from "react"
 import { STORES, STORE_COLORS } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
@@ -273,28 +274,13 @@ export default function ProductPerformancePage() {
       )}
 
       {/* Store filter */}
-      <div className="glass rounded-xl p-1.5 inline-flex gap-1 overflow-x-auto mb-5">
-        {STORES.map((s) => {
-          const isActive = s === store
-          const color = s === "Overall" ? "#6366f1" : STORE_COLORS[s] || "#666"
-          return (
-            <button
-              key={s}
-              onClick={() => setStore(s)}
-              className="relative px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all"
-              style={{
-                background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
-                color: isActive ? "#fff" : "var(--text-dim)",
-              }}
-            >
-              {isActive && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-[2px] rounded-full" style={{ background: color }} />}
-              <div className="flex items-center gap-1.5">
-                {s !== "Overall" && <div className="w-1.5 h-1.5 rounded-full" style={{ background: color, opacity: isActive ? 1 : 0.4 }} />}
-                {s}
-              </div>
-            </button>
-          )
-        })}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <PillSelect
+          label="Store"
+          value={store}
+          onChange={(v) => setStore(v as StoreName)}
+          options={STORES.map((s) => ({ value: s, label: s === "Overall" ? "all stores" : s }))}
+        />
       </div>
 
       {/* Table */}

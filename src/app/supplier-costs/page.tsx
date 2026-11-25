@@ -1,6 +1,8 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { PillSelect } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 
 interface SupplierProduct {
   title: string
@@ -54,7 +56,7 @@ export default function SupplierCostsPage() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [filterStore, setFilterStore] = useState("all")
+  const [filterStore, setFilterStore] = useState<FilterValue>(EMPTY_FILTER)
   const [filterAlerts, setFilterAlerts] = useState("all")
   const [sortBy, setSortBy] = useState<"qty" | "cogs" | "variance" | "cogs_pct">("qty")
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -82,7 +84,7 @@ export default function SupplierCostsPage() {
   const stores = Array.from(new Set(products.map((p) => p.store)))
   const filtered = products
     .filter((p) => {
-      if (filterStore !== "all" && p.store !== filterStore) return false
+      if (!passes(filterStore, p.store)) return false
       if (filterAlerts === "price" && !p.price_alert) return false
       if (filterAlerts === "negotiate" && !p.negotiation_alert) return false
       if (filterAlerts === "cogs" && !p.cogs_alert) return false
@@ -145,30 +147,31 @@ export default function SupplierCostsPage() {
       )}
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <select className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-          value={filterStore} onChange={(e) => setFilterStore(e.target.value)}>
-          <option value="all">All stores</option>
-          {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-          value={filterAlerts} onChange={(e) => setFilterAlerts(e.target.value)}>
-          <option value="all">All products</option>
-          <option value="any">With alerts</option>
-          <option value="cogs">COGS% out of range</option>
-          <option value="price">Price mismatches</option>
-          <option value="negotiate">Volume negotiate</option>
-        </select>
-        <select className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-          value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
-          <option value="qty">Sort: Quantity</option>
-          <option value="cogs">Sort: Total COGS</option>
-          <option value="cogs_pct">Sort: COGS%</option>
-          <option value="variance">Sort: Price variance</option>
-        </select>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
+        <PillSelect
+          label="Show"
+          value={filterAlerts}
+          onChange={setFilterAlerts}
+          options={[
+            { value: "all", label: "All products" },
+            { value: "any", label: "With alerts" },
+            { value: "cogs", label: "COGS% out of range" },
+            { value: "price", label: "Price mismatches" },
+            { value: "negotiate", label: "Volume negotiate" },
+          ]}
+        />
+        <PillSelect
+          label="Sort"
+          value={sortBy}
+          onChange={(v) => setSortBy(v as typeof sortBy)}
+          options={[
+            { value: "qty", label: "Quantity" },
+            { value: "cogs", label: "Total COGS" },
+            { value: "cogs_pct", label: "COGS%" },
+            { value: "variance", label: "Price variance" },
+          ]}
+        />
         <span className="text-[10px] ml-auto" style={{ color: "var(--text-dim)" }}>
           {filtered.length} products
         </span>

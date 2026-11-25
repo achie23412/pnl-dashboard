@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 
 interface Metrics {
   roas: number
@@ -55,8 +56,8 @@ export default function PriceSuggestionsPage() {
   const [applying, setApplying] = useState<string | null>(null)
   const [applyResult, setApplyResult] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [filterStore, setFilterStore] = useState("all")
-  const [filterRule, setFilterRule] = useState("all")
+  const [filterStore, setFilterStore] = useState<FilterValue>(EMPTY_FILTER)
+  const [filterRule, setFilterRule] = useState<FilterValue>(EMPTY_FILTER)
 
   const fetchSuggestions = useCallback(async () => {
     setLoading(true)
@@ -108,8 +109,8 @@ export default function PriceSuggestionsPage() {
   const stores = Array.from(new Set(suggestions.map(s => s.store)))
   const rules = Array.from(new Set(suggestions.map(s => s.rule)))
   const filtered = suggestions.filter(s => {
-    if (filterStore !== "all" && s.store !== filterStore) return false
-    if (filterRule !== "all" && s.rule !== filterRule) return false
+    if (!passes(filterStore, s.store)) return false
+    if (!passes(filterRule, s.rule)) return false
     return true
   })
 
@@ -134,25 +135,9 @@ export default function PriceSuggestionsPage() {
       ]}
     >
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <select
-          className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-          value={filterStore}
-          onChange={e => setFilterStore(e.target.value)}
-        >
-          <option value="all">All stores</option>
-          {stores.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select
-          className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-          value={filterRule}
-          onChange={e => setFilterRule(e.target.value)}
-        >
-          <option value="all">All rules</option>
-          {rules.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
+        <FilterSelect label="Rule" options={rules} value={filterRule} onChange={setFilterRule} />
         <button
           onClick={fetchSuggestions}
           disabled={loading}

@@ -1,9 +1,11 @@
 "use client"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { PillSelect } from "@/components/PillSelect"
 import type { LiveListing } from "@/app/api/listings/route"
 
-const STORES = ["All", "Walsh & Farley", "Carter & Collins", "Susan & Allen"]
+const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "critical", label: "Must fix" },
@@ -86,7 +88,7 @@ type FixStatus = "idle" | "fixing" | "done" | "error"
 export default function ListingsPage() {
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [store, setStore] = useState("All")
+  const [store, setStore] = useState<FilterValue>(EMPTY_FILTER)
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("critical")
   const [q, setQ] = useState("")
   const [open, setOpen] = useState<string | null>(null)
@@ -113,7 +115,7 @@ export default function ListingsPage() {
   }, [])
 
   const all = useMemo(() => data?.listings || [], [data])
-  const inStore = useMemo(() => all.filter((l) => store === "All" || l.store === store), [all, store])
+  const inStore = useMemo(() => all.filter((l) => passes(store, l.store)), [all, store])
   const crit = (l: LiveListing) => l.issues.some((i) => i.level === "critical")
   const stats = {
     live: inStore.length,
@@ -244,25 +246,19 @@ export default function ListingsPage() {
           )}
 
           {/* Filters */}
-          <div className="glass rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2">
-            {STORES.map((s) => {
-              const n = s === "All" ? all.length : all.filter((l) => l.store === s).length
-              return (
-                <button key={s} onClick={() => { setStore(s); setLimit(100) }} className="px-3 py-1.5 rounded-lg text-[11px] font-medium" style={{
-                  background: store === s ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.03)",
-                  color: store === s ? "#c7d2fe" : "var(--text-muted)",
-                  border: `1px solid ${store === s ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.06)"}`,
-                }}>{s} <span style={{ opacity: 0.6 }}>{n}</span></button>
-              )
-            })}
-            <span className="mx-1 h-5 w-px" style={{ background: "rgba(255,255,255,0.1)" }} />
-            {FILTERS.map((f) => (
-              <button key={f.key} onClick={() => { setFilter(f.key); setLimit(100) }} className="px-3 py-1.5 rounded-lg text-[11px] font-medium" style={{
-                background: filter === f.key ? (f.key === "critical" ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.1)") : "rgba(255,255,255,0.03)",
-                color: filter === f.key ? (f.key === "critical" ? "#f87171" : "var(--text)") : "var(--text-muted)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}>{f.label}</button>
-            ))}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <FilterSelect
+              label="Store"
+              options={STORES.map((s) => ({ value: s, count: all.filter((l) => l.store === s).length }))}
+              value={store}
+              onChange={(v) => { setStore(v); setLimit(100) }}
+            />
+            <PillSelect
+              label="Show"
+              value={filter}
+              onChange={(v) => { setFilter(v as (typeof FILTERS)[number]["key"]); setLimit(100) }}
+              options={FILTERS.map((f) => ({ value: f.key, label: f.label }))}
+            />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="ml-auto px-3 py-1.5 rounded-lg text-[11px] w-[200px]" style={inputStyle} />
           </div>
 
@@ -270,7 +266,7 @@ export default function ListingsPage() {
           {topIssues.length > 0 && (
             <div className="glass rounded-xl p-4 mb-4">
               <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-dim)" }}>
-                Most common problems {store !== "All" ? `· ${store}` : ""} — click to see affected products
+                Most common problems {store.values.length ? `· ${store.mode === "exclude" ? "not " : ""}${store.values.join(", ")}` : ""} — click to see affected products
               </div>
               <div className="grid gap-1.5 md:grid-cols-2">
                 {topIssues.map(([k, v]) => {

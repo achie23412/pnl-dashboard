@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { PageShell } from "@/components/PageShell"
+import { PillSelect } from "@/components/PillSelect"
 import { ListingWorkflow, type WorkflowStats } from "@/components/ListingWorkflow"
 import { KopyImporter } from "@/components/KopyImporter"
 
@@ -161,16 +162,7 @@ export default function ProductImporterPage() {
             </div>
             <div>
               <label className="text-[10px] font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Target store</label>
-              <select
-                className="w-full bg-transparent border rounded-lg px-3 py-2 text-[11px]"
-                style={{ borderColor: "rgba(255,255,255,0.08)", color: "var(--text)" }}
-                value={store}
-                onChange={(e) => setStore(e.target.value)}
-              >
-                <option>Walsh & Farley</option>
-                <option>Carter & Collins</option>
-                <option>Susan & Allen</option>
-              </select>
+              <PillSelect fullWidth value={store} onChange={setStore} options={["Walsh & Farley", "Carter & Collins", "Susan & Allen"]} />
             </div>
           </div>
         </div>

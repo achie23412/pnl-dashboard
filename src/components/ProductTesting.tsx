@@ -3,6 +3,7 @@ import { useState, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
+import { PillSelect } from "@/components/PillSelect"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -307,6 +308,7 @@ export function ProductTesting() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.product_name.trim()) return // the product dropdown used to be `required`
     const kill = getKillStatus(form)
     const entry = {
       ...form,
@@ -437,21 +439,16 @@ export function ProductTesting() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Store</label>
-              <select
+              <PillSelect
+                fullWidth
                 value={form.store}
-                onChange={(e) => {
-                  const store = e.target.value
+                onChange={(store) => {
                   const cogs = AVG_COGS_PER_ORDER[store] || 0
                   setForm({ ...form, store, cogs_per_order: cogs, product_name: "" })
                   loadCogsProducts(store)
                 }}
-                className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-              >
-                {STORES_NO_OVERALL.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                options={STORES_NO_OVERALL}
+              />
             </div>
             <div className="col-span-2">
               <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>
@@ -469,11 +466,11 @@ export function ProductTesting() {
                 )}
               </label>
               {hasSheetTab && cogsProducts.length > 0 ? (
-                <select
-                  required
+                <PillSelect
+                  fullWidth
                   value={form.product_name}
-                  onChange={(e) => {
-                    const name = e.target.value
+                  placeholder={cogsLoading ? "Loading products..." : `Select from sheet (${cogsProducts.length})`}
+                  onChange={(name) => {
                     if (name === "__manual__") {
                       setForm({ ...form, product_name: "" })
                       return
@@ -485,19 +482,11 @@ export function ProductTesting() {
                       cogs_per_order: p ? p.cogs_usd : form.cogs_per_order,
                     })
                   }}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-                >
-                  <option value="">
-                    {cogsLoading ? "Loading products..." : `Select from sheet (${cogsProducts.length})`}
-                  </option>
-                  {cogsProducts.map((p) => (
-                    <option key={p.product_name} value={p.product_name}>
-                      {p.product_name} — ${p.cogs_usd.toFixed(2)} COGS
-                    </option>
-                  ))}
-                  <option value="__manual__">— Type manually —</option>
-                </select>
+                  options={[
+                    ...cogsProducts.map((p) => ({ value: p.product_name, label: p.product_name, hint: `$${p.cogs_usd.toFixed(2)} COGS` })),
+                    { value: "__manual__", label: "— Type manually —" },
+                  ]}
+                />
               ) : (
                 <input
                   type="text"
@@ -805,18 +794,18 @@ export function ProductTesting() {
                                 >
                                   Save
                                 </button>
-                                <select
+                                <PillSelect
+                                  label="Status"
                                   value={t.status}
-                                  onChange={(e) => handleStatusChange(t.id!, e.target.value as ProductTest["status"])}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-medium"
-                                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}
-                                >
-                                  <option value="testing">Testing</option>
-                                  <option value="killed">Killed</option>
-                                  <option value="scaling">Scaling</option>
-                                  <option value="winner">Winner</option>
-                                  <option value="paused">Paused</option>
-                                </select>
+                                  onChange={(v) => handleStatusChange(t.id!, v as ProductTest["status"])}
+                                  options={[
+                                    { value: "testing", label: "Testing" },
+                                    { value: "killed", label: "Killed" },
+                                    { value: "scaling", label: "Scaling" },
+                                    { value: "winner", label: "Winner" },
+                                    { value: "paused", label: "Paused" },
+                                  ]}
+                                />
                                 <button
                                   onClick={() => handleDelete(t.id!)}
                                   className="px-2 py-1 rounded-lg text-[10px] font-semibold ml-auto"

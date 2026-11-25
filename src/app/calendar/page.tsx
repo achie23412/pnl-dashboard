@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react"
 import { TodoPanel, type CustomTodo } from "@/components/TodoPanel"
 import { HARDCODED_EVENTS } from "@/lib/calendar-hardcoded"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
+import { PillSelect } from "@/components/PillSelect"
 
 type CalendarEvent = {
   id?: string
@@ -155,16 +156,12 @@ export default function CalendarPage() {
             </div>
             <div>
               <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Type</label>
-              <select
+              <PillSelect
+                fullWidth
                 value={addForm.type}
-                onChange={(e) => setAddForm({ ...addForm, type: e.target.value as CalendarEvent["type"] })}
-                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
-              >
-                {EVENT_TYPES.map((t) => (
-                  <option key={t} value={t}>{TYPE_COLORS[t].label}</option>
-                ))}
-              </select>
+                onChange={(v) => setAddForm({ ...addForm, type: v as CalendarEvent["type"] })}
+                options={EVENT_TYPES.map((t) => ({ value: t, label: TYPE_COLORS[t].label }))}
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { fetchSourceProduct, listCollectionProducts } from "@/lib/competitor-scan"
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
+import { PillSelect } from "@/components/PillSelect"
 
 const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES", "Blinky"]
 type Mode = "single" | "multiple" | "collection"
@@ -141,9 +142,7 @@ export function KopyImporter() {
           </div>
           <div>
             <label className="text-[10px] font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Into store</label>
-            <select className={`w-full ${field}`} style={border} value={store} onChange={(e) => setStore(e.target.value)}>
-              {STORES.map((s) => <option key={s}>{s}</option>)}
-            </select>
+            <PillSelect fullWidth value={store} onChange={setStore} options={STORES} />
           </div>
           <button disabled={busy || !input.trim()} onClick={load} className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)", opacity: busy || !input.trim() ? 0.5 : 1 }}>
             {busy && rows.length === 0 ? "Loading…" : "Load products"}
@@ -155,11 +154,15 @@ export function KopyImporter() {
           <div className="mt-3">
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>Price:</span>
-              <select className={field} style={border} value={rule} onChange={(e) => setRule(e.target.value as Rule)}>
-                <option value="keep">keep competitor price</option>
-                <option value="multiply">× multiplier</option>
-                <option value="fixed">fixed price</option>
-              </select>
+              <PillSelect
+                value={rule}
+                onChange={(v) => setRule(v as Rule)}
+                options={[
+                  { value: "keep", label: "keep competitor price" },
+                  { value: "multiply", label: "× multiplier" },
+                  { value: "fixed", label: "fixed price" },
+                ]}
+              />
               {rule !== "keep" && <input className={`${field} w-20`} style={border} value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} />}
               {mode === "collection" && (
                 <button className="text-[10px] underline" style={{ color: "var(--text-muted)" }} onClick={() => setRows((rs) => rs.map((r) => ({ ...r, selected: !rs.every((x) => x.selected) })))}>select all / none</button>

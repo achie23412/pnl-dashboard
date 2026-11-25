@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react"
 import { fetchLatestEurRates } from "@/lib/currency"
 import { createClient } from "@supabase/supabase-js"
+import { PillSelect } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,9 +64,9 @@ export default function CompetitorsPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ domain: "", store_name: "", niche: "", status: "watching" as Competitor["status"] })
   const [saving, setSaving] = useState(false)
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [countryFilter, setCountryFilter] = useState("all")
-  const [nicheFilter, setNicheFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState<FilterValue>(EMPTY_FILTER)
+  const [countryFilter, setCountryFilter] = useState<FilterValue>(EMPTY_FILTER)
+  const [nicheFilter, setNicheFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<string>("monthly_visits")
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
@@ -115,9 +117,9 @@ export default function CompetitorsPage() {
   const allNiches = Array.from(new Set(competitors.map((c) => c.niche).filter(Boolean))).sort()
 
   const filtered = competitors
-    .filter((c) => statusFilter === "all" || c.status === statusFilter)
-    .filter((c) => countryFilter === "all" || (Array.isArray(c.markets) && c.markets.some((m) => m.toUpperCase() === countryFilter)))
-    .filter((c) => nicheFilter === "all" || c.niche === nicheFilter)
+    .filter((c) => passes(statusFilter, c.status))
+    .filter((c) => passesAny(countryFilter, Array.isArray(c.markets) ? c.markets.map((m) => m.toUpperCase()) : []))
+    .filter((c) => passes(nicheFilter, c.niche))
     .filter((c) => !search || c.domain.toLowerCase().includes(search.toLowerCase()) || (c.store_name || "").toLowerCase().includes(search.toLowerCase()) || (c.niche || "").toLowerCase().includes(search.toLowerCase()))
 
   const sorted = [...filtered].sort((a, b) => {
@@ -152,41 +154,30 @@ export default function CompetitorsPage() {
       <div className="flex flex-wrap items-center gap-2 mb-6">
         <input type="text" placeholder="Search domain, name, niche..." value={search} onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-1.5 rounded-lg border text-xs w-48" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }} />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
-          <option value="all">All Status</option>
-          <option value="new">New</option>
-          <option value="watching">Watching</option>
-          <option value="scaling">Scaling</option>
-          <option value="dead">Dead</option>
-        </select>
-        <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)}
-          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
-          <option value="all">All Countries</option>
-          {allCountries.map((c) => <option key={c} value={c}>{FLAG[c] || ""} {c}</option>)}
-        </select>
-        <select value={nicheFilter} onChange={(e) => setNicheFilter(e.target.value)}
-          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
-          <option value="all">All Niches</option>
-          {allNiches.map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <select value={`${sortBy}:${sortDir}`} onChange={(e) => { const [f, d] = e.target.value.split(":"); setSortBy(f); setSortDir(d as "asc" | "desc") }}
-          className="px-3 py-1.5 rounded-lg border text-xs" style={{ background: "var(--bg-card)", borderColor: "var(--border)", color: "var(--text)" }}>
-          <option value="monthly_visits:desc">Visits: High → Low</option>
-          <option value="monthly_visits:asc">Visits: Low → High</option>
-          <option value="growth_30d:desc">Growth: High → Low</option>
-          <option value="growth_30d:asc">Growth: Low → High</option>
-          <option value="active_ads:desc">Ads: Most → Least</option>
-          <option value="active_ads:asc">Ads: Least → Most</option>
-          <option value="products_count:desc">Products: Most → Least</option>
-          <option value="products_count:asc">Products: Least → Most</option>
-          <option value="est_monthly_revenue:desc">Revenue: High → Low</option>
-          <option value="est_monthly_revenue:asc">Revenue: Low → High</option>
-          <option value="tp_reviews:desc">TP Reviews: Most → Least</option>
-          <option value="tp_reviews:asc">TP Reviews: Least → Most</option>
-        </select>
-        {(statusFilter !== "all" || countryFilter !== "all" || nicheFilter !== "all" || search) && (
-          <button onClick={() => { setStatusFilter("all"); setCountryFilter("all"); setNicheFilter("all"); setSearch("") }}
+        <FilterSelect label="Status" options={["new", "watching", "scaling", "dead"]} value={statusFilter} onChange={setStatusFilter} />
+        <FilterSelect label="Country" options={allCountries.map((c) => ({ value: c, label: `${FLAG[c] || ""} ${c}`.trim() }))} value={countryFilter} onChange={setCountryFilter} />
+        <FilterSelect label="Niche" options={allNiches.map((n) => String(n))} value={nicheFilter} onChange={setNicheFilter} />
+        <PillSelect
+          label="Sort"
+          value={`${sortBy}:${sortDir}`}
+          onChange={(v) => { const [f, d] = v.split(":"); setSortBy(f); setSortDir(d as "asc" | "desc") }}
+          options={[
+            { value: "monthly_visits:desc", label: "Visits: High → Low" },
+            { value: "monthly_visits:asc", label: "Visits: Low → High" },
+            { value: "growth_30d:desc", label: "Growth: High → Low" },
+            { value: "growth_30d:asc", label: "Growth: Low → High" },
+            { value: "active_ads:desc", label: "Ads: Most → Least" },
+            { value: "active_ads:asc", label: "Ads: Least → Most" },
+            { value: "products_count:desc", label: "Products: Most → Least" },
+            { value: "products_count:asc", label: "Products: Least → Most" },
+            { value: "est_monthly_revenue:desc", label: "Revenue: High → Low" },
+            { value: "est_monthly_revenue:asc", label: "Revenue: Low → High" },
+            { value: "tp_reviews:desc", label: "TP reviews: Most → Least" },
+            { value: "tp_reviews:asc", label: "TP reviews: Least → Most" },
+          ]}
+        />
+        {(statusFilter.values.length > 0 || countryFilter.values.length > 0 || nicheFilter.values.length > 0 || search) && (
+          <button onClick={() => { setStatusFilter(EMPTY_FILTER); setCountryFilter(EMPTY_FILTER); setNicheFilter(EMPTY_FILTER); setSearch("") }}
             className="px-3 py-1.5 rounded-lg text-xs" style={{ color: "var(--text-muted)" }}>
             Clear filters
           </button>
@@ -296,17 +287,11 @@ export default function CompetitorsPage() {
                   </td>
                   <td className="px-4 py-3 text-right font-mono">{fmtRev(c.est_monthly_revenue, usdPerEur)}</td>
                   <td className="px-4 py-3 text-center">
-                    <select value={c.status} onChange={(e) => c.id && updateStatus(c.id, e.target.value as Competitor["status"])}
-                      className="px-2 py-0.5 rounded text-xs border-0 cursor-pointer"
-                      style={{
-                        background: c.status === "scaling" ? "#34d39922" : c.status === "watching" ? "#4E6AA722" : c.status === "dead" ? "#f8717122" : "#D4903A22",
-                        color: c.status === "scaling" ? "var(--green)" : c.status === "watching" ? "#4E6AA7" : c.status === "dead" ? "var(--red)" : "var(--orange)",
-                      }}>
-                      <option value="new">new</option>
-                      <option value="watching">watching</option>
-                      <option value="scaling">scaling</option>
-                      <option value="dead">dead</option>
-                    </select>
+                    <PillSelect
+                      value={c.status}
+                      onChange={(v) => c.id && updateStatus(c.id, v as Competitor["status"])}
+                      options={["new", "watching", "scaling", "dead"]}
+                    />
                   </td>
                   <td className="px-2 py-3">
                     <button onClick={() => c.id && remove(c.id)}

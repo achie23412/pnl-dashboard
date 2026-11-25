@@ -3,6 +3,7 @@
 // or "imported in the Kopy app" with the Shopify admin link.
 import { useState } from "react"
 import { fetchSourceProduct } from "@/lib/competitor-scan"
+import { PillSelect } from "@/components/PillSelect"
 
 export interface ImportJob {
   id: number
@@ -90,11 +91,15 @@ export function ImportJobActions({ job, onDone }: { job: ImportJob; onDone: (mes
       )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>Price:</span>
-        <select className={field} style={border} value={rule} onChange={(e) => setRule(e.target.value as Rule)}>
-          <option value="keep">keep competitor price</option>
-          <option value="multiply">× multiplier</option>
-          <option value="fixed">fixed price</option>
-        </select>
+        <PillSelect
+          value={rule}
+          onChange={(v) => setRule(v as Rule)}
+          options={[
+            { value: "keep", label: "keep competitor price" },
+            { value: "multiply", label: "× multiplier" },
+            { value: "fixed", label: "fixed price" },
+          ]}
+        />
         {rule !== "keep" && <input className={`${field} w-16`} style={border} value={value} onChange={(e) => setValue(e.target.value)} />}
         <button disabled={busy} onClick={runImport} className="px-2.5 py-1 rounded-md text-[10px] font-semibold" style={{ background: "var(--accent)", color: "#fff", opacity: busy ? 0.5 : 1 }}>
           {busy ? "Working…" : job.status === "failed" ? "Retry import (draft)" : "Import now (draft)"}

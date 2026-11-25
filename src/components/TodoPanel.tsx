@@ -4,6 +4,7 @@ import Link from "next/link"
 import type { AutoTodo } from "@/lib/todo-rules"
 import { calendarAction } from "@/lib/todo-actions"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
+import { PillSelect } from "@/components/PillSelect"
 
 export type CustomTodo = {
   id: number
@@ -264,16 +265,12 @@ export function TodoPanel({ events, onCustomChange }: Props) {
                 style={inputStyle}
               />
               <SingleDatePicker value={form.date} onChange={(date) => setForm({ ...form, date })} />
-              <select
+              <PillSelect
+                label="Store"
                 value={form.store}
-                onChange={(e) => setForm({ ...form, store: e.target.value })}
-                className="px-2 py-1.5 rounded-lg text-[11px]"
-                style={inputStyle}
-                aria-label="Store (optional)"
-              >
-                <option value="">Any store</option>
-                {STORES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+                onChange={(v) => setForm({ ...form, store: v })}
+                options={[{ value: "", label: "any" }, ...STORES]}
+              />
               <button
                 onClick={addCustom}
                 disabled={saving || !form.label.trim()}

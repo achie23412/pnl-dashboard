@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { PageShell } from "@/components/PageShell"
+import { PillSelect } from "@/components/PillSelect"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
 
@@ -210,11 +211,16 @@ export default function ProfitLossPage() {
       ]}
     >
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <select value={scope} onChange={(e) => setScope(e.target.value)} className="text-[11px] px-3 py-1.5 rounded-lg" style={field} aria-label="Stores">
-          <option value="google">Google stores (profit sheet)</option>
-          <option value="all">All 5 stores</option>
-          {ALL_STORES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <PillSelect
+          label="Stores"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "google", label: "Google stores (profit sheet)" },
+            { value: "all", label: "All 5 stores" },
+            ...ALL_STORES.map((s) => ({ value: s })),
+          ]}
+        />
         <div className="flex gap-1 flex-wrap">
           {monthsWithData.map((m) => (
             <button key={m} onClick={() => setMonth(m)} className="text-[11px] px-3 py-1.5 rounded-lg" style={{ ...field, background: m === month ? "rgba(99,102,241,0.25)" : field.background, color: m === month ? "#c7d2fe" : "var(--text-muted)" }}>

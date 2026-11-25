@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 
 interface LineItem {
   quoted_unit?: number | null
@@ -53,7 +54,7 @@ export default function CogsInvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [filterStore, setFilterStore] = useState("all")
+  const [filterStore, setFilterStore] = useState<FilterValue>(EMPTY_FILTER)
   const [showDiscrepancies, setShowDiscrepancies] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -78,7 +79,7 @@ export default function CogsInvoicesPage() {
 
   const stores = Array.from(new Set(invoices.map((inv) => inv.store)))
   const filtered = invoices.filter((inv) => {
-    if (filterStore !== "all" && inv.store !== filterStore) return false
+    if (!passes(filterStore, inv.store)) return false
     if (showDiscrepancies && !inv.has_price_discrepancy) return false
     return true
   })
@@ -113,23 +114,8 @@ export default function CogsInvoicesPage() {
       ]}
     >
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <select
-          className="bg-transparent border rounded-lg px-3 py-1.5 text-[11px]"
-          style={{
-            borderColor: "rgba(255,255,255,0.08)",
-            color: "var(--text)",
-          }}
-          value={filterStore}
-          onChange={(e) => setFilterStore(e.target.value)}
-        >
-          <option value="all">All stores</option>
-          {stores.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <FilterSelect label="Store" options={stores} value={filterStore} onChange={setFilterStore} />
         <label
           className="flex items-center gap-1.5 text-[11px] cursor-pointer"
           style={{ color: "var(--text-muted)" }}

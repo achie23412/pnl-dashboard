@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { PillSelect } from "@/components/PillSelect"
 
 interface Keyword {
   k: string
@@ -265,19 +266,9 @@ export default function KeywordMakerPage() {
           ))}
         </div>
 
-        <select
-          value={modifier}
-          onChange={(e) => setModifier(e.target.value)}
-          className="ml-auto"
-          style={{
-            padding: "6px 10px", border: "1px solid var(--border)", borderRadius: "8px",
-            background: "var(--bg-card)", color: "var(--text)", fontSize: "0.8rem", cursor: "pointer",
-          }}
-        >
-          {MODIFIERS.map((m) => (
-            <option key={m.key} value={m.key}>{m.label}</option>
-          ))}
-        </select>
+        <div className="ml-auto">
+          <PillSelect label="Modifier" value={modifier} onChange={setModifier} options={MODIFIERS.map((m) => ({ value: m.key, label: m.label }))} align="right" />
+        </div>
       </div>
 
       {/* Stats + bulk actions */}

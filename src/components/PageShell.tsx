@@ -13,11 +13,11 @@ interface PageShellProps {
   description?: string
   stats?: StatCard[]
   tabs?: { label: string; count?: number; active?: boolean }[]
-  filters?: boolean
+  filters?: boolean // unused: pages put their own filters in a FilterBar
   children?: React.ReactNode
 }
 
-export function PageShell({ title, breadcrumb, description, stats, tabs, filters, children }: PageShellProps) {
+export function PageShell({ title, breadcrumb, description, stats, tabs, children }: PageShellProps) {
   return (
     <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
       {/* Breadcrumb */}
@@ -30,30 +30,6 @@ export function PageShell({ title, breadcrumb, description, stats, tabs, filters
         <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>
           {title}
         </h1>
-        {filters && (
-          <div className="flex items-center gap-2">
-            <select
-              className="text-[11px] px-3 py-1.5 rounded-lg"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "var(--text)",
-              }}
-            >
-              <option>All stores</option>
-            </select>
-            <div
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px]"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "var(--text-muted)",
-              }}
-            >
-              <span>Last 30 days</span>
-            </div>
-          </div>
-        )}
       </div>
 
       {description && (

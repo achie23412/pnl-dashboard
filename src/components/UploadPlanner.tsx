@@ -8,6 +8,7 @@
 //  - coverage: how many live products you already have per category
 //  - deadlines: season/event launch-by dates inside the upload window go first
 import { useState } from "react"
+import { PillSelect } from "@/components/PillSelect"
 import { tokenize, detectCategory, type OppStatus } from "@/lib/opportunity-engine"
 
 export type PlannerOpp = {
@@ -94,7 +95,6 @@ export function UploadPlanner({ opps, onApply }: { opps: PlannerOpp[]; onApply: 
   }
 
   const box = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }
-  const field = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
   return (
     <div className="glass rounded-xl p-4 mb-4" style={{ border: "1px solid rgba(99,102,241,0.25)" }}>
@@ -111,12 +111,13 @@ export function UploadPlanner({ opps, onApply }: { opps: PlannerOpp[]; onApply: 
       {open && (
         <div className="mt-3 text-[11px]" style={{ color: "var(--text)" }}>
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <select value={store} onChange={(e) => { setStore(e.target.value); setPlan(null) }} className="px-3 py-1.5 rounded-lg" style={field} aria-label="Store">
-              {Object.keys(STORES).map((s) => <option key={s}>{s}</option>)}
-            </select>
-            <select value={days} onChange={(e) => { setDays(Number(e.target.value)); setPlan(null) }} className="px-3 py-1.5 rounded-lg" style={field} aria-label="Upload window">
-              {[1, 3, 7, 14].map((d) => <option key={d} value={d}>Cover the next {d} day{d === 1 ? "" : "s"}</option>)}
-            </select>
+            <PillSelect label="Store" value={store} onChange={(v) => { setStore(v); setPlan(null) }} options={Object.keys(STORES)} />
+            <PillSelect
+              label="Cover"
+              value={String(days)}
+              onChange={(v) => { setDays(Number(v)); setPlan(null) }}
+              options={[1, 3, 7, 14].map((d) => ({ value: String(d), label: `next ${d} day${d === 1 ? "" : "s"}` }))}
+            />
             <button onClick={build} disabled={busy} className="px-4 py-1.5 rounded-lg font-semibold disabled:opacity-50" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff" }}>
               {busy ? "Reading your data… (~20s)" : "Build batch"}
             </button>

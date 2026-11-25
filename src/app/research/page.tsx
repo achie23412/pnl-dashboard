@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { createClient } from "@supabase/supabase-js"
+import { PillSelect } from "@/components/PillSelect"
 import { ProductTesting } from "@/components/ProductTesting"
 
 const supabase = createClient(
@@ -180,13 +181,12 @@ export default function ResearchPage() {
 
               <div>
                 <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>1. Google Trends category check</label>
-                <select value={form.google_trends} onChange={(e) => setForm({ ...form, google_trends: e.target.value as ResearchEntry["google_trends"] })}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}>
-                  <option value="unknown">Not checked</option>
-                  <option value="rising">Rising</option>
-                  <option value="stable">Stable</option>
-                  <option value="declining">Declining</option>
-                </select>
+                <PillSelect
+                  fullWidth
+                  value={form.google_trends}
+                  onChange={(v) => setForm({ ...form, google_trends: v as ResearchEntry["google_trends"] })}
+                  options={[{ value: "unknown", label: "Not checked" }, { value: "rising", label: "Rising" }, { value: "stable", label: "Stable" }, { value: "declining", label: "Declining" }]}
+                />
               </div>
 
               <div>
@@ -261,12 +261,12 @@ export default function ResearchPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Verdict</label>
-                  <select value={form.verdict} onChange={(e) => setForm({ ...form, verdict: e.target.value as ResearchEntry["verdict"] })}
-                    className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-medium" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)" }}>
-                    <option value="test">TEST</option>
-                    <option value="skip">SKIP</option>
-                    <option value="maybe">MAYBE</option>
-                  </select>
+                  <PillSelect
+                    fullWidth
+                    value={form.verdict}
+                    onChange={(v) => setForm({ ...form, verdict: v as ResearchEntry["verdict"] })}
+                    options={[{ value: "test", label: "TEST" }, { value: "skip", label: "SKIP" }, { value: "maybe", label: "MAYBE" }]}
+                  />
                 </div>
                 <div>
                   <label className="block text-[9px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--text-dim)" }}>Notes</label>

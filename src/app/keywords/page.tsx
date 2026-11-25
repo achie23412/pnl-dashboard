@@ -1,5 +1,7 @@
 "use client"
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { PillSelect } from "@/components/PillSelect"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 
 interface Keyword {
   k: string
@@ -77,7 +79,7 @@ export default function KeywordsPage() {
   const [data, setData] = useState<Keyword[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [category, setCategory] = useState("")
+  const [category, setCategory] = useState<FilterValue>(EMPTY_FILTER)
   const [trendFilter, setTrendFilter] = useState("")
   const [minVol, setMinVol] = useState(0)
   const [minWords, setMinWords] = useState(2)
@@ -99,7 +101,7 @@ export default function KeywordsPage() {
     const q = search.toLowerCase().trim()
     let result = data.filter((d) => {
       if (q && !d.k.includes(q)) return false
-      if (category && d.c !== category) return false
+      if (!passes(category, d.c)) return false
       if (minVol && d.uk < minVol && d.us < minVol) return false
       if (minWords > 1 && d.k.trim().split(/\s+/).length < minWords) return false
       if (trendFilter === "rising" && d.tu <= 10 && d.ta <= 10) return false
@@ -143,11 +145,6 @@ export default function KeywordsPage() {
 
   const otherGeos = GEOS.filter((g) => g.code !== activeGeo).slice(0, 3)
 
-  const selectStyle: React.CSSProperties = {
-    padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "8px",
-    background: "var(--bg-card)", color: "var(--text)", fontSize: "0.8rem", cursor: "pointer",
-  }
-
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
       <div className="mb-4">
@@ -167,31 +164,25 @@ export default function KeywordsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
-          <option value="">All categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-          ))}
-        </select>
-        <select value={trendFilter} onChange={(e) => setTrendFilter(e.target.value)} style={selectStyle}>
-          <option value="">All trends</option>
-          <option value="rising">Rising only</option>
-          <option value="falling">Falling only</option>
-        </select>
-        <select value={minVol} onChange={(e) => setMinVol(Number(e.target.value))} style={selectStyle}>
-          <option value={0}>Min volume: any</option>
-          <option value={5000}>5K+</option>
-          <option value={10000}>10K+</option>
-          <option value={25000}>25K+</option>
-          <option value={50000}>50K+</option>
-          <option value={100000}>100K+</option>
-        </select>
-        <select value={minWords} onChange={(e) => setMinWords(Number(e.target.value))} style={selectStyle}>
-          <option value={1}>All keywords</option>
-          <option value={2}>2+ words</option>
-          <option value={3}>3+ words</option>
-          <option value={4}>4+ words</option>
-        </select>
+        <FilterSelect label="Category" options={CATEGORIES.map((c) => ({ value: c, label: c.charAt(0).toUpperCase() + c.slice(1) }))} value={category} onChange={setCategory} />
+        <PillSelect
+          label="Trend"
+          value={trendFilter}
+          onChange={setTrendFilter}
+          options={[{ value: "", label: "all" }, { value: "rising", label: "Rising only" }, { value: "falling", label: "Falling only" }]}
+        />
+        <PillSelect
+          label="Min volume"
+          value={String(minVol)}
+          onChange={(v) => setMinVol(Number(v))}
+          options={[{ value: "0", label: "any" }, { value: "5000", label: "5K+" }, { value: "10000", label: "10K+" }, { value: "25000", label: "25K+" }, { value: "50000", label: "50K+" }, { value: "100000", label: "100K+" }]}
+        />
+        <PillSelect
+          label="Words"
+          value={String(minWords)}
+          onChange={(v) => setMinWords(Number(v))}
+          options={[{ value: "1", label: "all" }, { value: "2", label: "2+ words" }, { value: "3", label: "3+ words" }, { value: "4", label: "4+ words" }]}
+        />
       </div>
 
       {/* Link mode toggle */}

@@ -5,6 +5,7 @@ import { runCompetitorScan, type ScanProgress } from "@/lib/competitor-scan"
 import { ADAPT_CHECKS, TARGET_STORES, daysBetween, todayIn, missingChecks, type OppStatus } from "@/lib/opportunity-engine"
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
 import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
+import { PillSelect } from "@/components/PillSelect"
 import { FixBanner } from "@/components/FixBanner"
 import { UploadPlanner } from "@/components/UploadPlanner"
 
@@ -98,7 +99,6 @@ const STORE_TZ: Record<string, string> = Object.fromEntries(TARGET_STORES.map((s
 const STORE_NAMES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES", "Blinky"]
 
 const btn = "px-2.5 py-1 rounded-md text-[10px] font-semibold transition-opacity"
-const field = "bg-transparent border rounded-md px-2 py-1 text-[10px]"
 const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
 
 function money(price: number | null, cur: string | null, assumed: boolean) {
@@ -400,7 +400,7 @@ export default function OpportunitiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <FilterSelect label="Store" options={[...STORE_NAMES.map((s) => ({ value: s })), { value: "none", label: "No store chosen" }]} value={fStore} onChange={setFStoreF} />
         <FilterSelect label="Market" options={options.markets} value={fMarket} onChange={setFMarket} />
         <FilterSelect label="Competitor" options={options.competitors} value={fCompetitor} onChange={setFCompetitor} />
@@ -417,10 +417,11 @@ export default function OpportunitiesPage() {
             <button className={btn} style={{ background: "var(--accent)", color: "#fff" }} onClick={() => queue(Array.from(selected))}>Send to importer</button>
           ) : (
             <>
-              <select className={field} style={border} value={bulkStore} onChange={(e) => setBulkStore(e.target.value)}>
-                <option value="">Store for items without one…</option>
-                {STORE_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <PillSelect
+                value={bulkStore}
+                onChange={setBulkStore}
+                options={[{ value: "", label: "Store for items without one…" }, ...STORE_NAMES.map((s) => ({ value: s }))]}
+              />
               <button className={btn} style={{ background: "rgba(52,211,153,0.15)", color: "var(--green)" }} onClick={() => bulk("approved")}>Approve</button>
               <button className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)" }} onClick={() => bulk("saved")}>Save for later</button>
               <button className={btn} style={{ background: "rgba(248,113,113,0.12)", color: "var(--red)" }} onClick={() => bulk("rejected")}>Reject</button>
@@ -526,16 +527,13 @@ function OpportunityCard(props: {
           {o.catalogue_match && <div className="text-[10px] mt-0.5" style={{ color: "var(--orange)" }}>Possible duplicate: {o.catalogue_match}</div>}
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <select
-            className={field}
-            style={border}
+          <PillSelect
             value={o.target_store || ""}
             disabled={lockedStore}
-            onChange={(e) => patch(o.id, { target_store: e.target.value || null })}
-          >
-            <option value="">Choose store…</option>
-            {STORE_NAMES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+            align="right"
+            onChange={(v) => patch(o.id, { target_store: v || null })}
+            options={[{ value: "", label: "Choose store…" }, ...STORE_NAMES.map((s) => ({ value: s }))]}
+          />
           <div className="flex flex-wrap justify-end gap-1">
             {["new", "under_review", "saved"].includes(o.status) && (
               <>
