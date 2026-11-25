@@ -329,7 +329,7 @@ export default function SeasonBoardPage() {
           </Panel>
 
           {/* All keywords */}
-          <Panel className="mb-4" title="All keywords" sub="How timing works: a keyword's climb starts in the first month its searches pass 15% of its peak. List by = one month before (get indexed, low spend). Push budget = from the climb month. Evergreen = the quietest month is still 60%+ of the peak. Phase out doesn't mean delete: stop spending on it. Source: Dashboard Guide §7.">
+          <Panel className="mb-4" title="All keywords" sub="How timing works: a keyword's climb starts in the first month its searches are 15% of the way from their low point to their peak (Dashboard Guide §7 uses 15% of peak; same result when the off-season is near zero). List by = one month before (get indexed, low spend). Push budget = from the climb month. Evergreen = the quietest month is still 60%+ of the peak. Phase out doesn't mean delete: stop spending on it. Source: Dashboard Guide §7.">
             <FilterBar>
               <input value={q} onChange={(e) => { setQ(e.target.value); setPage(0) }} placeholder="Search keywords…" className="px-3 py-1.5 rounded-lg text-[11px] w-[220px]" style={field} />
               {(["all", "list_now", "indexing", "push_budget", "at_peak", "phase_out", "evergreen", "off_season"] as const).map((f) => (
