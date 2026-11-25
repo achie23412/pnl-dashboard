@@ -124,8 +124,9 @@ export function checkLiveProduct(p: LiveProductInput): LiveIssue[] {
   const inStock = p.variants.filter((v) => v.available).length
   if (p.variants.length && inStock === 0)
     out.push({ level: "warning", field: "Stock", message: "Every variant is sold out.", fix: "Check the supplier stock. If it can't be restocked, draft the product (Drafting SOP) so ad spend doesn't go to an unbuyable item.", source: "Stock" })
-  if (title && (title.length < 70 || title.length > 100) && title.length <= 150)
-    out.push({ level: "warning", field: "Title", message: `Title is ${title.length} characters.`, fix: "Aim for 70–100 characters: Gender + Style + Product type – key attributes.", source: SOP })
+  // The live Google stores follow coach Kevin's listing rule (55–70 characters), not the Ascend SOP's 70–100.
+  if (title && (title.length < 55 || title.length > 70) && title.length <= 150)
+    out.push({ level: "warning", field: "Title", message: `Title is ${title.length} characters (store rule 55–70).`, fix: "Rewrite to 55–70 characters: Gender + Style + Product type – key attributes, keyword first.", source: "Coach Kevin's listing rules" })
   const colours = COLOURS.filter((c) => has(title, c))
   if (colours.length) out.push({ level: "warning", field: "Title", message: `Colour in the title (${colours.join(", ")}).`, fix: "Move colour to the variant options and take it out of the title.", source: SOP })
   const sizes = SIZES.filter((s) => s.length > 2 && has(title, s))
