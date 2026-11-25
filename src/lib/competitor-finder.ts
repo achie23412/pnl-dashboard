@@ -48,9 +48,13 @@ export function phrasesFromTitle(title: string, vendor?: string | null): string[
   return Array.from(out).filter((p) => p.split(" ").length >= 2 && p.length >= 6)
 }
 
+// Segments the Google fashion stores don't sell: keep these out of the generic keyword list.
+const OFF_NICHE = /\b(wedding|bridal|bride|bridesmaid|prom|quinceanera|homecoming|graduation|communion|christening|running|basketball|football|soccer|golf|tennis|hiking|climbing|ski|snowboard|cycling|bike|gym|yoga|workout|nursing|maternity|kids|kid|baby|toddler|girls|boys|child|children|school|uniform|scrubs|costume|cosplay|halloween|lingerie|underwear|bra|bras|panties|swimsuit|bikini|wig|wigs|jewelry|jewellery|ring|rings|necklace|earrings|watch|watches|nike|adidas|puma|reebok|vans|converse|crocs|ugg|uggs|skechers|asics|hoka|birkenstock|timberland|dr|martens|zara|shein|primark|levis|gucci|prada|on)\b/
+
+const host = (d: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")
 const norm = (s: string) => s.toLowerCase().replace(/['’]s\b/g, "").replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim()
 
-export async function buildKeywords(market: MarketCode): Promise<{ keywords: FinderKeyword[]; competitorsInMarket: number; plannerCount: number }> {
+export async function buildKeywords(market: MarketCode): Promise<{ keywords: FinderKeyword[]; competitorsInMarket: number; plannerCount: number; productsScanned: number; productsInMarket: number }> {
   const db = getServiceClient()
   const m = MARKETS.find((x) => x.code === market) || MARKETS[0]
   const since = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10)
@@ -69,11 +73,12 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
       .catch(() => []),
   ])
 
-  const inMarket = new Set(
-    competitors
-      .filter((c) => c.status !== "dead" && (c.markets || []).some((x) => (m.competitorCodes as readonly string[]).includes(String(x).toUpperCase())))
-      .map((c) => c.domain),
-  )
+  // A competitor is in this market when the tracker row OR its scanned products say so.
+  const codes = m.competitorCodes as readonly string[]
+  const inCodes = (list: string[] | null | undefined) => (list || []).some((x) => codes.includes(String(x).toUpperCase()))
+  const dead = new Set(competitors.filter((c) => c.status === "dead").map((c) => host(c.domain)))
+  const inMarket = new Set(competitors.filter((c) => c.status !== "dead" && inCodes(c.markets)).map((c) => host(c.domain)))
+  for (const p of products) if (inCodes(p.markets) && !dead.has(host(p.competitor_domain))) inMarket.add(host(p.competitor_domain))
 
   // Normalised title index per competitor in this market (for "who already sells this").
   const titlesByDomain = new Map<string, string[]>()
@@ -90,10 +95,11 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
   }
 
   for (const p of products) {
-    if (!inMarket.has(p.competitor_domain)) continue
-    const list = titlesByDomain.get(p.competitor_domain) || []
+    const d = host(p.competitor_domain)
+    if (!inMarket.has(d)) continue
+    const list = titlesByDomain.get(d) || []
     list.push(norm(p.title))
-    titlesByDomain.set(p.competitor_domain, list)
+    titlesByDomain.set(d, list)
     for (const ph of phrasesFromTitle(p.title, p.vendor)) {
       const x = get(ph)
       if (!x) continue
@@ -107,11 +113,22 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
     x.volume = Math.max(x.volume || 0, Number(r.avg_monthly) || 0)
     if (!x.sources.includes("planner")) x.sources.push("planner")
   }
+  // Product nouns competitors actually use ("coat", "dress", "boots"…): generic keywords must end in one.
+  const nouns = new Map<string, number>()
+  map.forEach((x) => {
+    const last = x.keyword.split(" ").pop() || ""
+    nouns.set(last, (nouns.get(last) || 0) + 1)
+  })
+  const relevant = (kw: string) => {
+    const k = norm(kw)
+    if (OFF_NICHE.test(k)) return false
+    return nouns.size === 0 || (nouns.get(k.split(" ").pop() || "") || 0) >= 3
+  }
   const baseVol = (b: { uk: number; us: number }) => (market === "US" ? b.us : market === "UK" ? b.uk : Math.round(b.uk / 12)) // IE ≈ 1/12 of UK
   for (const b of base) {
     const v = baseVol(b)
     if (!v) continue
-    const x = map.get(norm(b.k)) || (v >= 1000 ? get(b.k) : null)
+    const x = map.get(norm(b.k)) || (v >= 1000 && relevant(b.k) ? get(b.k) : null)
     if (!x) continue
     if (x.volume == null) x.volume = v
     if (!x.sources.includes("base")) x.sources.push("base")
@@ -154,7 +171,9 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
 
   const filtered = keywords
   filtered.sort((a, b) => b.score - a.score)
-  return { keywords: filtered.slice(0, 400), competitorsInMarket: inMarket.size, plannerCount: planner.length }
+  let productsInMarket = 0
+  titlesByDomain.forEach((t) => (productsInMarket += t.length))
+  return { keywords: filtered.slice(0, 400), competitorsInMarket: inMarket.size, plannerCount: planner.length, productsScanned: products.length, productsInMarket }
 }
 
 // ── Store check: is a found domain a Shopify store, and do we track it already?
