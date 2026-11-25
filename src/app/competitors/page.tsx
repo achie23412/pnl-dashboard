@@ -140,9 +140,12 @@ export default function CompetitorsPage() {
         { label: "Total ads", value: fmt(competitors.reduce((s, c) => s + (c.active_ads || 0), 0)), color: "var(--orange)" },
       ]}
       actions={
-        <Button variant="primary" onClick={() => setShowForm(!showForm)}>
-          Add competitor
-        </Button>
+        <>
+          <Button href="/keyword-maker">Find new competitors</Button>
+          <Button variant="primary" onClick={() => setShowForm(!showForm)}>
+            Add competitor
+          </Button>
+        </>
       }
     >
       <FilterBar right={<span className="text-[10px] tabular-nums" style={{ color: "var(--text-dim)" }}>{filtered.length} of {competitors.length}</span>}>

@@ -238,6 +238,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/product-importer": "import kopy listing redo listing gmc pre-launch scanner merchant center check draft shopify",
   "/product-alerts": "draft drafting sop rules kill exclude alerts problems fix",
   "/competitors": "competitor tracker trendtrack stores visits trustpilot",
+  "/keyword-maker": "competitor finder keyword maker search google shopping find new stores research",
   "/price-suggestions": "price pricing markup",
   "/season-board": "season seasonal calendar trends",
 }
@@ -259,6 +260,7 @@ const NAV_SECTIONS: NavSection[] = [
       // In the order you work: find → list → check → measure → act.
       // 1. Find products
       { href: "/competitors", label: "Competitor Tracker", icon: <CompetitorIcon /> },
+      { href: "/keyword-maker", label: "Competitor Finder", icon: <ScannerIcon /> },
       { href: "/season-board", label: "Season Board", icon: <SeasonIcon /> },
       { href: "/opportunities", label: "Product Opportunities", icon: <ProductsIcon /> },
       // 2. List them
