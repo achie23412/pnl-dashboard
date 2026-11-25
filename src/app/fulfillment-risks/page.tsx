@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useCallback } from "react"
+import { Fragment, useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -177,7 +177,8 @@ export default function FulfillmentRisksPage() {
                   const health = rate > 0.1 ? "At risk" : rate > 0 ? "Watch" : "Healthy"
                   const tone = rate > 0.1 ? "red" : rate > 0 ? "amber" : "green"
                   return (
-                    <tr key={store} style={ROW_BORDER}>
+                    <Fragment key={store}>
+                    <tr style={ROW_BORDER}>
                       <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{store}</td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{s.total}</td>
                       <td className={`${TD} text-right tabular-nums`}>
@@ -253,6 +254,7 @@ export default function FulfillmentRisksPage() {
                         </tr>
                       )
                     })()}
+                    </Fragment>
                   )
                 })}
             </tbody>
