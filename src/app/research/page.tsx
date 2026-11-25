@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { PillSelect } from "@/components/PillSelect"
 import { ProductTesting } from "@/components/ProductTesting"
 import { PageShell } from "@/components/PageShell"
@@ -8,10 +8,8 @@ import { Panel, Badge, Button, Loading, EmptyState, SectionLabel, TH, TD, ROW_BO
 
 const INPUT_STYLE = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 
 interface ResearchEntry {
   id?: number

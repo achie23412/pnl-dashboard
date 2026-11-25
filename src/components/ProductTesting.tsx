@@ -1,15 +1,13 @@
 "use client"
 import { useState, useEffect } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
 import { PillSelect } from "@/components/PillSelect"
 import { ProductLink } from "@/components/ProductLink"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 
 const STORES_NO_OVERALL = STORES.filter((s) => s !== "Overall")
 

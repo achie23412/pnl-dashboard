@@ -4,14 +4,15 @@
 // Refund rate = refunded value ÷ revenue, per store in its own currency, overall in EUR.
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY, fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
 import { reasonLabel, money, type CsRefund } from "@/lib/cs-log"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 const TARGET = 5 // % of revenue
 const day = (offset: number) => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10)
 const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })

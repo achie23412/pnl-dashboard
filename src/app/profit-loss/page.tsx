@@ -3,7 +3,7 @@
 // PROFIT = Gross Revenue − Refunds − Cost of Goods − Ad Spend − Media Buyer Fee − Transaction Fee
 // Filled from the dashboard's own data instead of typing it in by hand.
 import { useEffect, useMemo, useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, passes, type FilterValue } from "@/components/FilterSelect"
@@ -11,7 +11,8 @@ import { Panel, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/comp
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 
 // Same fee settings as the sheet's Setup tab (Google stores). Meta stores have no media buyer.
 const SHEET_STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley"]

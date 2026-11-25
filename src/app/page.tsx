@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState, useMemo } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { StoreTabs } from "@/components/StoreTabs"
 import { DatePicker } from "@/components/DatePicker"
 import { FixBanner } from "@/components/FixBanner"
@@ -25,10 +25,8 @@ import type { EurRates } from "@/lib/currency"
 import { getCached, setCache } from "@/lib/cache"
 import { getDateRange } from "@/lib/date-range"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 
 function getPreviousRange(from: string, to: string): [string, string] {
   const f = new Date(from + "T12:00:00")

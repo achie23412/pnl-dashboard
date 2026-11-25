@@ -2,7 +2,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 
 function Icon({ d, size = 14 }: { d: string; size?: number }) {
   return (
@@ -356,11 +356,7 @@ export function NavBar() {
   const [supplierBadge, setSupplierBadge] = useState(0)
 
   useEffect(() => {
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    )
-    sb.from("refresh_log")
+    db.from("refresh_log")
       .select("completed_at")
       .order("completed_at", { ascending: false })
       .limit(1)

@@ -4,7 +4,7 @@
 // Polite: a few stores at a time, small pages, nothing but public JSON.
 "use client"
 
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { SHOPIFY_STORES } from "@/lib/constants"
 import { currencyForMarkets } from "@/lib/opportunity-engine"
 import type { SourceProduct } from "@/lib/shopify-import"
@@ -131,8 +131,7 @@ async function post(body: unknown) {
 
 // Scans every non-dead competitor plus our Google stores, then rebuilds opportunities.
 export async function runCompetitorScan(onProgress: (p: ScanProgress) => void, opts: { onlyStatuses?: string[] } = {}) {
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-  const { data, error } = await supabase.from("competitors").select("domain,store_name,store_url,markets,status,niche")
+  const { data, error } = await db.from("competitors").select("domain,store_name,store_url,markets,status,niche")
   if (error) throw new Error(`Competitor tracker: ${error.message}`)
   const competitors = ((data || []) as CompetitorRow[])
     .filter((c) => c.status !== "dead")

@@ -1,16 +1,14 @@
 "use client"
 import { useEffect, useState } from "react"
 import { fetchLatestEurRates } from "@/lib/currency"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { PageShell } from "@/components/PageShell"
 import { Panel, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 
 interface Competitor {
   id?: number

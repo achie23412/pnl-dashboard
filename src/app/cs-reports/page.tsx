@@ -4,7 +4,7 @@
 // store credit or a partial refund instead of a full refund (the funnel worked).
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@supabase/supabase-js"
+import { db } from "@/lib/db-client"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
@@ -13,7 +13,8 @@ import { SHOPIFY_STORES } from "@/lib/constants"
 import { STORE_CURRENCY, fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
 import { reasonLabel, money, type CsRefund, type CsStoreCredit } from "@/lib/cs-log"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+// Database reads go through our logged-in server (/api/db), not the public Supabase key
+const supabase = db
 const UNLOGGED = "unlogged"
 const reasonName = (k: string) => (k === UNLOGGED ? "No reason logged yet" : reasonLabel(k))
 const digits = (id: string | null | undefined) => (id ? (String(id).match(/(\d+)\D*$/)?.[1] ?? "") : "")
