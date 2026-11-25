@@ -86,3 +86,59 @@ export function checkListing(d: ListingDraft, sourceText = ""): GmcIssue[] {
 }
 
 export const isReady = (issues: GmcIssue[]) => !issues.some((i) => i.level === "critical")
+
+// ── Live products (already in the store). Each issue says how to fix it.
+export type LiveIssue = { level: "critical" | "warning"; field: string; message: string; fix: string; source: string }
+
+export type LiveProductInput = {
+  title: string
+  descriptionText: string
+  productType: string
+  images: number
+  variants: { price: number; compareAt: number | null; available: boolean }[]
+}
+
+export function checkLiveProduct(p: LiveProductInput): LiveIssue[] {
+  const out: LiveIssue[] = []
+  const GMC = "Google Merchant Center"
+  const SOP = "Ascend listing SOP"
+  const title = p.title.trim()
+  const all = `${title} ${p.descriptionText}`
+
+  // Critical: likely disapproval / not shown
+  if (p.images === 0) out.push({ level: "critical", field: "Images", message: "No product image.", fix: "Add at least one clear product photo in Shopify (Products → Media).", source: GMC })
+  if (!p.variants.length || p.variants.every((v) => !v.price || v.price <= 0))
+    out.push({ level: "critical", field: "Price", message: "No price above 0.", fix: "Set a price on every variant.", source: GMC })
+  if (!p.descriptionText.trim()) out.push({ level: "critical", field: "Description", message: "Description is empty.", fix: "Write a 5-sentence factual description (SOP format: main search term + what it looks like, no promo text).", source: GMC })
+  if (title.length > 150) out.push({ level: "critical", field: "Title", message: `Title is ${title.length} characters (Google limit 150).`, fix: "Shorten to 70–100 characters, most important keywords first.", source: GMC })
+  for (const w of PROMO) {
+    if (has(all, w)) out.push({ level: "critical", field: "Text", message: `Promotional text "${w}".`, fix: `Remove "${w}" from the title/description; Google rejects promotional wording in product data.`, source: `${GMC} (promotional text)` })
+  }
+  const caps = title.split(/\s+/).filter((w) => /^[A-Z]{4,}$/.test(w))
+  if (caps.length) out.push({ level: "critical", field: "Title", message: `ALL CAPS word(s): ${caps.join(", ")}.`, fix: "Write those words in normal capitalisation.", source: `${GMC} (editorial)` })
+  if (/!/.test(title)) out.push({ level: "critical", field: "Title", message: "Exclamation mark in the title.", fix: "Remove the exclamation mark.", source: `${GMC} (editorial)` })
+  const broken = p.variants.filter((v) => v.compareAt !== null && v.compareAt > 0 && v.compareAt <= v.price)
+  if (broken.length) out.push({ level: "critical", field: "Price", message: `${broken.length} variant(s) have a compare-at price that is not higher than the price.`, fix: "Clear the compare-at price on those variants (or set it correctly); a 'sale' that isn't lower looks wrong to Google and shoppers.", source: GMC })
+
+  // Warnings: stock + SOP quality
+  const inStock = p.variants.filter((v) => v.available).length
+  if (p.variants.length && inStock === 0)
+    out.push({ level: "warning", field: "Stock", message: "Every variant is sold out.", fix: "Check the supplier stock. If it can't be restocked, draft the product (Drafting SOP) so ad spend doesn't go to an unbuyable item.", source: "Stock" })
+  if (title && (title.length < 70 || title.length > 100) && title.length <= 150)
+    out.push({ level: "warning", field: "Title", message: `Title is ${title.length} characters.`, fix: "Aim for 70–100 characters: Gender + Style + Product type – key attributes.", source: SOP })
+  const colours = COLOURS.filter((c) => has(title, c))
+  if (colours.length) out.push({ level: "warning", field: "Title", message: `Colour in the title (${colours.join(", ")}).`, fix: "Move colour to the variant options and take it out of the title.", source: SOP })
+  const sizes = SIZES.filter((s) => s.length > 2 && has(title, s))
+  if (sizes.length) out.push({ level: "warning", field: "Title", message: `Size in the title (${sizes.join(", ")}).`, fix: "Sizes belong in the variants, not the title.", source: SOP })
+  const words = title.toLowerCase().replace(/[–-]/g, " ").split(/\s+/).filter((w) => w.length > 3)
+  const repeated = Array.from(new Set(words.filter((w, i) => words.indexOf(w) !== i)))
+  if (repeated.length) out.push({ level: "warning", field: "Title", message: `Repeated word(s): ${repeated.join(", ")}.`, fix: "Use each word once in the title.", source: SOP })
+  if (p.descriptionText.trim() && p.descriptionText.trim().length < 120)
+    out.push({ level: "warning", field: "Description", message: "Very short description.", fix: "Expand to 5 factual sentences (shape, details, occasion).", source: SOP })
+  for (const s of SUPERLATIVES) {
+    if (has(all, s)) out.push({ level: "warning", field: "Text", message: `Unsupported claim "${s}".`, fix: `Remove "${s}" unless you can back it up.`, source: `${SOP} (GMC compliance)` })
+  }
+  if (p.images === 1) out.push({ level: "warning", field: "Images", message: "Only 1 image.", fix: "Add more angles; products with several photos convert better.", source: "Listing quality" })
+  if (!p.productType.trim()) out.push({ level: "warning", field: "Product type", message: "No product type.", fix: "Set the product type in Shopify (e.g. Dresses); it helps the feed categorise the product.", source: "Feed quality" })
+  return out
+}
