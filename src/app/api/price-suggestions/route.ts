@@ -49,127 +49,113 @@ export interface PriceSuggestion {
 }
 
 const GOOGLE_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
+const MIN_SPEND_GOOGLE = 5
+
+function resolvePrice(p: CatalogProduct): number {
+  const explicit = parseFloat(p.retail_price?.replace(/[^0-9.]/g, "") || "0")
+  if (explicit > 0) return explicit
+  if (p.sales_revenue > 0 && p.units_sold > 0) return Math.round((p.sales_revenue / p.units_sold) * 100) / 100
+  return 0
+}
 
 function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[]): PriceSuggestion[] {
   const suggestions: PriceSuggestion[] = []
   const storeBeRoas = new Map(stores.map(s => [s.store, s.be_roas]))
 
   for (const p of products) {
-    const price = parseFloat(p.retail_price?.replace(/[^0-9.]/g, "") || "0")
+    const price = resolvePrice(p)
     if (!price || price <= 0) continue
-    if (p.ad_spend < 25) continue
+    if (p.units_sold < 1) continue
 
     const isGoogle = GOOGLE_STORES.includes(p.store)
+    const hasSpend = p.ad_spend != null && p.ad_spend > 0
+    const hasRoas = p.roas != null && p.roas > 0
     const txnRate = TRANSACTION_FEE_RATE[p.store] ?? 0.035
     const beRoas = p.be_roas ?? storeBeRoas.get(p.store) ?? null
+    const roas = p.roas ?? 0
+    const spend = p.ad_spend ?? 0
 
     let productMargin: number | null = null
-    if (p.cogs_usd !== null && price > 0) {
+    if (p.cogs_usd !== null && p.cogs_usd > 0 && price > 0) {
       productMargin = 1 - (p.cogs_usd / price) - txnRate
     }
 
-    // Rule 1: BE-ROAS too high (price too low relative to COGS) — margin < 25%
-    if (productMargin !== null && productMargin < 0.25 && p.cogs_usd !== null) {
+    const metrics = { roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: spend, cogs_usd: p.cogs_usd, margin_pct: productMargin != null ? Math.round(productMargin * 1000) / 10 : null }
+
+    // Rule 1: Thin margin (margin < 25%) — applies to ALL stores with COGS data
+    if (productMargin !== null && productMargin < 0.25 && p.cogs_usd !== null && p.cogs_usd > 0) {
       const targetMargin = 0.35
       const targetPrice = p.cogs_usd / (1 - targetMargin - txnRate)
       const changePct = ((targetPrice - price) / price) * 100
       if (changePct > 3) {
         suggestions.push({
-          product_name: p.product_name,
-          store: p.store,
-          current_price: price,
+          product_name: p.product_name, store: p.store, current_price: price,
           suggested_price: Math.ceil(targetPrice * 100) / 100,
           change_pct: Math.round(changePct * 10) / 10,
-          rule: "Thin margin",
-          rule_id: "thin_margin",
+          rule: "Thin margin", rule_id: "thin_margin",
           reason: `Margin is ${(productMargin * 100).toFixed(0)}% (target 35%). COGS $${p.cogs_usd.toFixed(2)} + ${(txnRate * 100).toFixed(1)}% fees leave too little.`,
-          priority: "high",
-          metrics: { roas: p.roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: p.ad_spend, cogs_usd: p.cogs_usd, margin_pct: productMargin ? Math.round(productMargin * 1000) / 10 : null },
-          cooldown_until: null,
+          priority: "high", metrics, cooldown_until: null,
         })
         continue
       }
     }
 
-    // Rule 2: ROAS downtrend — SOP rule 9: ROAS 1.0–2.2 → raise price 10%
-    if (isGoogle && p.roas >= 1.0 && p.roas <= 2.2 && p.ad_spend >= 25) {
+    // Rule 2: ROAS downtrend — SOP rule 9: ROAS 1.0–2.2 → raise price 10% (Google only)
+    if (isGoogle && hasRoas && roas >= 1.0 && roas <= 2.2 && spend >= MIN_SPEND_GOOGLE) {
       const newPrice = Math.ceil(price * 1.10 * 100) / 100
       suggestions.push({
-        product_name: p.product_name,
-        store: p.store,
-        current_price: price,
-        suggested_price: newPrice,
-        change_pct: 10,
-        rule: "ROAS downtrend",
-        rule_id: "roas_downtrend",
-        reason: `ROAS ${p.roas.toFixed(2)}x (between 1.0–2.2). Ascend Drafting SOP rule 9: raise price ≥10%, re-check after 7 days.`,
-        priority: "high",
-        metrics: { roas: p.roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: p.ad_spend, cogs_usd: p.cogs_usd, margin_pct: productMargin ? Math.round(productMargin * 1000) / 10 : null },
-        cooldown_until: null,
+        product_name: p.product_name, store: p.store, current_price: price,
+        suggested_price: newPrice, change_pct: 10,
+        rule: "ROAS downtrend", rule_id: "roas_downtrend",
+        reason: `ROAS ${roas.toFixed(2)}x (between 1.0–2.2). Ascend Drafting SOP rule 9: raise price ≥10%, re-check after 7 days.`,
+        priority: "high", metrics, cooldown_until: null,
       })
       continue
     }
 
-    // Rule 3: BE-ROAS too low (overpriced) — ROAS > 5 but very few sales
-    if (p.roas > 5 && p.units_sold <= 2 && p.ad_spend >= 25) {
+    // Rule 3: Possibly overpriced — ROAS > 5 but very few sales (Google only)
+    if (isGoogle && hasRoas && roas > 5 && p.units_sold <= 2 && spend >= MIN_SPEND_GOOGLE) {
       const newPrice = Math.ceil(price * 0.92 * 100) / 100
       suggestions.push({
-        product_name: p.product_name,
-        store: p.store,
-        current_price: price,
-        suggested_price: newPrice,
-        change_pct: -8,
-        rule: "Possibly overpriced",
-        rule_id: "overpriced",
-        reason: `High ROAS ${p.roas.toFixed(2)}x but only ${p.units_sold} sales. Price may be too high for conversion volume.`,
-        priority: "low",
-        metrics: { roas: p.roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: p.ad_spend, cogs_usd: p.cogs_usd, margin_pct: productMargin ? Math.round(productMargin * 1000) / 10 : null },
-        cooldown_until: null,
+        product_name: p.product_name, store: p.store, current_price: price,
+        suggested_price: newPrice, change_pct: -8,
+        rule: "Possibly overpriced", rule_id: "overpriced",
+        reason: `High ROAS ${roas.toFixed(2)}x but only ${p.units_sold} sales. Price may be too high for conversion volume.`,
+        priority: "low", metrics, cooldown_until: null,
       })
       continue
     }
 
     // Rule 4: Below break-even with spend — losing money
-    if (beRoas !== null && p.roas < beRoas && p.roas > 0 && p.ad_spend >= 25) {
-      const gap = ((beRoas - p.roas) / beRoas) * 100
+    if (beRoas !== null && hasRoas && roas < beRoas && roas > 0 && spend >= MIN_SPEND_GOOGLE) {
+      const gap = ((beRoas - roas) / beRoas) * 100
       if (gap > 15) {
         const increase = Math.min(gap * 0.4, 15)
         const newPrice = Math.ceil(price * (1 + increase / 100) * 100) / 100
         suggestions.push({
-          product_name: p.product_name,
-          store: p.store,
-          current_price: price,
-          suggested_price: newPrice,
-          change_pct: Math.round(increase * 10) / 10,
-          rule: "Below break-even",
-          rule_id: "below_be",
-          reason: `ROAS ${p.roas.toFixed(2)}x vs ${beRoas.toFixed(2)}x break-even (${gap.toFixed(0)}% gap). Raise price to close the margin gap.`,
-          priority: "normal",
-          metrics: { roas: p.roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: p.ad_spend, cogs_usd: p.cogs_usd, margin_pct: productMargin ? Math.round(productMargin * 1000) / 10 : null },
-          cooldown_until: null,
+          product_name: p.product_name, store: p.store, current_price: price,
+          suggested_price: newPrice, change_pct: Math.round(increase * 10) / 10,
+          rule: "Below break-even", rule_id: "below_be",
+          reason: `ROAS ${roas.toFixed(2)}x vs ${beRoas.toFixed(2)}x break-even (${gap.toFixed(0)}% gap). Raise price to close the margin gap.`,
+          priority: "normal", metrics, cooldown_until: null,
         })
         continue
       }
     }
 
-    // Rule 5: COGS% too high (> 40% of price) — not sustainable
-    if (p.cogs_usd !== null && price > 0 && (p.cogs_usd / price) > 0.40 && p.units_sold >= 1) {
+    // Rule 5: COGS% too high (> 40% of price) — applies to ALL stores with COGS data
+    if (p.cogs_usd !== null && p.cogs_usd > 0 && price > 0 && (p.cogs_usd / price) > 0.40) {
       const cogsPct = (p.cogs_usd / price) * 100
       const targetPrice = p.cogs_usd / 0.30
       const changePct = ((targetPrice - price) / price) * 100
       if (changePct > 5) {
         suggestions.push({
-          product_name: p.product_name,
-          store: p.store,
-          current_price: price,
+          product_name: p.product_name, store: p.store, current_price: price,
           suggested_price: Math.ceil(targetPrice * 100) / 100,
           change_pct: Math.round(changePct * 10) / 10,
-          rule: "COGS% too high",
-          rule_id: "high_cogs",
+          rule: "COGS% too high", rule_id: "high_cogs",
           reason: `COGS is ${cogsPct.toFixed(0)}% of price ($${p.cogs_usd.toFixed(2)} / $${price.toFixed(2)}). Target: under 30%.`,
-          priority: "normal",
-          metrics: { roas: p.roas, be_roas: beRoas, units_sold: p.units_sold, ad_spend: p.ad_spend, cogs_usd: p.cogs_usd, margin_pct: productMargin ? Math.round(productMargin * 1000) / 10 : null },
-          cooldown_until: null,
+          priority: "normal", metrics, cooldown_until: null,
         })
       }
     }
