@@ -139,8 +139,9 @@ export function KPICards({
     data.estCogs > 0
       ? ` · <span style="color:var(--orange)">~€${fmt(data.estCogs)} est.</span>`
       : ""
-  const txnLabel = includeTxnFees && data.txnFees > 0
-    ? ` · Fees −€${fmt(data.txnFees)}`
+  const feeTotal = (data.txnFees || 0) + (data.mediaBuyerFees || 0)
+  const txnLabel = includeTxnFees && feeTotal > 0
+    ? ` · Fees −€${fmt(feeTotal)}`
     : ""
 
   return (

@@ -49,6 +49,7 @@ export interface KPIData {
   cogs: number
   estCogs: number
   txnFees: number
+  mediaBuyerFees: number
   profit: number
   orders: number
   roas: number

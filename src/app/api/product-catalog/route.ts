@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE } from "@/lib/constants"
+import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
 import { fetchShopifyOrderTotals, fetchGoogleProductSpend } from "@/lib/windsor"
 import type { GoogleProductSpend } from "@/lib/windsor"
@@ -307,13 +307,15 @@ interface StoreContext {
   // multiply a USD COGS amount by this to get store currency
   usdToStore: number
   txnRate: number
+  // media buyer fee as a share of ad spend (profit sheet: 10% on Google stores)
+  mbRate: number
 }
 
 function beRoas(cogsUsdPerUnit: number | null, units: number, revenue: number, ctx: StoreContext): number | null {
   if (cogsUsdPerUnit == null || units <= 0 || revenue <= 0) return null
   const cogsPct = (cogsUsdPerUnit * ctx.usdToStore * units) / revenue
-  const margin = 1 - cogsPct - ctx.txnRate
-  return margin > 0 ? 1 / margin : null
+  const be = breakEvenRoas(cogsPct, ctx.txnRate, ctx.mbRate)
+  return Number.isFinite(be) ? be : null
 }
 
 function findShipgoodsCogs(
@@ -606,7 +608,7 @@ export async function GET(req: Request) {
       productSpend = new Map()
       for (const g of googleSpend) if (g.store === s) productSpend.set(g.productId, g.spend)
     }
-    return { productSpend, usdToStore: perEur(cur) / perEur("USD"), txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035 }
+    return { productSpend, usdToStore: perEur(cur) / perEur("USD"), txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035, mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0 }
   }
 
   let allProducts: CatalogProduct[] = []

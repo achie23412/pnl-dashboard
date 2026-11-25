@@ -87,12 +87,29 @@ export const STORE_MARKET: Record<string, string> = {
   "Susan & Allen": "US",
 }
 
+// Fees follow the Ascend profit sheet (Setup tab): Google stores pay a 6% transaction
+// fee on gross revenue and a 10% media buyer fee on ad spend. Meta stores: no media buyer.
 export const TRANSACTION_FEE_RATE: Record<string, number> = {
   LUMEGLASSES: 0.029,
   Blinky: 0.029,
-  "Walsh & Farley": 0.029,
-  "Carter & Collins": 0.039,
-  "Susan & Allen": 0.039,
+  "Walsh & Farley": 0.06,
+  "Carter & Collins": 0.06,
+  "Susan & Allen": 0.06,
+}
+
+export const MEDIA_BUYER_FEE_RATE: Record<string, number> = {
+  LUMEGLASSES: 0,
+  Blinky: 0,
+  "Walsh & Farley": 0.1,
+  "Carter & Collins": 0.1,
+  "Susan & Allen": 0.1,
+}
+
+// Break-even ROAS when profit = revenue − COGS − ad spend − media buyer fee − transaction fee:
+// R(1 − cogs% − txn%) = A(1 + mb%)  →  BE ROAS = (1 + mb%) / (1 − cogs% − txn%)
+export function breakEvenRoas(cogsRatio: number, txnRate: number, mediaBuyerRate: number): number {
+  const margin = 1 - cogsRatio - txnRate
+  return margin > 0 ? (1 + mediaBuyerRate) / margin : Infinity
 }
 
 export const DATE_PRESETS = [

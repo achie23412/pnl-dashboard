@@ -1,7 +1,7 @@
 // Builds the "Must do" list for a day from the dashboard data and the user's SOPs.
 // Every task carries `why` (the numbers that triggered it), `source` (which rule it comes from),
 // `fix` (what to do) and `href` (the dashboard page where you do it).
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, toEur, type EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow } from "@/lib/types"
 
@@ -74,8 +74,7 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       sum(wCogs, (r) => r.cogs) +
       sum(wRev.filter((r) => !cogsDays.has(r.date)), (r) =>
         r.orders * toEur(AVG_COGS_PER_ORDER[s] || 0, COGS_CURRENCY, r.date, rates))
-    const margin = (revTotal > 0 ? cogsTotal / revTotal : 0) + (TRANSACTION_FEE_RATE[s] || 0.035)
-    const be = margin < 1 ? 1 / (1 - margin) : Infinity
+    const be = breakEvenRoas(revTotal > 0 ? cogsTotal / revTotal : 0, TRANSACTION_FEE_RATE[s] || 0.035, MEDIA_BUYER_FEE_RATE[s] ?? 0)
 
     const roas = rRev / rSpend
     const baseRoas = bSpend > 0 ? bRev / bSpend : null

@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@supabase/supabase-js"
-import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE_MARKET } from "@/lib/constants"
+import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, STORE_TIMEZONE, STORE_MARKET } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, FALLBACK_RATES } from "@/lib/currency"
 import type { EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow, RefundRow } from "@/lib/types"
@@ -98,7 +98,9 @@ export default function DailyReportPage() {
       const totalCogs = actualCogs + estCogs
 
       // Revenue is gross (order rows only); refunds are subtracted here.
-      const profit = totalRevEur - totalRefund - totalSpend - totalCogs
+      // Same as the profit sheet: minus transaction fee (% of gross) and media buyer fee (% of ad spend)
+      const fees = totalRevEur * (TRANSACTION_FEE_RATE[s] ?? 0.035) + totalSpend * (MEDIA_BUYER_FEE_RATE[s] ?? 0)
+      const profit = totalRevEur - totalRefund - totalSpend - totalCogs - fees
       const roas = totalSpend > 0 ? totalRevEur / totalSpend : 0
 
       // CVR = orders ÷ human sessions (bots excluded), from Shopify Analytics

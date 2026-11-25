@@ -14,7 +14,7 @@ import {
   RevenueByStoreChart,
   SpendByAccountChart,
 } from "@/components/Charts"
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, STORES, breakEvenRoas } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
 import type {
   RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData,
@@ -70,7 +70,8 @@ export default function Dashboard() {
   const [refunds, setRefunds] = useState<RefundRow[]>([])
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [includeTxnFees, setIncludeTxnFees] = useState(false)
+  // Fees on by default, like the profit sheet (transaction fee + media buyer fee)
+  const [includeTxnFees, setIncludeTxnFees] = useState(true)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [sessions, setSessions] = useState<SessionsRow[]>([])
   // Details always visible — no toggle needed
@@ -197,8 +198,13 @@ export default function Dashboard() {
       }
     }
 
+    let mediaBuyerFees = 0
+    if (includeTxnFees) {
+      for (const r of sp) mediaBuyerFees += r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0)
+    }
+
     // Revenue is gross (order rows only); refunds are subtracted here.
-    const profit = totalRevenue - totalRefundAmount - totalSpend - totalCogs - txnFees
+    const profit = totalRevenue - totalRefundAmount - totalSpend - totalCogs - txnFees - mediaBuyerFees
 
     const sessionDays = new Set(ses.map((r) => `${r.date}|${r.store}`))
     const totalSessions = ses.reduce((s, r) => s + r.sessions, 0)
@@ -213,8 +219,9 @@ export default function Dashboard() {
         weightedTxnRate += (r.revenue / totalRevenue) * (TRANSACTION_FEE_RATE[r.store] || 0.035)
       }
     }
-    const margin = cogsPercent / 100 + weightedTxnRate
-    const breakevenRoas = margin < 1 ? 1 / (1 - margin) : 0
+    const mbRate = totalSpend > 0 ? sp.reduce((s, r) => s + r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0), 0) / totalSpend : 0
+    const be = breakEvenRoas(cogsPercent / 100, weightedTxnRate, mbRate)
+    const breakevenRoas = Number.isFinite(be) ? be : 0
 
     const cogsConfidence: CogsConfidence =
       actualCogs > 0 && estCogs === 0 ? "actual"
@@ -227,6 +234,7 @@ export default function Dashboard() {
       cogs: actualCogs,
       estCogs,
       txnFees,
+      mediaBuyerFees,
       profit,
       orders: totalOrders,
       roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
@@ -276,6 +284,7 @@ export default function Dashboard() {
       let txn = 0
       if (includeTxnFees) {
         for (const r of rev) txn += r.revenue * (TRANSACTION_FEE_RATE[s] || 0.035)
+        txn += totalSpend * (MEDIA_BUYER_FEE_RATE[s] ?? 0)
       }
 
       return {
@@ -340,6 +349,9 @@ export default function Dashboard() {
           for (const r of filtered.revenue.filter((x) => x.date === date)) {
             dayTxn += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
           }
+          for (const r of filtered.spend.filter((x) => x.date === date)) {
+            dayTxn += r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0)
+          }
         }
 
         return {
@@ -393,8 +405,7 @@ export default function Dashboard() {
       const cogsTotal =
         sum(wCogs, (r) => r.cogs) +
         sum(wRev.filter((r) => !cogsDays.has(r.date) && AVG_COGS_PER_ORDER[s]), (r) => r.orders * estCogsPerOrderEur(s, r.date))
-      const margin = (revTotal > 0 ? cogsTotal / revTotal : 0) + (TRANSACTION_FEE_RATE[s] || 0.035)
-      const breakevenRoas = margin < 1 ? 1 / (1 - margin) : Infinity
+      const breakevenRoas = breakEvenRoas(revTotal > 0 ? cogsTotal / revTotal : 0, TRANSACTION_FEE_RATE[s] || 0.035, MEDIA_BUYER_FEE_RATE[s] ?? 0)
 
       const severity: RoasAlert["severity"] =
         recentRoas < breakevenRoas ? "loss" : recentRoas < breakevenRoas * 1.2 ? "thin" : "ok"
@@ -504,7 +515,7 @@ export default function Dashboard() {
 
           <div className="mb-5">
             <div className="flex items-center justify-end gap-1.5 mb-2.5">
-              <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }}>Transaction fees</span>
+              <span className="text-[9px] uppercase tracking-wider font-medium" style={{ color: "var(--text-dim)" }} title="Transaction fee (6% Google stores, 2.9% Meta stores) + media buyer fee (10% of Google ad spend), as in the profit sheet">Fees (profit sheet)</span>
               <button
                 onClick={() => setIncludeTxnFees(!includeTxnFees)}
                 className="relative w-7 h-4 rounded-full transition-all"
