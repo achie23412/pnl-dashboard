@@ -16,7 +16,7 @@ interface CatalogProduct {
   cog_pct: number | null
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "estimate" | "none"
   ad_spend: number | null
   roas: number | null
   be_roas: number | null
@@ -431,13 +431,14 @@ export default function ProductRulesPage() {
                       style={{ color: "var(--text-dim)" }}
                       title={
                         p.be_roas != null
-                          ? `COGS from ${p.cogs_source === "shipgoods" ? "ShipGoods charges" : p.cogs_source === "quote" ? "the launch sheet quote (COG $)" : p.cogs_source === "catalog" ? "the ShipGoods catalog price (not charged yet)" : "the COGS sheet"}`
+                          ? `COGS from ${p.cogs_source === "shipgoods" ? "ShipGoods charges" : p.cogs_source === "quote" ? "the launch sheet quote (COG $)" : p.cogs_source === "catalog" ? "the ShipGoods catalog price (not charged yet)" : p.cogs_source === "estimate" ? "an ESTIMATE: this store's average COGS % (no ShipGoods charge or supplier quote yet)" : "the COGS sheet"}`
                           : p.cogs_usd == null
                             ? "No COGS yet: ShipGoods hasn't charged this product, it isn't in the ShipGoods catalog and has no COG $ in the launch sheet. Add the COG $ in the launch sheet."
                             : "No sales in this period"
                       }
                     >
                       {p.be_roas != null ? x(p.be_roas) : p.cogs_usd == null ? <span className="text-[9px]" style={{ color: "var(--orange)" }}>no COGS</span> : "—"}
+                      {p.cogs_source === "estimate" && <span className="text-[8px] ml-1" style={{ color: "var(--orange)" }}>est.</span>}
                     </td>
                     <td
                       className={`${TD} text-right tabular-nums`}
@@ -449,6 +450,7 @@ export default function ProductRulesPage() {
                       }
                     >
                       {p.margin != null ? `${p.margin.toFixed(1)}%` : p.cogs_usd == null ? <span className="text-[9px]" style={{ color: "var(--orange)" }}>no COGS</span> : "—"}
+                      {p.cogs_source === "estimate" && <span className="text-[8px] ml-1" style={{ color: "var(--orange)" }}>est.</span>}
                       {p.margin_basis === "before_ads" && <span className="text-[8px] ml-1" style={{ color: "var(--text-dim)" }}>pre-ads</span>}
                     </td>
                   </tr>

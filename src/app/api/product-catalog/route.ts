@@ -310,7 +310,7 @@ interface CatalogProduct {
   category: string
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "estimate" | "none"
   // Ad spend attributed to this product (Google Shopping, matched on Shopify
   // product id). null = no per-product spend for this store (Meta/TikTok).
   ad_spend: number | null
@@ -517,6 +517,30 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
       product_ids: s.productIds,
       ...netMargin(cogsUsd, s.qty, s.revenue, adSpend, ctx),
     })
+  }
+
+  // Still no COGS anywhere (not charged, not quoted): estimate it from this store's own
+  // COGS % on the products we do know, so BE ROAS and margin show. Marked "estimate";
+  // replaced automatically once ShipGoods charges it or the supplier quotes it.
+  // No known products in the store → 30% (middle of the 28–32% target).
+  {
+    let knownRev = 0
+    let knownCogs = 0
+    for (const p of catalog) {
+      if (p.cogs_usd != null && p.cogs_source !== "estimate" && p.units_sold > 0 && p.sales_revenue > 0) {
+        knownRev += p.sales_revenue
+        knownCogs += p.cogs_usd * ctx.usdToStore * p.units_sold
+      }
+    }
+    const ratio = knownRev > 0 ? Math.min(0.6, Math.max(0.1, knownCogs / knownRev)) : 0.3
+    for (const p of catalog) {
+      if (p.cogs_usd != null || p.units_sold <= 0 || p.sales_revenue <= 0) continue
+      const est = Math.round(((p.sales_revenue / p.units_sold) * ratio / ctx.usdToStore) * 100) / 100
+      p.cogs_usd = est
+      p.cogs_source = "estimate"
+      p.be_roas = beRoas(est, p.units_sold, p.sales_revenue, ctx)
+      Object.assign(p, netMargin(est, p.units_sold, p.sales_revenue, p.ad_spend, ctx))
+    }
   }
 
   // Second pass: sheet products that weren't matched to any Shopify sale

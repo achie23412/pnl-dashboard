@@ -4,16 +4,24 @@
 // store credit or a partial refund instead of a full refund (the funnel worked).
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { createClient } from "@supabase/supabase-js"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { SHOPIFY_STORES } from "@/lib/constants"
-import { fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
+import { STORE_CURRENCY, fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
 import { reasonLabel, money, type CsRefund, type CsStoreCredit } from "@/lib/cs-log"
 
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+const UNLOGGED = "unlogged"
+const reasonName = (k: string) => (k === UNLOGGED ? "No reason logged yet" : reasonLabel(k))
+const digits = (id: string | null | undefined) => (id ? (String(id).match(/(\d+)\D*$/)?.[1] ?? "") : "")
+type ShopifyRefund = { date: string; store: string; amount: number; order_id: string | null; source: string | null }
+
 type Case = {
-  kind: "full" | "partial" | "credit"
+  // "unlogged" = refunded in Shopify but CS hasn't logged why yet
+  kind: "full" | "partial" | "credit" | "unlogged"
   date: string
   store: string
   reason: string
@@ -32,12 +40,12 @@ const productType = (title: string) => {
   return w.endsWith("es") && w.length > 5 ? w.slice(0, -2) : w.endsWith("s") && w.length > 4 && !w.endsWith("ss") ? w.slice(0, -1) : w
 }
 
-type Row = { key: string; cases: number; full: number; partial: number; credit: number; eur: number }
+type Row = { key: string; cases: number; full: number; partial: number; credit: number; unlogged: number; eur: number }
 function group(cases: Case[], keyOf: (c: Case) => string[]): Row[] {
   const m = new Map<string, Row>()
   for (const c of cases) {
     for (const key of keyOf(c)) {
-      const r = m.get(key) || { key, cases: 0, full: 0, partial: 0, credit: 0, eur: 0 }
+      const r = m.get(key) || { key, cases: 0, full: 0, partial: 0, credit: 0, unlogged: 0, eur: 0 }
       r.cases += 1
       r[c.kind] += 1
       r.eur += c.eur
@@ -61,13 +69,15 @@ function Breakdown({ title, sub, rows, label }: { title: string; sub?: string; r
               <th className={`${TH} text-right`}>Full</th>
               <th className={`${TH} text-right`}>Partial</th>
               <th className={`${TH} text-right`}>Credit</th>
+              <th className={`${TH} text-right`} title="Refunded in Shopify, reason not logged by CS yet">No reason</th>
               <th className={`${TH} text-right`}>Kept sale</th>
               <th className={`${TH} text-right`}>Value (EUR)</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const kept = r.cases > 0 ? (r.partial + r.credit) / r.cases : 0
+              const logged = r.cases - r.unlogged
+              const kept = logged > 0 ? (r.partial + r.credit) / logged : 0
               return (
                 <tr key={r.key} style={ROW_BORDER}>
                   <td className={`${TD} max-w-[200px] truncate`} style={{ color: "var(--text)" }}>{label(r.key)}</td>
@@ -75,7 +85,8 @@ function Breakdown({ title, sub, rows, label }: { title: string; sub?: string; r
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{r.full}</td>
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{r.partial}</td>
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{r.credit}</td>
-                  <td className={`${TD} text-right`}><Badge tone={kept >= 0.5 ? "green" : kept > 0 ? "amber" : "red"}>{pct(r.partial + r.credit, r.cases)}</Badge></td>
+                  <td className={`${TD} text-right tabular-nums`} style={{ color: r.unlogged ? "var(--orange)" : "var(--text-dim)" }}>{r.unlogged}</td>
+                  <td className={`${TD} text-right`}>{logged > 0 ? <Badge tone={kept >= 0.5 ? "green" : kept > 0 ? "amber" : "red"}>{pct(r.partial + r.credit, logged)}</Badge> : <span style={{ color: "var(--text-dim)" }}>—</span>}</td>
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{money(r.eur, "EUR")}</td>
                 </tr>
               )
@@ -92,6 +103,7 @@ export default function CSReportsPage() {
   const [stores, setStores] = useState<FilterValue>(EMPTY_FILTER)
   const [refunds, setRefunds] = useState<CsRefund[]>([])
   const [credits, setCredits] = useState<CsStoreCredit[]>([])
+  const [shopify, setShopify] = useState<ShopifyRefund[]>([])
   const [rates, setRates] = useState<EurRates | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -101,8 +113,10 @@ export default function CSReportsPage() {
       fetch("/api/cs-log?kind=refund").then((r) => r.json()),
       fetch("/api/cs-log?kind=credit").then((r) => r.json()),
       fetchEurRates(day(120), day(0)),
+      supabase.from("refunds").select("date,store,amount,order_id,source").gte("date", day(120)).limit(5000),
     ])
-      .then(([a, b, x]) => {
+      .then(([a, b, x, f]) => {
+        setShopify(((f.data || []) as ShopifyRefund[]).filter((r) => r.source === "shopify"))
         if (a.error || b.error) setError(a.error || b.error)
         setRefunds(a.rows || [])
         setCredits(b.rows || [])
@@ -135,14 +149,23 @@ export default function CSReportsPage() {
         products: [],
       })),
     ]
+    // Shopify refunds without a CS log entry (matched on the Shopify order id) count as "no reason logged yet".
+    const loggedIds = new Set(refunds.map((r) => digits(r.shopify_order_id)).filter(Boolean))
+    for (const r of shopify) {
+      if (digits(r.order_id) && loggedIds.has(digits(r.order_id))) continue
+      list.push({ kind: "unlogged", date: r.date, store: r.store, reason: UNLOGGED, eur: eur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date), by: "(not logged)", products: [] })
+    }
     return list.filter((c) => c.date >= from && passes(stores, c.store))
-  }, [refunds, credits, rates, from, stores])
+  }, [refunds, credits, shopify, rates, from, stores])
 
-  const kept = cases.filter((c) => c.kind !== "full").length
+  const unloggedN = cases.filter((c) => c.kind === "unlogged").length
+  const loggedCases = cases.length - unloggedN
+  const kept = cases.filter((c) => c.kind === "partial" || c.kind === "credit").length
   const byReason = group(cases, (c) => [c.reason])
+  const topLogged = byReason.find((r) => r.key !== UNLOGGED)
   const byStore = group(cases, (c) => [c.store])
   const byType = group(cases.filter((c) => c.products.length), (c) => Array.from(new Set(c.products.map(productType))))
-  const byPerson = group(cases, (c) => [c.by])
+  const byPerson = group(cases.filter((c) => c.kind !== "unlogged"), (c) => [c.by])
   const creditsInPeriod = credits.filter((c) => c.issue_date >= from && passes(stores, c.store))
   const used = creditsInPeriod.filter((c) => c.status === "used").length
 
@@ -153,7 +176,7 @@ export default function CSReportsPage() {
       const end = day(i * 7)
       const start = day(i * 7 + 6)
       const inWeek = cases.filter((c) => c.date >= start && c.date <= end)
-      return { label: new Date(start + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }), n: inWeek.length, kept: inWeek.filter((c) => c.kind !== "full").length }
+      return { label: new Date(start + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }), n: inWeek.length, kept: inWeek.filter((c) => c.kind === "partial" || c.kind === "credit").length, unlogged: inWeek.filter((c) => c.kind === "unlogged").length }
     }).reverse()
   }, [cases, days])
   const maxWeek = Math.max(1, ...weeks.map((w) => w.n))
@@ -164,9 +187,9 @@ export default function CSReportsPage() {
       breadcrumb="Customer Service → Reports"
       description="What CS handled: cases per reason, store, product type and team member, and how often the funnel kept the sale (store credit or partial refund instead of a full refund)."
       stats={[
-        { label: `Cases (${days}d)`, value: loading ? "—" : String(cases.length), sub: "refunds + store credits logged" },
-        { label: "Kept the sale", value: loading ? "—" : pct(kept, cases.length), sub: `${kept} credit or partial`, color: cases.length ? (kept / cases.length >= 0.5 ? "var(--green)" : "var(--orange)") : undefined },
-        { label: "Top reason", value: loading ? "—" : byReason[0] ? reasonLabel(byReason[0].key) : "—", sub: byReason[0] ? `${byReason[0].cases} cases` : undefined },
+        { label: `Cases (${days}d)`, value: loading ? "—" : String(cases.length), sub: unloggedN ? `${unloggedN} without a reason yet` : "all logged by CS" },
+        { label: "Kept the sale", value: loading ? "—" : loggedCases ? pct(kept, loggedCases) : "—", sub: loggedCases ? `${kept} of ${loggedCases} logged cases` : "needs logged cases", color: loggedCases ? (kept / loggedCases >= 0.5 ? "var(--green)" : "var(--orange)") : undefined },
+        { label: "Top reason", value: loading ? "—" : topLogged ? reasonLabel(topLogged.key) : "—", sub: topLogged ? `${topLogged.cases} cases` : "needs logged cases" },
         { label: "Store credit used", value: loading ? "—" : creditsInPeriod.length ? `${used} / ${creditsInPeriod.length}` : "—", sub: "credits given in this period" },
       ]}
       actions={
@@ -181,18 +204,25 @@ export default function CSReportsPage() {
         <Loading>Loading CS cases…</Loading>
       ) : cases.length === 0 ? (
         <EmptyState title="No cases logged in this period">
-          The report fills as CS logs refunds on <Link href="/refunds" className="underline">Refunds</Link> and credits on{" "}
+          No refunds in Shopify and nothing logged in this period. The report fills as CS logs refunds on <Link href="/refunds" className="underline">Refunds</Link> and credits on{" "}
           <Link href="/store-credit" className="underline">Store Credit</Link>. Refund rate against revenue is on the{" "}
           <Link href="/refund-report" className="underline">Refund Report</Link>.
         </EmptyState>
       ) : (
         <>
-          <Panel title="Cases per week" sub="Bar = cases logged, green part = sale kept (credit or partial)." className="mb-4">
+          {unloggedN > 0 && (
+            <Notice tone="warning">
+              {unloggedN} refund{unloggedN !== 1 ? "s" : ""} in Shopify {unloggedN !== 1 ? "have" : "has"} no reason logged yet. Log them on the{" "}
+              <Link href="/refund-report" className="underline">Refund Report</Link> (Log it) so this report can show why.
+            </Notice>
+          )}
+          <Panel title="Cases per week" sub="Green = sale kept (credit or partial), red = full refund, grey = no reason logged yet." className="mb-4">
             <div className="flex items-end gap-2 h-[110px]">
               {weeks.map((w) => (
                 <div key={w.label} className="flex-1 flex flex-col items-center gap-1">
                   <span className="text-[9px] tabular-nums" style={{ color: "var(--text-muted)" }}>{w.n || ""}</span>
                   <div className="w-full rounded-t flex flex-col justify-end overflow-hidden" style={{ height: `${(w.n / maxWeek) * 70}px`, background: "rgba(239,68,68,0.35)" }}>
+                    <div style={{ height: `${w.n ? (w.unlogged / w.n) * 100 : 0}%`, background: "rgba(148,163,184,0.45)" }} />
                     <div style={{ height: `${w.n ? (w.kept / w.n) * 100 : 0}%`, background: "rgba(74,222,128,0.6)" }} />
                   </div>
                   <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{w.label}</span>
@@ -201,7 +231,7 @@ export default function CSReportsPage() {
             </div>
           </Panel>
           <div className="grid gap-4 lg:grid-cols-2 mb-4">
-            <Breakdown title="By reason" rows={byReason} label={reasonLabel} />
+            <Breakdown title="By reason" rows={byReason} label={reasonName} />
             <Breakdown title="By store" sub="Refund rate against revenue: see the Refund Report." rows={byStore} label={(k) => k} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">

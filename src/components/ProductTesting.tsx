@@ -31,7 +31,7 @@ interface CatalogProduct {
   category: string
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "catalog" | "estimate" | "none"
 }
 
 interface CatalogMeta {
