@@ -37,9 +37,9 @@ interface Opportunity {
   competitor_domains?: string[]
   first_source_url?: string | null
   competitor_count: number
-  observations: string[]
-  inferences: string[]
-  data_gaps: string[]
+  observations?: string[]
+  inferences?: string[]
+  data_gaps?: string[]
   season: string | null
   event_label: string | null
   event_date: string | null
@@ -127,7 +127,7 @@ export default function OpportunitiesPage() {
   const [open, setOpen] = useState<number | null>(null)
   const [bulkStore, setBulkStore] = useState("")
 
-  const CACHE_KEY = "opportunities:v2"
+  const CACHE_KEY = "opportunities:v3"
   const applyData = (json: { opportunities?: Opportunity[]; jobs?: ImportJob[]; patterns?: { label: string; detail: string }[]; scan?: typeof scanInfo }) => {
     setOpps(json.opportunities || [])
     setJobs(json.jobs || [])
@@ -474,6 +474,7 @@ function OpportunityCard(props: {
   const go = (status: OppStatus, extra: Record<string, unknown> = {}) => patch(o.id, { status, ...extra })
   const missing = missingChecks(o.adapt_checks)
   const evidence = detail?.evidence || o.evidence || []
+  const d = detail || o // long texts (observations, gaps…) come with the detail request
   const sourceUrl = o.source_url || o.first_source_url || evidence[0]?.url
   const lockedStore = ["queued", "importing", "imported", "adapting", "ready_for_review", "ready_to_publish"].includes(o.status)
 
@@ -644,20 +645,20 @@ function OpportunityCard(props: {
           <div className="grid md:grid-cols-2 gap-3 text-[10px]">
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--text)" }}>Observed</div>
-              {o.observations.map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
+              {(d.observations || []).map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
             </div>
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--text)" }}>Inferred (not proven)</div>
-              {o.inferences.map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
-              {o.timing_note && <div style={{ color: "var(--text-muted)" }}>• {o.timing_note}</div>}
+              {(d.inferences || []).map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
+              {d.timing_note && <div style={{ color: "var(--text-muted)" }}>• {d.timing_note}</div>}
             </div>
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--text)" }}>Priority</div>
-              <div style={{ color: "var(--text-muted)" }}>{o.priority_reason}</div>
+              <div style={{ color: "var(--text-muted)" }}>{d.priority_reason || "Loading…"}</div>
             </div>
             <div>
               <div className="font-semibold mb-1" style={{ color: "var(--orange)" }}>Data gaps & risks</div>
-              {o.data_gaps.map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
+              {(d.data_gaps || []).map((x, i) => <div key={i} style={{ color: "var(--text-muted)" }}>• {x}</div>)}
             </div>
           </div>
           <div>

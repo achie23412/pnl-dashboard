@@ -47,8 +47,10 @@ export async function GET() {
     ])
     if (jobs.error) throw new Error(jobs.error.message)
     // List view stays light: evidence (titles, images, prices of every source)
-    // is loaded per item from /api/opportunities/[id] when a card is opened.
-    const light = opps.map(({ evidence, ...o }) => ({
+    // and the long explanations are loaded per item from /api/opportunities/[id]
+    // when a card is opened.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const light = opps.map(({ evidence, observations, inferences, data_gaps, priority_reason, timing_note, ...o }) => ({
       ...o,
       competitor_domains: Array.from(new Set(((evidence as { competitor_domain: string }[]) || []).map((e) => e.competitor_domain))),
       first_source_url: ((evidence as { url: string }[]) || [])[0]?.url || null,
