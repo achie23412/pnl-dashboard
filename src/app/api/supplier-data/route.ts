@@ -192,6 +192,26 @@ export async function GET() {
         negotiationAlert = `${p.total_qty} units in 30d — approaching volume for price reduction`
       }
 
+      const salePrice = p.total_qty > 0 ? p.total_sold / p.total_qty : 0
+      const cogsPct = salePrice > 0 ? (avgCost / salePrice) * 100 : null
+      const roundedCogsPct = cogsPct !== null ? Math.round(cogsPct * 10) / 10 : null
+
+      let cogsAlert: string | null = null
+      let cogsAction: string | null = null
+      if (roundedCogsPct !== null && p.total_qty >= 1) {
+        if (roundedCogsPct > 32) {
+          cogsAlert = `COGS% ${roundedCogsPct.toFixed(1)}% — above 32% target`
+          if (roundedCogsPct > 40) {
+            cogsAction = "Raise sale price or switch supplier — margin critically low"
+          } else {
+            cogsAction = "Negotiate lower unit cost with supplier, or raise sale price slightly"
+          }
+        } else if (roundedCogsPct < 28) {
+          cogsAlert = `COGS% ${roundedCogsPct.toFixed(1)}% — below 28% floor`
+          cogsAction = "Check if supplier price is correct — unusually low"
+        }
+      }
+
       return {
         title: p.title,
         variant_title: p.variant_title,
@@ -203,15 +223,15 @@ export async function GET() {
         min_cost: Math.round(minCost * 100) / 100,
         max_cost: Math.round(maxCost * 100) / 100,
         cost_variance: Math.round(costVariance * 100) / 100,
+        sale_price: Math.round(salePrice * 100) / 100,
         quote_price: p.quote_price,
         orders: p.orders,
         last_order_date: p.last_order_date,
-        cogs_pct:
-          p.total_sold > 0
-            ? Math.round((p.total_cogs / p.total_sold) * 1000) / 10
-            : null,
+        cogs_pct: roundedCogsPct,
         price_alert: priceAlert,
         negotiation_alert: negotiationAlert,
+        cogs_alert: cogsAlert,
+        cogs_action: cogsAction,
       }
     })
 
@@ -223,8 +243,11 @@ export async function GET() {
     const totalInvoiced7d = recentInvoices.reduce((a, inv) => a + inv.amount, 0)
     const pendingDiscrepancies = invoices.filter((inv) => inv.has_price_discrepancy)
     const productsWithAlerts = supplierProducts.filter(
-      (p) => p.price_alert || p.negotiation_alert
+      (p) => p.price_alert || p.negotiation_alert || p.cogs_alert
     )
+    const cogsOutOfRange = supplierProducts.filter((p) => p.cogs_alert).length
+    const cogsAbove = supplierProducts.filter((p) => p.cogs_pct !== null && p.cogs_pct > 32).length
+    const cogsBelow = supplierProducts.filter((p) => p.cogs_pct !== null && p.cogs_pct < 28).length
 
     return NextResponse.json({
       invoices: invoices.sort((a, b) => b.date.localeCompare(a.date)),
@@ -246,6 +269,9 @@ export async function GET() {
               ) / 100
             : 0,
         balance: summary?.balance ?? null,
+        cogs_out_of_range: cogsOutOfRange,
+        cogs_above_32: cogsAbove,
+        cogs_below_28: cogsBelow,
       },
       generated_at: new Date().toISOString(),
     })

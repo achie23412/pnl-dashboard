@@ -242,7 +242,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/season-board": "season seasonal calendar trends",
 }
 
-const DONE_PAGES = new Set(["/", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts"])
+const DONE_PAGES = new Set(["/", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -345,6 +345,7 @@ export function NavBar() {
   const searchRef = useRef<HTMLInputElement>(null)
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [supplierBadge, setSupplierBadge] = useState(0)
 
   useEffect(() => {
     const sb = createClient(
@@ -358,6 +359,12 @@ export function NavBar() {
       .then(({ data }) => {
         if (data?.[0]?.completed_at) setLastRefresh(data[0].completed_at)
       })
+    fetch("/api/supplier-data")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.summary?.cogs_out_of_range) setSupplierBadge(d.summary.cogs_out_of_range)
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -382,7 +389,12 @@ export function NavBar() {
     const hay = `${item.label} ${section.label} ${item.href} ${SEARCH_WORDS[item.href] || ""}`.toLowerCase()
     return terms.every((t) => hay.includes(t))
   }
-  const visibleSections = NAV_SECTIONS.map((section) => ({ section, items: section.items.filter((i) => matches(section, i)) })).filter((x) => x.items.length > 0)
+  const badgeMap: Record<string, number> = {}
+  if (supplierBadge > 0) badgeMap["/supplier-costs"] = supplierBadge
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    section,
+    items: section.items.filter((i) => matches(section, i)).map((i) => badgeMap[i.href] ? { ...i, badge: badgeMap[i.href] } : i),
+  })).filter((x) => x.items.length > 0)
   const firstHit = visibleSections[0]?.items[0]
 
   return (
