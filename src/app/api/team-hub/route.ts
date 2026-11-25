@@ -59,8 +59,8 @@ interface TeamHubData {
 }
 
 async function buildTeamHub(): Promise<TeamHubData | { connected: false; reason: string }> {
-  if (!process.env.HUBSTAFF_TOKEN) {
-    return { connected: false, reason: "HUBSTAFF_TOKEN not set" }
+  if (!process.env.HUBSTAFF_REFRESH_TOKEN) {
+    return { connected: false, reason: "HUBSTAFF_REFRESH_TOKEN not set" }
   }
 
   const orgs = await fetchOrganizations()

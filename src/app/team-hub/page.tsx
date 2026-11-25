@@ -196,9 +196,9 @@ export default function TeamHubPage() {
                 Setup steps:
               </div>
               <ol className="list-decimal pl-4 space-y-1" style={{ color: "var(--text-muted)" }}>
-                <li>Go to <strong>developer.hubstaff.com</strong> → My Apps → Personal Access Tokens</li>
-                <li>Create a new token with read access</li>
-                <li>Add to Vercel: <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.06)" }}>HUBSTAFF_TOKEN=your_token_here</code></li>
+                <li>Go to <strong>developer.hubstaff.com</strong> → Account → Personal Access Tokens</li>
+                <li>Create a token with scopes: openid, hubstaff:read, tasks:read</li>
+                <li>Add the refresh token to Vercel: <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.06)" }}>HUBSTAFF_REFRESH_TOKEN=your_token</code></li>
                 <li>Optional: <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.06)" }}>HUBSTAFF_ORG_ID=your_org_id</code> (auto-detected if not set)</li>
                 <li>Redeploy the dashboard</li>
               </ol>
