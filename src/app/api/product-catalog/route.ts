@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES } from "@/lib/constants"
+import { getShopifyToken } from "@/lib/shopify-sessions"
 
 export const maxDuration = 60
 
@@ -100,7 +101,9 @@ interface ShipgoodsItem {
 }
 
 interface ShipgoodsOrder {
-  items: ShipgoodsItem[]
+  row_type?: string
+  store_name?: string
+  items: ShipgoodsItem[] | null
 }
 
 interface ShipgoodsResponse {
@@ -111,80 +114,120 @@ interface ShipgoodsResponse {
   }
 }
 
-async function fetchShipgoodsCogs(): Promise<Map<string, { avgCogs: number; totalQty: number }>> {
+type SgCogsMap = Map<string, { avgCogs: number; totalQty: number }>
+type SalesMap = Map<string, { qty: number; revenue: number }>
+
+interface ShipgoodsData {
+  // keyed by ShipGoods store_name (= the *.myshopify.com prefix, e.g. "xq9pn7-dw")
+  cogsByStore: Map<string, SgCogsMap>
+  salesByStore: Map<string, SalesMap>
+  error: string | null
+}
+
+// Store name in ShipGoods = the myshopify domain prefix of the store.
+function shipgoodsStoreKey(store: string): string | null {
+  const cfg = SHOPIFY_STORES[store]
+  return cfg ? cfg.domain.replace(".myshopify.com", "") : null
+}
+
+const SG_TIMEOUT_MS = 25000
+const SG_MAX_PAGES = 30
+
+// One pass over ShipGoods order-cost-items for the last 30 days, split per store.
+// Page 1 tells us total_pages; the remaining pages are fetched in parallel
+// (one page takes ~7s, so sequential reads would hit the 60s function limit).
+async function fetchShipgoodsData(): Promise<ShipgoodsData> {
   const token = process.env.SHIPGOODS_TOKEN
   const base = process.env.SHIPGOODS_BASE || "https://dashboard.shipgoods.eu"
-  if (!token) return new Map()
+  const empty: ShipgoodsData = { cogsByStore: new Map(), salesByStore: new Map(), error: null }
+  if (!token) return { ...empty, error: "ShipGoods: SHIPGOODS_TOKEN not set" }
 
-  try {
-    const productMap = new Map<string, { totalCost: number; totalQty: number }>()
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-    const today = new Date().toISOString().slice(0, 10)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const today = new Date().toISOString().slice(0, 10)
+  const fetchPage = async (page: number): Promise<ShipgoodsResponse> => {
+    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(SG_TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`page ${page}: HTTP ${res.status}`)
+    const json: ShipgoodsResponse = await res.json()
+    if (!json.data?.list) throw new Error(`page ${page}: unexpected response`)
+    return json
+  }
 
-    let page = 1
-    const maxPages = 3
-
-    while (page <= maxPages) {
-      const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
-      const res: Response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(8000),
-      })
-
-      if (!res.ok) break
-
-      const json: ShipgoodsResponse = await res.json()
-      if (!json.data?.list) break
-
-      for (const order of json.data.list) {
-        if (!order.items) continue
-        for (const item of order.items) {
-          const title = item.title
-          if (!title) continue
-          const existing = productMap.get(title) || { totalCost: 0, totalQty: 0 }
-          existing.totalCost += item.unit_cost * item.quantity
-          existing.totalQty += item.quantity
-          productMap.set(title, existing)
-        }
+  const costAcc = new Map<string, Map<string, { totalCost: number; totalQty: number }>>()
+  const salesByStore = new Map<string, SalesMap>()
+  const addPage = (json: ShipgoodsResponse) => {
+    for (const order of json.data.list) {
+      if (order.row_type && order.row_type !== "order_charge") continue
+      if (!order.items) continue
+      const storeKey = order.store_name || "unknown"
+      if (!costAcc.has(storeKey)) costAcc.set(storeKey, new Map())
+      if (!salesByStore.has(storeKey)) salesByStore.set(storeKey, new Map())
+      const costs = costAcc.get(storeKey)!
+      const sales = salesByStore.get(storeKey)!
+      for (const item of order.items) {
+        if (!item.title) continue
+        const qty = Number(item.quantity) || 0
+        const c = costs.get(item.title) || { totalCost: 0, totalQty: 0 }
+        c.totalCost += (Number(item.unit_cost) || 0) * qty
+        c.totalQty += qty
+        costs.set(item.title, c)
+        const s = sales.get(item.title) || { qty: 0, revenue: 0 }
+        s.qty += qty
+        s.revenue += (Number(item.sold_price) || 0) * qty
+        sales.set(item.title, s)
       }
-
-      if (page >= json.data.pagination.total_pages) break
-      page++
     }
+  }
 
-    const result = new Map<string, { avgCogs: number; totalQty: number }>()
-    const entries = Array.from(productMap.entries())
-    for (let i = 0; i < entries.length; i++) {
-      const [title, data] = entries[i]
-      result.set(title, {
+  const errors: string[] = []
+  try {
+    const first = await fetchPage(1)
+    addPage(first)
+    const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
+    const rest = await Promise.allSettled(
+      Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => fetchPage(i + 2)),
+    )
+    for (const r of rest) {
+      if (r.status === "fulfilled") addPage(r.value)
+      else errors.push(String(r.reason instanceof Error ? r.reason.message : r.reason))
+    }
+  } catch (e: unknown) {
+    errors.push(e instanceof Error ? e.message : String(e))
+  }
+
+  const cogsByStore = new Map<string, SgCogsMap>()
+  costAcc.forEach((products, storeKey) => {
+    const m: SgCogsMap = new Map()
+    products.forEach((data, title) => {
+      m.set(title, {
         avgCogs: data.totalQty > 0 ? Math.round((data.totalCost / data.totalQty) * 100) / 100 : 0,
         totalQty: data.totalQty,
       })
-    }
-    return result
-  } catch {
-    return new Map()
-  }
+    })
+    cogsByStore.set(storeKey, m)
+  })
+
+  return { cogsByStore, salesByStore, error: errors.length > 0 ? `ShipGoods: ${errors.join("; ")}` : null }
 }
 
-async function fetchShopifySales(domain: string, token: string): Promise<Map<string, { qty: number; revenue: number }>> {
-  const sales = new Map<string, { qty: number; revenue: number }>()
+async function fetchShopifySales(domain: string, token: string): Promise<SalesMap> {
+  const sales: SalesMap = new Map()
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
   let url: string | null = `https://${domain}/admin/api/2024-10/orders.json?status=any&created_at_min=${thirtyDaysAgo}T00:00:00Z&limit=250&fields=id,created_at,line_items,cancelled_at,financial_status`
   let pages = 0
 
-  while (url && pages < 5) {
+  while (url && pages < 10) {
     pages++
     const res: Response = await fetch(url, {
       headers: { "X-Shopify-Access-Token": token },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     })
 
-    if (!res.ok) break
+    if (!res.ok) throw new Error(`Shopify orders HTTP ${res.status}`)
 
     const data = await res.json()
     const orders: ShopifyOrder[] = data.orders || []
@@ -242,22 +285,42 @@ function findShipgoodsCogs(
   return undefined
 }
 
-async function buildStoreProducts(
-  store: string,
-  sgCogs: Map<string, { avgCogs: number; totalQty: number }>
-): Promise<CatalogProduct[]> {
-  const cogsProducts = await fetchCogsProducts(store)
+interface StoreBuildResult {
+  products: CatalogProduct[]
+  salesSource: "shopify" | "shipgoods" | "none"
+  errors: string[]
+}
 
-  let sales = new Map<string, { qty: number; revenue: number }>()
+async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<StoreBuildResult> {
+  const errors: string[] = []
+  const cogsProducts = await fetchCogsProducts(store)
+  const sgKey = shipgoodsStoreKey(store)
+  const sgCogs: SgCogsMap = (sgKey && sg.cogsByStore.get(sgKey)) || new Map()
+
+  // Sales: Shopify orders API first (direct token or client credentials, same
+  // as sessions). If that is unavailable or fails, fall back to ShipGoods
+  // order items (units + sold price per product, fulfilled orders only).
+  let sales: SalesMap = new Map()
+  let salesSource: StoreBuildResult["salesSource"] = "none"
   const shopifyConfig = SHOPIFY_STORES[store]
   if (shopifyConfig) {
-    const token = process.env[shopifyConfig.envKey]
-    if (token) {
-      try {
+    try {
+      const token = await getShopifyToken(shopifyConfig.domain, shopifyConfig.envKey)
+      if (token) {
         sales = await fetchShopifySales(shopifyConfig.domain, token)
-      } catch {
-        // continue without sales
+        salesSource = "shopify"
+      } else {
+        errors.push(`${store}: no Shopify token (${shopifyConfig.envKey} or client credentials)`)
       }
+    } catch (e: unknown) {
+      errors.push(`${store}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  if (sales.size === 0) {
+    const sgSales = sgKey ? sg.salesByStore.get(sgKey) : undefined
+    if (sgSales && sgSales.size > 0) {
+      sales = sgSales
+      salesSource = "shipgoods"
     }
   }
 
@@ -386,7 +449,7 @@ async function buildStoreProducts(
     }
   }
 
-  return catalog
+  return { products: catalog, salesSource, errors }
 }
 
 export async function GET(req: Request) {
@@ -397,22 +460,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "store param required" }, { status: 400 })
   }
 
-  // Always fetch ShipGoods — it's the primary COGS source
-  const sgCogs = await fetchShipgoodsCogs()
+  // Always fetch ShipGoods — primary COGS source and sales fallback
+  const sg = await fetchShipgoodsData()
 
   let allProducts: CatalogProduct[] = []
+  const errors: string[] = sg.error ? [sg.error] : []
+  const salesSources: Record<string, StoreBuildResult["salesSource"]> = {}
 
-  if (store === "all") {
-    const storesWithData = Object.keys(SHOPIFY_STORES)
-    const results = await Promise.allSettled(storesWithData.map((s) => buildStoreProducts(s, sgCogs)))
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === "fulfilled") {
-        allProducts = allProducts.concat((results[i] as PromiseFulfilledResult<CatalogProduct[]>).value)
-      }
+  const storeNames = store === "all" ? Object.keys(SHOPIFY_STORES) : [store]
+  const results = await Promise.allSettled(storeNames.map((s) => buildStoreProducts(s, sg)))
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      allProducts = allProducts.concat(r.value.products)
+      errors.push(...r.value.errors)
+      salesSources[storeNames[i]] = r.value.salesSource
+    } else {
+      errors.push(`${storeNames[i]}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
     }
-  } else {
-    allProducts = await buildStoreProducts(store, sgCogs)
-  }
+  })
 
   allProducts.sort((a, b) => b.units_sold - a.units_sold)
 
@@ -437,5 +502,7 @@ export async function GET(req: Request) {
       ? { name: mostSold.product_name, store: mostSold.store, units: mostSold.units_sold }
       : null,
     period: "last_30d",
+    sales_sources: salesSources,
+    errors,
   })
 }

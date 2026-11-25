@@ -18,7 +18,8 @@ export interface SessionRow {
   sessions: number
 }
 
-async function getToken(domain: string, envKey: string): Promise<string | null> {
+// Exported so the product catalog uses the same token fallback as sessions.
+export async function getShopifyToken(domain: string, envKey: string): Promise<string | null> {
   const direct = process.env[envKey]
   if (direct) return direct
 
@@ -50,7 +51,7 @@ export async function fetchShopifySessions(dateFrom: string, dateTo: string): Pr
 
   for (const [storeName, config] of Object.entries(SHOPIFY_STORES)) {
     try {
-      const token = await getToken(config.domain, config.envKey)
+      const token = await getShopifyToken(config.domain, config.envKey)
       if (!token) continue
 
       // Human sessions only (bots excluded): CVR = orders / human sessions

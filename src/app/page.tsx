@@ -155,7 +155,11 @@ export default function Dashboard() {
     () => cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) })),
     [cogs, rates],
   )
-  const estCogsPerOrderEur = (storeName: string, date: string) =>
+  const refundsEur = useMemo(
+    () => refunds.map((r) => ({ ...r, amount: toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
+    [refunds, rates],
+  )
+  const estCogsPerOrderEur =(storeName: string, date: string) =>
     toEur(AVG_COGS_PER_ORDER[storeName] || 0, COGS_CURRENCY, date, rates)
 
   const [dateFrom, dateTo] = getDateRange(preset, customFrom, customTo)
@@ -173,13 +177,13 @@ export default function Dashboard() {
       spend: spendEur.filter((r) => inRange(r.date) && inStore(r.store)),
       cogs: cogsEur.filter((r) => inRange(r.date) && inStore(r.store)),
       sessions: sessions.filter((r) => inRange(r.date) && inStore(r.store)),
-      refunds: refunds.filter((r) => inRange(r.date) && inStore(r.store)),
+      refunds: refundsEur.filter((r) => inRange(r.date) && inStore(r.store)),
       prevRevenue: revenueEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
       prevSpend: spendEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
       prevCogs: cogsEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
-      prevRefunds: refunds.filter((r) => inPrevRange(r.date) && inStore(r.store)),
+      prevRefunds: refundsEur.filter((r) => inPrevRange(r.date) && inStore(r.store)),
     }
-  }, [revenueEur, spendEur, cogsEur, sessions, refunds, dateFrom, dateTo, prevFrom, prevTo, store])
+  }, [revenueEur, spendEur, cogsEur, sessions, refundsEur, dateFrom, dateTo, prevFrom, prevTo, store])
 
   function computeKPI(
     rev: typeof filtered.revenue,
@@ -210,7 +214,8 @@ export default function Dashboard() {
       }
     }
 
-    const profit = totalRevenue - totalSpend - totalCogs - txnFees
+    // Revenue is gross (order rows only); refunds are subtracted here.
+    const profit = totalRevenue - totalRefundAmount - totalSpend - totalCogs - txnFees
 
     const sessionDays = new Set(ses.map((r) => `${r.date}|${r.store}`))
     const totalSessions = ses.reduce((s, r) => s + r.sessions, 0)
@@ -298,7 +303,7 @@ export default function Dashboard() {
         roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
         refundAmount: totalRefund,
         refundRate: totalRevenue > 0 ? (totalRefund / totalRevenue) * 100 : 0,
-        profit: totalRevenue - totalSpend - totalCog - txn,
+        profit: totalRevenue - totalRefund - totalSpend - totalCog - txn,
       }
     }).filter((s) => s.revenue > 0 || s.spend > 0)
   }, [filtered, store, includeTxnFees, rates])
@@ -363,44 +368,42 @@ export default function Dashboard() {
           refundAmount: Math.round(refAmt),
           refundRate: rev.revenue > 0 ? (refAmt / rev.revenue) * 100 : 0,
           cogs: Math.round(totalCog),
-          profit: Math.round(rev.revenue - sp - totalCog - dayTxn),
+          profit: Math.round(rev.revenue - refAmt - sp - totalCog - dayTxn),
           isToday: date === todayStr,
         }
       })
   }, [filtered, includeTxnFees, rates, todayStr])
 
+  // ROAS trend alerts: judge trends, not single days. Today (live, partial) is
+  // excluded. Compares the last ALERT_RECENT_DAYS complete days with the
+  // ALERT_BASELINE_DAYS complete days before that, independent of the date picker.
   const roasAlerts = useMemo(() => {
-    if (dailyBriefing.length < 2) return []
-    const sorted = [...dailyBriefing].sort((a, b) => b.date.localeCompare(a.date))
-    const today = sorted[0]
-    const prev = sorted[1]
-    if (!prev || prev.roas === 0) return []
-    const alerts: { store: string; todayRoas: number; prevRoas: number; drop: number }[] = []
+    const ALERT_RECENT_DAYS = 3
+    const ALERT_BASELINE_DAYS = 7
+    const MIN_RECENT_SPEND = 30
+    const dayStr = (offset: number) => new Date(Date.now() - offset * 86400000).toISOString().slice(0, 10)
+    const recentFrom = dayStr(ALERT_RECENT_DAYS)
+    const baselineFrom = dayStr(ALERT_RECENT_DAYS + ALERT_BASELINE_DAYS)
+    const inRecent = (d: string) => d >= recentFrom && d < todayStr
+    const inBaseline = (d: string) => d >= baselineFrom && d < recentFrom
 
-    if (store === "Overall") {
-      const storeNames = STORES.filter((s) => s !== "Overall")
-      for (const s of storeNames) {
-        const sRevToday = filtered.revenue.filter((r) => r.store === s && r.date === today.date)
-        const sSpendToday = filtered.spend.filter((r) => r.store === s && r.date === today.date)
-        const sRevPrev = filtered.revenue.filter((r) => r.store === s && r.date === prev.date)
-        const sSpendPrev = filtered.spend.filter((r) => r.store === s && r.date === prev.date)
-        const tRev = sRevToday.reduce((a, r) => a + r.revenue, 0)
-        const tSpend = sSpendToday.reduce((a, r) => a + r.spend, 0)
-        const pRev = sRevPrev.reduce((a, r) => a + r.revenue, 0)
-        const pSpend = sSpendPrev.reduce((a, r) => a + r.spend, 0)
-        const tRoas = tSpend > 0 ? tRev / tSpend : 0
-        const pRoas = pSpend > 0 ? pRev / pSpend : 0
-        if (pRoas > 0 && tRoas < pRoas * 0.7 && tSpend > 10) {
-          alerts.push({ store: s, todayRoas: tRoas, prevRoas: pRoas, drop: ((pRoas - tRoas) / pRoas) * 100 })
-        }
-      }
-    } else {
-      if (today.roas < prev.roas * 0.7 && today.spend > 10) {
-        alerts.push({ store, todayRoas: today.roas, prevRoas: prev.roas, drop: ((prev.roas - today.roas) / prev.roas) * 100 })
+    const alerts: { store: string; recentRoas: number; baselineRoas: number; drop: number }[] = []
+    const storeNames = store === "Overall" ? STORES.filter((s) => s !== "Overall") : [store]
+    for (const s of storeNames) {
+      const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + pick(r), 0)
+      const rRev = sum(revenueEur.filter((r) => r.store === s && inRecent(r.date)), (r) => r.revenue)
+      const rSpend = sum(spendEur.filter((r) => r.store === s && inRecent(r.date)), (r) => r.spend)
+      const bRev = sum(revenueEur.filter((r) => r.store === s && inBaseline(r.date)), (r) => r.revenue)
+      const bSpend = sum(spendEur.filter((r) => r.store === s && inBaseline(r.date)), (r) => r.spend)
+      if (rSpend < MIN_RECENT_SPEND || bSpend <= 0) continue
+      const recentRoas = rRev / rSpend
+      const baselineRoas = bRev / bSpend
+      if (baselineRoas > 0 && recentRoas < baselineRoas * 0.7) {
+        alerts.push({ store: s, recentRoas, baselineRoas, drop: ((baselineRoas - recentRoas) / baselineRoas) * 100 })
       }
     }
     return alerts
-  }, [dailyBriefing, filtered, store])
+  }, [revenueEur, spendEur, store, todayStr])
 
   const dailyPnL = useMemo((): DailyPnL[] => {
     return dailyBriefing.map((row) => ({
@@ -502,7 +505,7 @@ export default function Dashboard() {
                     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
                   </svg>
                   <span className="text-[11px] font-medium" style={{ color: "var(--red)" }}>
-                    {a.store} ROAS dropped {a.drop.toFixed(0)}% — {a.prevRoas.toFixed(2)}x → {a.todayRoas.toFixed(2)}x
+                    {a.store} ROAS down {a.drop.toFixed(0)}% — last 3 days {a.recentRoas.toFixed(2)}x vs {a.baselineRoas.toFixed(2)}x the 7 days before
                   </span>
                 </div>
               ))}

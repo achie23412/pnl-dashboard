@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
-import { fetchShopifyRevenue, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSpend } from "@/lib/windsor"
+import { fetchShopifyRevenueAndRefunds, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSpend } from "@/lib/windsor"
 import { fetchShopifyRevenueDirect } from "@/lib/shopify-direct"
 import { fetchShopifySessions, hasAnySessionsCredentials } from "@/lib/shopify-sessions"
 import { fetchCogs } from "@/lib/shipgoods"
@@ -25,8 +25,13 @@ export async function GET(req: NextRequest) {
 
     // Revenue stays on Windsor; Shopify tokens are only used for sessions (CVR)
     // unless direct revenue is switched on explicitly.
+    // Refunds always come from Windsor (refund rows of the Shopify connector).
     const useDirectShopify = process.env.USE_SHOPIFY_DIRECT_REVENUE === "1"
-    const revenueFetcher = useDirectShopify ? fetchShopifyRevenueDirect : fetchShopifyRevenue
+    const revenueFetcher = async (f: string, t: string) => {
+      if (!useDirectShopify) return fetchShopifyRevenueAndRefunds(f, t)
+      const [direct, windsor] = await Promise.all([fetchShopifyRevenueDirect(f, t), fetchShopifyRevenueAndRefunds(f, t)])
+      return { revenue: direct, refunds: windsor.refunds }
+    }
 
     const [revenueResult, metaResult, tiktokResult, googleResult, cogsResult, sessionsResult] = await Promise.allSettled([
       revenueFetcher(from, today),
@@ -37,7 +42,8 @@ export async function GET(req: NextRequest) {
       hasAnySessionsCredentials() ? fetchShopifySessions(from, today) : Promise.resolve({ rows: [], errors: [] }),
     ])
 
-    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value : (errors.push(`Shopify${useDirectShopify ? " Direct" : ""}: ${revenueResult.reason}`), [])
+    const revenue = revenueResult.status === "fulfilled" ? revenueResult.value.revenue : (errors.push(`Shopify${useDirectShopify ? " Direct" : ""}: ${revenueResult.reason}`), [])
+    const shopifyRefunds = revenueResult.status === "fulfilled" ? revenueResult.value.refunds : null
     const metaSpend = metaResult.status === "fulfilled" ? metaResult.value : (errors.push(`Meta: ${metaResult.reason}`), [])
     const tiktokSpend = tiktokResult.status === "fulfilled" ? tiktokResult.value : (errors.push(`TikTok: ${tiktokResult.reason}`), [])
     const googleSpend = googleResult.status === "fulfilled" ? googleResult.value : (errors.push(`Google Ads: ${googleResult.reason}`), [])
@@ -53,6 +59,31 @@ export async function GET(req: NextRequest) {
     }
     if (cogs.length > 0) {
       await db.from("daily_cogs").upsert(cogs, { onConflict: "date,store" })
+    }
+
+    // Shopify refunds: replace the window's shopify-sourced rows (the refunds
+    // table has no unique key, so delete + insert keeps the refresh idempotent).
+    // Manual refunds are left alone.
+    let refundRows = 0
+    if (shopifyRefunds) {
+      const { error: delErr } = await db.from("refunds").delete().eq("source", "shopify").gte("date", from).lte("date", today)
+      if (delErr) {
+        errors.push(`Refunds delete: ${delErr.message}`)
+      } else if (shopifyRefunds.length > 0) {
+        const { error: insErr } = await db.from("refunds").insert(
+          shopifyRefunds.map((r) => ({
+            date: r.date,
+            store: r.store,
+            order_id: r.order_id,
+            amount: r.amount,
+            reason: `Shopify refund ${r.refund_id.split("/").pop()}`,
+            source: "shopify",
+            status: "refunded",
+          })),
+        )
+        if (insErr) errors.push(`Refunds insert: ${insErr.message}`)
+        else refundRows = shopifyRefunds.length
+      }
     }
 
     // Estimate COGS for Google stores using launch sheet averages
@@ -106,6 +137,7 @@ export async function GET(req: NextRequest) {
       spend: spend.length,
       cogs: cogs.length,
       sessions: sessionRows,
+      refunds: refundRows,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (err: unknown) {

@@ -22,6 +22,8 @@ interface CatalogResponse {
   products_with_cogs: number
   total_units_sold: number
   total_revenue: number
+  sales_sources?: Record<string, string>
+  errors?: string[]
 }
 
 function fmt(n: number, decimals = 0): string {
@@ -37,14 +39,22 @@ export default function ProductPerformancePage() {
   const [store, setStore] = useState<StoreName>("Overall")
   const [sortKey, setSortKey] = useState<SortKey>("revenue")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [dataErrors, setDataErrors] = useState<string[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [salesSources, setSalesSources] = useState<Record<string, string>>({})
   const [summary, setSummary] = useState({ total: 0, withSales: 0, withCogs: 0, totalUnits: 0, totalRevenue: 0 })
 
   useEffect(() => {
     setLoading(true)
     fetch("/api/product-catalog?store=all")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Product API returned HTTP ${r.status}`)
+        return r.json()
+      })
       .then((data: CatalogResponse) => {
         setProducts(data.products || [])
+        setDataErrors(data.errors || [])
+        setSalesSources(data.sales_sources || {})
         setSummary({
           total: data.total_products,
           withSales: data.products_with_sales,
@@ -54,7 +64,10 @@ export default function ProductPerformancePage() {
         })
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch((e: unknown) => {
+        setLoadError(e instanceof Error ? e.message : String(e))
+        setLoading(false)
+      })
   }, [])
 
   const filtered = useMemo(() => {
@@ -118,6 +131,16 @@ export default function ProductPerformancePage() {
           </div>
         ))}
       </div>
+
+      {!loading && (loadError || dataErrors.length > 0) && (
+        <div className="rounded-xl px-4 py-2.5 mb-4" style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)" }}>
+          <div className="text-[11px] font-semibold mb-1" style={{ color: "var(--orange)" }}>Some product data could not be loaded</div>
+          {loadError && <div className="text-[10px]" style={{ color: "var(--orange)" }}>{loadError}</div>}
+          {dataErrors.map((e) => (
+            <div key={e} className="text-[10px]" style={{ color: "var(--orange)" }}>{e}</div>
+          ))}
+        </div>
+      )}
 
       {/* Store filter */}
       <div className="glass rounded-xl p-1.5 inline-flex gap-1 overflow-x-auto mb-5">
@@ -220,6 +243,9 @@ export default function ProductPerformancePage() {
           </div>
           <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             {filtered.length} products · Revenue and COGS in original store currency (not EUR-converted) · SG = ShipGoods actual, Sheet = launch sheet
+            {Object.keys(salesSources).length > 0 && (
+              <> · Sales from: {Object.entries(salesSources).map(([s, src]) => `${s} ${src === "shopify" ? "Shopify" : src === "shipgoods" ? "ShipGoods (fulfilled orders)" : "none"}`).join(", ")}</>
+            )}
           </div>
         </div>
       )}

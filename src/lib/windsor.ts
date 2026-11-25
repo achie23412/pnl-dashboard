@@ -5,7 +5,7 @@ const BASE = "https://connectors.windsor.ai/all"
 interface WindsorRow {
   date: string
   account_name: string
-  [key: string]: string | number
+  [key: string]: string | number | null
 }
 
 async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string): Promise<WindsorRow[]> {
@@ -22,9 +22,64 @@ async function fetchWindsor(connector: string, fields: string[], dateFrom: strin
   return Array.isArray(json.data) ? json.data : []
 }
 
-export async function fetchShopifyRevenue(dateFrom: string, dateTo: string) {
-  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price"], dateFrom, dateTo)
+export interface ShopifyRevenueRow {
+  date: string
+  store: string
+  revenue: number
+  orders: number
+}
 
+export interface ShopifyRefundRow {
+  date: string
+  store: string
+  order_id: string
+  refund_id: string
+  amount: number
+}
+
+// Windsor's Shopify connector returns two kinds of rows:
+//  - order rows (order_refund_id empty), dated on the order date
+//  - refund rows (order_refund_id set), dated on the refund date, with a
+//    NEGATIVE order_total_price equal to the refunded amount
+// Revenue and orders count order rows only; refund rows become refunds.
+export async function fetchShopifyRevenueAndRefunds(
+  dateFrom: string,
+  dateTo: string,
+): Promise<{ revenue: ShopifyRevenueRow[]; refunds: ShopifyRefundRow[] }> {
+  const rows = await fetchWindsor(
+    "shopify",
+    ["date", "account_name", "order_id", "order_total_price", "order_refund_id", "order_refunds_net"],
+    dateFrom,
+    dateTo,
+  )
+  return { revenue: aggregateRevenue(rows.filter((r) => !r.order_refund_id)), refunds: extractRefunds(rows) }
+}
+
+export async function fetchShopifyRevenue(dateFrom: string, dateTo: string): Promise<ShopifyRevenueRow[]> {
+  return (await fetchShopifyRevenueAndRefunds(dateFrom, dateTo)).revenue
+}
+
+function extractRefunds(rows: WindsorRow[]): ShopifyRefundRow[] {
+  const byRefundId = new Map<string, ShopifyRefundRow>()
+  for (const row of rows) {
+    if (!row.order_refund_id) continue
+    const refundId = String(row.order_refund_id)
+    if (byRefundId.has(refundId)) continue
+    const fromTotal = -(Number(row.order_total_price) || 0)
+    const amount = fromTotal > 0 ? fromTotal : Number(row.order_refunds_net) || 0
+    if (amount <= 0) continue
+    byRefundId.set(refundId, {
+      date: row.date,
+      store: SHOPIFY_ACCOUNT_MAP[row.account_name] || row.account_name,
+      order_id: String(row.order_id),
+      refund_id: refundId,
+      amount: Math.round(amount * 100) / 100,
+    })
+  }
+  return Array.from(byRefundId.values())
+}
+
+function aggregateRevenue(rows: WindsorRow[]): ShopifyRevenueRow[] {
   const byDateStore = new Map<string, { revenue: number; orderIds: Set<string> }>()
   for (const row of rows) {
     const store = SHOPIFY_ACCOUNT_MAP[row.account_name] || row.account_name

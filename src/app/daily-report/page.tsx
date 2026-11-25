@@ -84,14 +84,15 @@ export default function DailyReportPage() {
       const totalRevEur = rev.reduce((sum, r) => sum + toEur(r.revenue, STORE_CURRENCY[r.store] || "EUR", r.date, rates), 0)
       const totalOrders = rev.reduce((sum, r) => sum + r.orders, 0)
       const totalSpend = sp.reduce((sum, r) => sum + r.spend, 0)
-      const totalRefund = ref.reduce((sum, r) => sum + r.amount, 0)
+      const totalRefund = ref.reduce((sum, r) => sum + toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates), 0)
 
       const actualCogs = cg.reduce((sum, r) => sum + toEur(r.cogs, COGS_CURRENCY, r.date, rates), 0)
       const hasCogs = cg.length > 0
       const estCogs = hasCogs ? 0 : totalOrders * toEur(AVG_COGS_PER_ORDER[s] || 0, COGS_CURRENCY, date, rates)
       const totalCogs = actualCogs + estCogs
 
-      const profit = totalRevEur - totalSpend - totalCogs
+      // Revenue is gross (order rows only); refunds are subtracted here.
+      const profit = totalRevEur - totalRefund - totalSpend - totalCogs
       const roas = totalSpend > 0 ? totalRevEur / totalSpend : 0
 
       return { store: s, revenue: totalRevEur, orders: totalOrders, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit }
