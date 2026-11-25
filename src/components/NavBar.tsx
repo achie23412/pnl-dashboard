@@ -243,7 +243,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/season-board": "season seasonal calendar trends",
 }
 
-const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub"])
+const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
