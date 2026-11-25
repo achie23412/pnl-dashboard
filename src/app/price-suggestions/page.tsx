@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { ProductLink } from "@/components/ProductLink"
 
 interface Metrics {
   roas: number
@@ -218,7 +219,7 @@ export default function PriceSuggestionsPage() {
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: pb.bg, color: pb.text }}>{pb.label}</span>
-                        <span className="font-medium truncate max-w-[200px]" style={{ color: "var(--text)" }}>{s.product_name}</span>
+                        <ProductLink store={s.store} name={s.product_name} maxWidth={220} />
                       </div>
                       {isExpanded && (
                         <div className="mt-2 p-2 rounded-lg text-[10px] leading-relaxed" style={{ background: "rgba(255,255,255,0.02)", color: "var(--text-muted)" }}>

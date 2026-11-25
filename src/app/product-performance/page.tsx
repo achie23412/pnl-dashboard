@@ -7,6 +7,7 @@ import { STORE_CURRENCY } from "@/lib/currency"
 import { DatePicker } from "@/components/DatePicker"
 import { FixBanner } from "@/components/FixBanner"
 import { getDateRange } from "@/lib/date-range"
+import { ProductLink } from "@/components/ProductLink"
 
 interface CatalogProduct {
   product_name: string
@@ -21,6 +22,7 @@ interface CatalogProduct {
   ad_spend: number | null
   roas: number | null
   be_roas: number | null
+  product_ids?: string[]
 }
 
 interface StoreSummary {
@@ -329,7 +331,7 @@ export default function ProductPerformancePage() {
                       style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
                     >
                       <td className="px-3 py-2 max-w-[200px]">
-                        <span className="text-[11px] font-medium truncate block" style={{ color: "var(--text)" }}>{p.product_name}</span>
+                        <ProductLink store={p.store} name={p.product_name} productId={p.product_ids?.[0]} className="text-[11px] font-medium" maxWidth={200} />
                         {p.category && <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.category}</span>}
                       </td>
                       <td className="px-3 py-2">

@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageShell } from "@/components/PageShell"
+import { ProductLink } from "@/components/ProductLink"
 
 interface Product {
   product_name: string
@@ -294,7 +295,7 @@ export default function SeasonBoardPage() {
                   {risingProducts.map((p, i) => (
                     <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
                       <div>
-                        <div className="text-[10px] font-medium truncate max-w-[200px]" style={{ color: "var(--text)" }}>{p.product_name}</div>
+                        <div className="text-[10px]"><ProductLink store={p.store} name={p.product_name} className="font-medium" maxWidth={200} /></div>
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
@@ -320,7 +321,7 @@ export default function SeasonBoardPage() {
                   {decliningProducts.map((p, i) => (
                     <div key={i} className="flex items-center justify-between p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
                       <div>
-                        <div className="text-[10px] font-medium truncate max-w-[200px]" style={{ color: "var(--text)" }}>{p.product_name}</div>
+                        <div className="text-[10px]"><ProductLink store={p.store} name={p.product_name} className="font-medium" maxWidth={200} /></div>
                         <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store} · {p.units_sold} sold</div>
                       </div>
                       <div className="text-right">
@@ -345,7 +346,7 @@ export default function SeasonBoardPage() {
                   <div key={i} className="flex items-center gap-3 p-2 rounded-lg" style={{ background: "rgba(255,255,255,0.02)" }}>
                     <span className="text-[10px] font-mono w-5 text-right" style={{ color: "var(--text-dim)" }}>#{i + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-medium truncate" style={{ color: "var(--text)" }}>{p.product_name}</div>
+                      <div className="text-[10px] min-w-0"><ProductLink store={p.store} name={p.product_name} className="font-medium" /></div>
                       <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.store}</div>
                     </div>
                     <div className="text-right flex-shrink-0">

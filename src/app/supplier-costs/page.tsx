@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { PillSelect } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { ProductLink } from "@/components/ProductLink"
 
 interface SupplierProduct {
   title: string
@@ -223,7 +224,7 @@ export default function SupplierCostsPage() {
                     style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                     onClick={() => setExpanded(isExpanded ? null : key)}>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium truncate max-w-[200px]" style={{ color: "var(--text)" }}>{p.title}</div>
+                      <div><ProductLink store={p.store} name={p.title} maxWidth={220} /></div>
                       {p.variant_title && <div className="text-[9px]" style={{ color: "var(--text-dim)" }}>{p.variant_title}</div>}
                       {isExpanded && (
                         <div className="mt-2 p-2 rounded-lg text-[10px] space-y-1" style={{ background: "rgba(255,255,255,0.02)" }}>

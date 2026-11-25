@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { ProductLink } from "@/components/ProductLink"
 
 interface LineItem {
   quoted_unit?: number | null
@@ -284,7 +285,7 @@ export default function CogsInvoicesPage() {
                                 className="flex-1 truncate"
                                 style={{ color: "var(--text)" }}
                               >
-                                {li.title}
+                                <ProductLink store={inv.store} name={li.title} maxWidth={260} />
                                 {li.variant_title
                                   ? ` — ${li.variant_title}`
                                   : ""}

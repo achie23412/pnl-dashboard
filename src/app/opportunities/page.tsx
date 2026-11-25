@@ -510,6 +510,9 @@ function OpportunityCard(props: {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={props.onExpand} className="text-[12px] font-semibold text-left truncate max-w-[520px]" style={{ color: "var(--text)" }}>{o.title}</button>
+            {(o.source_url || o.first_source_url) && (
+              <a href={(o.source_url || o.first_source_url)!} target="_blank" rel="noreferrer" title="Open the competitor's product page" className="text-[10px] opacity-60 hover:opacity-100" style={{ color: "#7dd3fc" }}>↗</a>
+            )}
             {o.priority && (
               <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ color: PRIORITY_COLOR[o.priority], background: "rgba(255,255,255,0.05)" }}>{o.priority}</span>
             )}

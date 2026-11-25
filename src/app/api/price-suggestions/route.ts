@@ -51,11 +51,24 @@ export interface PriceSuggestion {
 const GOOGLE_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
 const MIN_SPEND_GOOGLE = 5
 
+// "104,95" / "1.234,56" / "$104.95" / "1,234.56" -> number. The launch sheets use a decimal comma,
+// which the old parser turned into 10495.
+function parseMoney(raw: string | undefined | null): number {
+  if (!raw) return 0
+  let t = raw.replace(/[^0-9.,]/g, "")
+  if (t.includes(",") && t.includes(".")) {
+    t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "")
+  } else if (t.includes(",")) {
+    t = /,\d{1,2}$/.test(t) ? t.replace(",", ".") : t.replace(/,/g, "")
+  }
+  const n = parseFloat(t)
+  return Number.isFinite(n) ? n : 0
+}
+
+// Prefer what customers actually paid (average sold price); the launch-sheet price can be outdated.
 function resolvePrice(p: CatalogProduct): number {
-  const explicit = parseFloat(p.retail_price?.replace(/[^0-9.]/g, "") || "0")
-  if (explicit > 0) return explicit
   if (p.sales_revenue > 0 && p.units_sold > 0) return Math.round((p.sales_revenue / p.units_sold) * 100) / 100
-  return 0
+  return parseMoney(p.retail_price)
 }
 
 function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[]): PriceSuggestion[] {

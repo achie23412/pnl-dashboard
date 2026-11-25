@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js"
 import { STORES, STORE_COLORS, AVG_COGS_PER_ORDER, STORE_SHEET_TAB, COGS_SHEET_ID } from "@/lib/constants"
 import type { ProductTest } from "@/lib/types"
 import { PillSelect } from "@/components/PillSelect"
+import { ProductLink } from "@/components/ProductLink"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +24,7 @@ interface CogsProduct {
 interface CatalogProduct {
   product_name: string
   store: string
+  product_ids?: string[]
   cogs_usd: number | null
   retail_price: string
   cog_pct: string
@@ -985,8 +987,8 @@ export function ProductTesting() {
                           style={{ borderBottom: "1px solid var(--border)" }}
                         >
                           <td className="px-3 py-2 max-w-[240px]">
-                            <div className="text-[11px] font-medium truncate" style={{ color: "var(--text)" }}>
-                              {p.product_name}
+                            <div className="text-[11px]">
+                              <ProductLink store={p.store} name={p.product_name} productId={p.product_ids?.[0]} maxWidth={240} />
                             </div>
                             {p.category && (
                               <div className="text-[8px] mt-0.5" style={{ color: "var(--text-dim)" }}>{p.category}</div>
