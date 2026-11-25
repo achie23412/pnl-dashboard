@@ -1,11 +1,12 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { TodoPanel, type CustomTodo } from "@/components/TodoPanel"
 
 type CalendarEvent = {
   id?: string
   date: string
   label: string
-  type: "deadline" | "sale" | "prep" | "shipping" | "season" | "launch"
+  type: "deadline" | "sale" | "prep" | "shipping" | "season" | "launch" | "todo"
   store?: string
   note?: string
   source?: "hardcoded" | "dynamic"
@@ -54,6 +55,7 @@ const TYPE_COLORS: Record<CalendarEvent["type"], { bg: string; text: string; lab
   shipping: { bg: "rgba(249,115,22,0.18)", text: "#f97316", label: "Shipping" },
   season: { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "Season" },
   launch: { bg: "rgba(14,165,233,0.18)", text: "#0ea5e9", label: "Launch" },
+  todo: { bg: "rgba(255,255,255,0.08)", text: "#e2e8f0", label: "My task" },
 }
 
 const EVENT_TYPES: CalendarEvent["type"][] = ["deadline", "sale", "prep", "shipping", "season", "launch"]
@@ -80,6 +82,7 @@ export default function CalendarPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ date: "", label: "", type: "deadline" as CalendarEvent["type"], store: "", note: "" })
   const [saving, setSaving] = useState(false)
+  const [customTodos, setCustomTodos] = useState<CustomTodo[]>([])
 
   const fetchDynamic = useCallback(async () => {
     try {
@@ -96,11 +99,15 @@ export default function CalendarPage() {
     ...HARDCODED_EVENTS.map((e) => ({ ...e, source: "hardcoded" as const })),
     ...dynamicEvents,
   ]
+  // Dated custom to-dos also show on the calendar
+  const todoEvents: CalendarEvent[] = customTodos
+    .filter((t) => t.date)
+    .map((t) => ({ date: t.date!, label: `${t.done ? "✓ " : "☐ "}${t.label}`, type: "todo" as const, store: t.store || undefined }))
 
   const { offset, days, monthName } = getMonthData(viewYear, viewMonth)
 
   const eventMap = new Map<string, CalendarEvent[]>()
-  for (const ev of allEvents) {
+  for (const ev of [...allEvents, ...todoEvents]) {
     const list = eventMap.get(ev.date) || []
     list.push(ev)
     eventMap.set(ev.date, list)
@@ -247,6 +254,8 @@ export default function CalendarPage() {
           </div>
         ))}
       </div>
+
+      <TodoPanel events={allEvents} onCustomChange={setCustomTodos} />
 
       {/* Month nav */}
       <div className="glass rounded-xl p-4">

@@ -61,3 +61,20 @@ ALTER TABLE competitors ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "anon_read_competitors" ON competitors FOR SELECT TO anon USING (true);
 CREATE POLICY "anon_insert_competitors" ON competitors FOR INSERT TO anon WITH CHECK (true);
 CREATE POLICY "service_all_competitors" ON competitors FOR ALL TO service_role USING (true);
+
+-- To-do list on the Calendar page (custom tasks + "done" marks for auto must-dos)
+create table if not exists todos (
+  id bigserial primary key,
+  created_at timestamptz not null default now(),
+  date date,
+  label text not null,
+  note text,
+  store text,
+  done boolean not null default false,
+  done_at timestamptz,
+  source text not null default 'custom',
+  auto_key text unique
+);
+alter table todos enable row level security;
+grant select, insert, update, delete on todos to service_role;
+grant usage, select on sequence todos_id_seq to service_role;
