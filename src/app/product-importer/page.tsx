@@ -96,12 +96,13 @@ export default function ProductImporterPage() {
 
       {/* Redo Listing (SOP) */}
       <div className="glass rounded-xl p-4 mb-4">
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2">
           <div className="text-[12px] font-semibold" style={{ color: "var(--text)" }}>Redo Listing — Ascend SOP</div>
           <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>AI</span>
+          <span className="text-[9px] px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(234,179,8,0.12)", color: "#facc15" }}>New imports only</span>
         </div>
         <p className="text-[10px] mb-3" style={{ color: "var(--text-muted)" }}>
-          Generate a GMC-compliant product listing using the Ascend Listing Prompt. Provide product details, a competitor URL, or describe the product images.
+          Generate a GMC-compliant listing for <strong style={{ color: "var(--text)" }}>freshly imported products only</strong>. Paste the new product details below — do not use this on existing live listings.
         </p>
         <div className="grid grid-cols-1 gap-3 mb-3">
           <div>
