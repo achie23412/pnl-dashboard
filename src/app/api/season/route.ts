@@ -6,13 +6,13 @@ import { liveTitles } from "@/lib/live-titles"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-type DbKeyword = { country: string; keyword: string; category: string | null; months: number[]; avg_monthly: number; uploaded_at: string }
+type DbKeyword = { country: string; keyword: string; category: string | null; months: number[]; avg_monthly: number; uploaded_at: string; source?: string | null }
 
 async function allKeywords(country?: string): Promise<DbKeyword[]> {
   const db = getServiceClient()
   const out: DbKeyword[] = []
   for (let from = 0; ; from += 1000) {
-    let q = db.from("season_keywords").select("country,keyword,category,months,avg_monthly,uploaded_at").range(from, from + 999)
+    let q = db.from("season_keywords").select("country,keyword,category,months,avg_monthly,uploaded_at,source").range(from, from + 999)
     if (country) q = q.eq("country", country)
     const { data, error } = await q
     if (error) throw new Error(error.message)
@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
           category: categoryOf(r.keyword),
           months: (r.months || []).slice(0, 12).map((v) => Math.max(0, Math.round(Number(v) || 0))),
           avg_monthly: Math.round(Number(r.avg) || 0),
-          source: "keyword_planner",
+          // "keyword_planner+trends" = volumes from Keyword Planner, monthly pattern from Google Trends
+          source: body.source === "keyword_planner+trends" ? "keyword_planner+trends" : "keyword_planner",
           uploaded_at: now,
         }))
         const { error } = await db.from("season_keywords").upsert(chunk, { onConflict: "country,keyword" })

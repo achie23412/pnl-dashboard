@@ -16,7 +16,7 @@ import {
   decodeExport, parseKeywordPlanner, categoryOf, type Status, type Timing, type TitleIndex,
 } from "@/lib/season-keywords"
 
-type DbKeyword = { country: string; keyword: string; category: string | null; months: number[]; avg_monthly: number; uploaded_at: string }
+type DbKeyword = { country: string; keyword: string; category: string | null; months: number[]; avg_monthly: number; uploaded_at: string; source?: string | null }
 type Suggestion = { id: number; created_at: string; keyword: string; country: string; category: string | null; why: string | null; status: string; note: string | null; decided_at: string | null }
 type CatalogProduct = { product_name: string; store: string; units_sold: number; sales_revenue: number; ad_spend: number | null; roas: number | null; be_roas: number | null; product_ids?: string[] }
 type StoreSummary = { store: string; revenue: number; ad_spend: number; roas: number | null; be_roas: number | null }
@@ -166,7 +166,7 @@ export default function SeasonBoardPage() {
       const parsed = parseKeywordPlanner(text)
       if (parsed.error) throw new Error(parsed.error)
       const replace = confirm(`${parsed.rows.length} keywords found for ${country}. Replace the current ${country} keywords?\n\nOK = replace · Cancel = add/update only`)
-      const res = await fetch("/api/season", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "upload", country, rows: parsed.rows, replace }) })
+      const res = await fetch("/api/season", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "upload", country, rows: parsed.rows, replace, source: /trends/i.test(file.name) ? "keyword_planner+trends" : "keyword_planner" }) })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`)
       setMsg(`Saved ${d.saved} keywords for ${country}.`)
@@ -207,6 +207,7 @@ export default function SeasonBoardPage() {
   const movers: [string, CatalogProduct[], string][] = [["Rising (ROAS > 2.5, 3+ sales)", rising, "var(--green)"], ["Losing steam (below breakeven)", declining, "#f87171"]]
 
   const hasData = (data?.keywords.length || 0) > 0
+  const fromTrends = (data?.keywords || []).some((kw) => kw.source === "keyword_planner+trends")
   const pendingSug = (data?.suggestions || []).filter((s) => s.status === "pending")
   const decidedSug = (data?.suggestions || []).filter((s) => s.status !== "pending").slice(0, 8)
   const countryName = COUNTRIES.find((c) => c.code === country)?.label.split("— ")[1] || country
@@ -244,6 +245,12 @@ export default function SeasonBoardPage() {
       )}
       {msg && <Notice tone="success">{msg}</Notice>}
       {error && <Notice tone="error">Couldn&apos;t load the Season Board: {error}.</Notice>}
+
+      {fromTrends && (
+        <Notice tone="info">
+          Estimated months: the Google Ads accounts only get rounded averages from Keyword Planner, so each keyword&apos;s average volume (Keyword Planner) is spread over the year with the Google Trends pattern of its main clothing term (e.g. &quot;wool coat&quot;, &quot;maxi dress&quot;), last 12 months, per country. US: a shared April–May jump across almost all US clothing searches was removed and replaced by the UK&apos;s shared pattern. Timing is reliable per clothing type; exact numbers are estimates.
+        </Notice>
+      )}
 
       {/* Year strip */}
       <Panel className="mb-4" title="The year" sub={`Click a month to plan ahead. Store for ${country}: ${stores.join(", ") || "none"}; coverage is checked against its live products.`}>
