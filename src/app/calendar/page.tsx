@@ -1,33 +1,32 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 type CalendarEvent = {
+  id?: string
   date: string
   label: string
   type: "deadline" | "sale" | "prep" | "shipping" | "season" | "launch"
   store?: string
   note?: string
+  source?: "hardcoded" | "dynamic"
 }
 
-const EVENTS: CalendarEvent[] = [
-  // ── BLACK FRIDAY / CYBER MONDAY WEEK ──
+const HARDCODED_EVENTS: CalendarEvent[] = [
   { date: "2026-11-27", label: "Black Friday", type: "sale", note: "Peak ad spend day. All stores max budget." },
   { date: "2026-11-28", label: "Black Saturday", type: "sale", note: "BF weekend — keep budgets high." },
   { date: "2026-11-29", label: "BF Sunday", type: "sale", note: "Momentum day — don't cut spend." },
   { date: "2026-11-30", label: "Cyber Monday", type: "sale", note: "Last big promo day. Push remaining BF stock." },
-
-  // ── DECEMBER: Q4 PEAK ──
   { date: "2026-12-01", label: "List winter products", type: "prep", note: "Publish winter coats, knitwear, boots for Google indexing. Algorithm needs 2-3 weeks before peak." },
   { date: "2026-12-01", label: "December campaigns live", type: "launch", note: "Switch creatives to Christmas/gift angle. All stores." },
   { date: "2026-12-02", label: "Free Shipping Day prep", type: "prep", note: "Prep banners/badges for Dec 14 Free Shipping Day." },
   { date: "2026-12-05", label: "List NYE & party products", type: "prep", note: "NYE dresses, sparkly items, party accessories. Google needs indexing time before Dec 20+ searches." },
   { date: "2026-12-07", label: "Green Monday", type: "sale", note: "2nd biggest online shopping day in Dec. Push gift angles." },
   { date: "2026-12-08", label: "Review Q4 ROAS", type: "deadline", note: "Mid-Q4 check: draft underperformers (SOP rule 1-5), scale winners." },
-  { date: "2026-12-10", label: "🇮🇪 IE shipping cutoff soon", type: "shipping", store: "WF", note: "Walsh & Farley: last safe order date for pre-Xmas delivery ~Dec 14 (ShipGoods EU 10-15 days)." },
+  { date: "2026-12-10", label: "IE shipping cutoff soon", type: "shipping", store: "WF", note: "Walsh & Farley: last safe order date for pre-Xmas delivery ~Dec 14 (ShipGoods EU 10-15 days)." },
   { date: "2026-12-10", label: "List Jan trending products", type: "prep", note: "Athleisure, gym wear, cozy loungewear for 'New Year New Me'. List NOW for Google algorithm." },
-  { date: "2026-12-12", label: "🇬🇧 UK shipping cutoff soon", type: "shipping", store: "CC", note: "Carter & Collins: flag last order date for guaranteed Xmas delivery." },
+  { date: "2026-12-12", label: "UK shipping cutoff soon", type: "shipping", store: "CC", note: "Carter & Collins: flag last order date for guaranteed Xmas delivery." },
   { date: "2026-12-14", label: "Free Shipping Day", type: "sale", note: "Offer free shipping across all stores. Big conversion driver." },
-  { date: "2026-12-14", label: "🇺🇸 US shipping cutoff soon", type: "shipping", store: "SA", note: "Susan & Allen: last safe date for Xmas delivery (varies by carrier)." },
+  { date: "2026-12-14", label: "US shipping cutoff soon", type: "shipping", store: "SA", note: "Susan & Allen: last safe date for Xmas delivery (varies by carrier)." },
   { date: "2026-12-15", label: "Switch to 'Last Chance' angle", type: "launch", note: "Creatives → urgency: 'Order now for Xmas delivery'. Gift cards as backup offer." },
   { date: "2026-12-17", label: "Draft slow Christmas stock", type: "deadline", note: "Draft products that won't sell before Xmas. Free up ad budget for winners." },
   { date: "2026-12-18", label: "Super Saturday", type: "sale", note: "Last big shopping Saturday before Xmas. In-store rush → online last-chancers." },
@@ -35,12 +34,10 @@ const EVENTS: CalendarEvent[] = [
   { date: "2026-12-21", label: "Winter Solstice", type: "season", note: "Shortest day. 'Winter essentials' angle for content." },
   { date: "2026-12-24", label: "Christmas Eve", type: "sale", note: "Last-minute digital/gift card sales. Reduce ad spend on physical products." },
   { date: "2026-12-25", label: "Christmas Day", type: "season", note: "Low ad spend. People browse with gift money. Prep Boxing Day campaigns." },
-  { date: "2026-12-26", label: "Boxing Day / Q5 starts", type: "sale", note: "🔥 Q5 begins! CPMs drop 30-50%, gift card spend floods in. Scale aggressively." },
+  { date: "2026-12-26", label: "Boxing Day / Q5 starts", type: "sale", note: "Q5 begins! CPMs drop 30-50%, gift card spend floods in. Scale aggressively." },
   { date: "2026-12-27", label: "Scale Q5 winners", type: "launch", note: "Double budgets on winners. Low CPMs + high intent = best ROAS window of the year." },
   { date: "2026-12-28", label: "List spring preview products", type: "prep", note: "Early spring: light jackets, transitional pieces, Valentine's gifts. Google needs 3+ weeks." },
   { date: "2026-12-31", label: "New Year's Eve", type: "season", note: "NYE outfit searches peak. Party/sparkle product push." },
-
-  // ── JANUARY: Q5 & NEW YEAR ──
   { date: "2027-01-01", label: "New Year's Day / Q5 peak", type: "sale", note: "Resolution shoppers. Athleisure, wellness, self-improvement products spike." },
   { date: "2027-01-02", label: "New Year sales continue", type: "sale", note: "Q5 momentum. Keep budgets elevated — CPMs still low." },
   { date: "2027-01-03", label: "Review holiday performance", type: "deadline", note: "Full Q4 + Q5 review. Identify winners to keep, losers to draft." },
@@ -58,6 +55,8 @@ const TYPE_COLORS: Record<CalendarEvent["type"], { bg: string; text: string; lab
   season: { bg: "rgba(148,163,184,0.15)", text: "#94a3b8", label: "Season" },
   launch: { bg: "rgba(14,165,233,0.18)", text: "#0ea5e9", label: "Launch" },
 }
+
+const EVENT_TYPES: CalendarEvent["type"][] = ["deadline", "sale", "prep", "shipping", "season", "launch"]
 
 function getMonthData(year: number, month: number) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -77,11 +76,31 @@ export default function CalendarPage() {
   const [viewMonth, setViewMonth] = useState(now.getMonth())
   const [viewYear, setViewYear] = useState(now.getFullYear())
   const [selected, setSelected] = useState<string | null>(null)
+  const [dynamicEvents, setDynamicEvents] = useState<CalendarEvent[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [addForm, setAddForm] = useState({ date: "", label: "", type: "deadline" as CalendarEvent["type"], store: "", note: "" })
+  const [saving, setSaving] = useState(false)
+
+  const fetchDynamic = useCallback(async () => {
+    try {
+      const res = await fetch("/api/calendar-events")
+      if (!res.ok) return
+      const data = await res.json()
+      setDynamicEvents(data.map((e: CalendarEvent & { id: string }) => ({ ...e, source: "dynamic" as const })))
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { fetchDynamic() }, [fetchDynamic])
+
+  const allEvents: CalendarEvent[] = [
+    ...HARDCODED_EVENTS.map((e) => ({ ...e, source: "hardcoded" as const })),
+    ...dynamicEvents,
+  ]
 
   const { offset, days, monthName } = getMonthData(viewYear, viewMonth)
 
   const eventMap = new Map<string, CalendarEvent[]>()
-  for (const ev of EVENTS) {
+  for (const ev of allEvents) {
     const list = eventMap.get(ev.date) || []
     list.push(ev)
     eventMap.set(ev.date, list)
@@ -98,15 +117,126 @@ export default function CalendarPage() {
 
   const selectedEvents = selected ? (eventMap.get(selected) || []) : []
 
+  const handleAdd = async () => {
+    if (!addForm.date || !addForm.label) return
+    setSaving(true)
+    try {
+      const res = await fetch("/api/calendar-events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addForm),
+      })
+      if (res.ok) {
+        setAddForm({ date: "", label: "", type: "deadline", store: "", note: "" })
+        setShowAdd(false)
+        fetchDynamic()
+      }
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/calendar-events?id=${id}`, { method: "DELETE" })
+      if (res.ok) fetchDynamic()
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
-      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Home → Calendar</div>
+      <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Home &rarr; Calendar</div>
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-[20px] font-bold" style={{ color: "var(--text)" }}>Calendar</h1>
+        <button
+          onClick={() => setShowAdd(!showAdd)}
+          className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+          style={{ background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", color: "#818cf8" }}
+        >
+          {showAdd ? "Cancel" : "+ Add Event"}
+        </button>
       </div>
       <p className="text-[12px] mb-4 max-w-3xl" style={{ color: "var(--text-muted)" }}>
-        E-commerce action calendar — must-do deadlines, sales peaks, shipping cutoffs, and advance prep for Google indexing.
+        E-commerce action calendar &mdash; must-do deadlines, sales peaks, shipping cutoffs, and advance prep for Google indexing.
       </p>
+
+      {/* Add event form */}
+      {showAdd && (
+        <div className="glass rounded-xl p-4 mb-4" style={{ border: "1px solid rgba(99,102,241,0.2)" }}>
+          <h3 className="text-[12px] font-bold mb-3" style={{ color: "var(--text)" }}>New Event</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <div>
+              <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Date *</label>
+              <input
+                type="date"
+                value={addForm.date}
+                onChange={(e) => setAddForm({ ...addForm, date: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Label *</label>
+              <input
+                type="text"
+                placeholder="Event name"
+                value={addForm.label}
+                onChange={(e) => setAddForm({ ...addForm, label: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Type</label>
+              <select
+                value={addForm.type}
+                onChange={(e) => setAddForm({ ...addForm, type: e.target.value as CalendarEvent["type"] })}
+                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
+              >
+                {EVENT_TYPES.map((t) => (
+                  <option key={t} value={t}>{TYPE_COLORS[t].label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Store (optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. WF, CC, SA"
+                value={addForm.store}
+                onChange={(e) => setAddForm({ ...addForm, store: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] block mb-1" style={{ color: "var(--text-dim)" }}>Note (optional)</label>
+              <input
+                type="text"
+                placeholder="Details"
+                value={addForm.note}
+                onChange={(e) => setAddForm({ ...addForm, note: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg text-[11px]"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }}
+              />
+            </div>
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={saving || !addForm.date || !addForm.label}
+            className="px-4 py-1.5 rounded-lg text-[11px] font-medium transition-all"
+            style={{
+              background: addForm.date && addForm.label ? "var(--accent)" : "rgba(255,255,255,0.05)",
+              color: addForm.date && addForm.label ? "#fff" : "var(--text-dim)",
+              opacity: saving ? 0.5 : 1,
+            }}
+          >
+            {saving ? "Saving..." : "Add Event"}
+          </button>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -121,9 +251,9 @@ export default function CalendarPage() {
       {/* Month nav */}
       <div className="glass rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <button onClick={prevMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>← Prev</button>
+          <button onClick={prevMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>&larr; Prev</button>
           <div className="text-sm font-bold" style={{ color: "var(--text)" }}>{monthName}</div>
-          <button onClick={nextMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>Next →</button>
+          <button onClick={nextMonth} className="px-3 py-1 rounded-lg text-[11px] font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.08)" }}>Next &rarr;</button>
         </div>
         <div className="grid grid-cols-7 gap-px">
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
@@ -191,6 +321,18 @@ export default function CalendarPage() {
                   {ev.store && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.1)", color: "var(--text-muted)" }}>{ev.store}</span>
                   )}
+                  {ev.source === "dynamic" && (
+                    <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8" }}>Custom</span>
+                  )}
+                  {ev.source === "dynamic" && ev.id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(ev.id!) }}
+                      className="ml-auto text-[9px] px-2 py-0.5 rounded-lg transition-all hover:scale-105"
+                      style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
                 {ev.note && <div className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{ev.note}</div>}
               </div>
@@ -203,7 +345,7 @@ export default function CalendarPage() {
       <div className="mt-4 glass rounded-xl p-4">
         <h3 className="text-[13px] font-bold mb-3" style={{ color: "var(--text)" }}>Upcoming (next 6 weeks)</h3>
         <div className="space-y-1.5">
-          {EVENTS
+          {allEvents
             .filter((ev) => {
               const evDate = new Date(ev.date + "T00:00:00")
               const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -223,6 +365,7 @@ export default function CalendarPage() {
                   <div className="flex-1 min-w-0">
                     <span className="text-[11px] font-medium" style={{ color: TYPE_COLORS[ev.type].text }}>{ev.label}</span>
                     {ev.store && <span className="ml-1.5 text-[9px]" style={{ color: "var(--text-dim)" }}>({ev.store})</span>}
+                    {ev.source === "dynamic" && <span className="ml-1.5 text-[8px] px-1 py-0.5 rounded" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8" }}>Custom</span>}
                   </div>
                   <div className="text-[9px] shrink-0 px-1.5 py-0.5 rounded-full" style={{
                     background: daysAway <= 3 ? "rgba(239,68,68,0.15)" : daysAway <= 7 ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.05)",

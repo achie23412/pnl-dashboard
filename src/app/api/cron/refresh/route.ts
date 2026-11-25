@@ -4,6 +4,7 @@ import { fetchShopifyRevenue, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSp
 import { fetchShopifyRevenueDirect } from "@/lib/shopify-direct"
 import { fetchShopifySessions, hasAnySessionsCredentials } from "@/lib/shopify-sessions"
 import { fetchCogs } from "@/lib/shipgoods"
+import { estimateGoogleStoreCogs } from "@/lib/launch-sheet-cogs"
 
 export const maxDuration = 60
 
@@ -52,6 +53,28 @@ export async function GET(req: NextRequest) {
     }
     if (cogs.length > 0) {
       await db.from("daily_cogs").upsert(cogs, { onConflict: "date,store" })
+    }
+
+    // Estimate COGS for Google stores using launch sheet averages
+    let estCogsRows = 0
+    try {
+      const cogsDateStores = new Set(cogs.map((c) => `${c.date}|${c.store}`))
+      const revenueForEstimate = revenue.filter(
+        (r) => r.orders > 0 && !cogsDateStores.has(`${r.date}|${r.store}`),
+      )
+      if (revenueForEstimate.length > 0) {
+        const estimated = await estimateGoogleStoreCogs(revenueForEstimate)
+        if (estimated.length > 0) {
+          const { error } = await db.from("daily_cogs").upsert(
+            estimated.map((e) => ({ date: e.date, store: e.store, cogs: e.cogs })),
+            { onConflict: "date,store", ignoreDuplicates: true },
+          )
+          if (error) errors.push(`Est COGS: ${error.message}`)
+          else estCogsRows = estimated.length
+        }
+      }
+    } catch (e: unknown) {
+      errors.push(`Est COGS: ${e instanceof Error ? e.message : String(e)}`)
     }
 
     let sessionRows = 0
