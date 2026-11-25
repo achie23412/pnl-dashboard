@@ -16,7 +16,7 @@ interface CatalogProduct {
   cog_pct: number | null
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "none"
   ad_spend: number | null
   roas: number | null
   be_roas: number | null
@@ -419,11 +419,25 @@ export default function ProductRulesPage() {
                     <td className={`${TD} text-right tabular-nums`} style={{ color: p.ad_spend != null ? "var(--text)" : "var(--text-dim)" }}>
                       {p.ad_spend != null ? money(p.ad_spend, STORE_CURRENCY[p.store] || "EUR") : "—"}
                     </td>
-                    <td className={`${TD} text-right tabular-nums`} style={{ color: roasColor }}>
-                      {x(p.roas)}
+                    <td
+                      className={`${TD} text-right tabular-nums`}
+                      style={{ color: roasColor }}
+                      title={p.roas == null ? (p.ad_spend == null ? "No per-product ad spend for this store (Meta/TikTok: store level only)" : "No ad spend on this product in this period, so no ROAS") : undefined}
+                    >
+                      {p.roas != null ? x(p.roas) : p.ad_spend === 0 ? <span className="text-[9px]">no spend</span> : "—"}
                     </td>
-                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-dim)" }}>
-                      {x(p.be_roas)}
+                    <td
+                      className={`${TD} text-right tabular-nums`}
+                      style={{ color: "var(--text-dim)" }}
+                      title={
+                        p.be_roas != null
+                          ? `COGS from ${p.cogs_source === "shipgoods" ? "ShipGoods charges" : p.cogs_source === "quote" ? "the launch sheet quote (COG $)" : "the COGS sheet"}`
+                          : p.cogs_usd == null
+                            ? "No COGS yet: ShipGoods hasn't charged this product and it has no COG $ in the launch sheet. Add the COG $ in the launch sheet."
+                            : "No sales in this period"
+                      }
+                    >
+                      {p.be_roas != null ? x(p.be_roas) : p.cogs_usd == null ? <span className="text-[9px]" style={{ color: "var(--orange)" }}>no COGS</span> : "—"}
                     </td>
                     <td
                       className={`${TD} text-right tabular-nums`}
@@ -434,7 +448,7 @@ export default function ProductRulesPage() {
                           : `Profit ${money(p.profit!, STORE_CURRENCY[p.store] || "EUR")} on ${money(p.sales_revenue, STORE_CURRENCY[p.store] || "EUR")} revenue${p.margin_basis === "before_ads" ? " (before ads: no per-product spend for this store)" : ""}`
                       }
                     >
-                      {p.margin != null ? `${p.margin.toFixed(1)}%` : "—"}
+                      {p.margin != null ? `${p.margin.toFixed(1)}%` : p.cogs_usd == null ? <span className="text-[9px]" style={{ color: "var(--orange)" }}>no COGS</span> : "—"}
                       {p.margin_basis === "before_ads" && <span className="text-[8px] ml-1" style={{ color: "var(--text-dim)" }}>pre-ads</span>}
                     </td>
                   </tr>

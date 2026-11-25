@@ -20,7 +20,7 @@ interface CatalogProduct {
   category: string
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "none"
   ad_spend: number | null
   roas: number | null
   be_roas: number | null
@@ -343,7 +343,7 @@ export default function ProductPerformancePage() {
                         {margin != null ? `${margin.toFixed(1)}%` : "—"}
                       </td>
                       <td className={`${TD} text-right`}>
-                        {p.cogs_source === "shipgoods" ? <Badge tone="green">SG</Badge> : p.cogs_source === "sheet" ? <Badge tone="amber">Sheet</Badge> : <Badge tone="grey">None</Badge>}
+                        {p.cogs_source === "shipgoods" ? <Badge tone="green">SG</Badge> : p.cogs_source === "sheet" ? <Badge tone="amber">Sheet</Badge> : p.cogs_source === "quote" ? <Badge tone="blue">Quote</Badge> : <Badge tone="grey">None</Badge>}
                       </td>
                     </tr>
                   )

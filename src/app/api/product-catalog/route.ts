@@ -1,3 +1,4 @@
+import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
@@ -128,6 +129,8 @@ type SalesMap = Map<string, { qty: number; revenue: number; productIds: string[]
 interface ShipgoodsData {
   // keyed by ShipGoods store_name (= the *.myshopify.com prefix, e.g. "xq9pn7-dw")
   cogsByStore: Map<string, SgCogsMap>
+  // Shopify product id -> average COGS (USD), per ShipGoods store key. Matches when titles differ.
+  cogsByIdByStore: Map<string, Map<string, number>>
   salesByStore: Map<string, SalesMap>
   error: string | null
 }
@@ -147,7 +150,7 @@ const SG_MAX_PAGES = 30
 async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<ShipgoodsData> {
   const token = process.env.SHIPGOODS_TOKEN
   const base = process.env.SHIPGOODS_BASE || "https://dashboard.shipgoods.eu"
-  const empty: ShipgoodsData = { cogsByStore: new Map(), salesByStore: new Map(), error: null }
+  const empty: ShipgoodsData = { cogsByStore: new Map(), cogsByIdByStore: new Map(), salesByStore: new Map(), error: null }
   if (!token) return { ...empty, error: "ShipGoods: SHIPGOODS_TOKEN not set" }
 
   const fetchPage = async (page: number): Promise<ShipgoodsResponse> => {
@@ -175,6 +178,7 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   let orderTotals = new Map<string, number>()
 
   const costAcc = new Map<string, Map<string, { totalCost: number; totalQty: number }>>()
+  const costById = new Map<string, Map<string, { totalCost: number; totalQty: number }>>()
   const salesByStore = new Map<string, SalesMap>()
   const seenOrders = new Set<string>()
   const addPage = (json: ShipgoodsResponse) => {
@@ -200,6 +204,15 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
         c.totalCost += (Number(item.unit_cost) || 0) * qty
         c.totalQty += qty
         costs.set(item.title, c)
+        if (item.product_id) {
+          if (!costById.has(storeKey)) costById.set(storeKey, new Map())
+          const byId = costById.get(storeKey)!
+          const k = String(item.product_id)
+          const ci = byId.get(k) || { totalCost: 0, totalQty: 0 }
+          ci.totalCost += (Number(item.unit_cost) || 0) * qty
+          ci.totalQty += qty
+          byId.set(k, ci)
+        }
         const s = sales.get(item.title) || { qty: 0, revenue: 0, productIds: [] }
         s.qty += qty
         s.revenue += (Number(item.sold_price) || 0) * qty * scale
@@ -239,7 +252,14 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     cogsByStore.set(storeKey, m)
   })
 
-  return { cogsByStore, salesByStore, error: errors.length > 0 ? errors.join("; ") : null }
+  const cogsByIdByStore = new Map<string, Map<string, number>>()
+  costById.forEach((ids, storeKey) => {
+    const m = new Map<string, number>()
+    ids.forEach((d, id) => { if (d.totalQty > 0) m.set(id, Math.round((d.totalCost / d.totalQty) * 100) / 100) })
+    cogsByIdByStore.set(storeKey, m)
+  })
+
+  return { cogsByStore, cogsByIdByStore, salesByStore, error: errors.length > 0 ? errors.join("; ") : null }
 }
 
 async function fetchShopifySales(domain: string, token: string, dateFrom: string, dateTo: string): Promise<SalesMap> {
@@ -289,7 +309,7 @@ interface CatalogProduct {
   category: string
   units_sold: number
   sales_revenue: number
-  cogs_source: "shipgoods" | "sheet" | "none"
+  cogs_source: "shipgoods" | "sheet" | "quote" | "none"
   // Ad spend attributed to this product (Google Shopping, matched on Shopify
   // product id). null = no per-product spend for this store (Meta/TikTok).
   ad_spend: number | null
@@ -315,6 +335,9 @@ interface StoreContext {
   txnRate: number
   // media buyer fee as a share of ad spend (profit sheet: 10% on Google stores)
   mbRate: number
+  // launch-sheet quotes (COG $) + Shopify product id -> handle, for COGS when ShipGoods has none
+  quotes: Quote[]
+  handleById: Map<string, string>
 }
 
 function beRoas(cogsUsdPerUnit: number | null, units: number, revenue: number, ctx: StoreContext): number | null {
@@ -413,7 +436,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
 
     const sgMatch = findShipgoodsCogs(title, sgCogs)
     let cogsUsd: number | null = null
-    let cogsSource: "shipgoods" | "sheet" | "none" = "none"
+    let cogsSource: CatalogProduct["cogs_source"] = "none"
     let retailPrice = ""
     let cogPct = ""
     let category = ""
@@ -441,6 +464,24 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
         cogPct = cp.cog_pct
         category = cp.category
         break
+      }
+    }
+
+    // Still no COGS: ShipGoods by Shopify product id (title renamed), then our launch-sheet quote.
+    if (cogsUsd == null) {
+      const byId = (sgKey && sg.cogsByIdByStore.get(sgKey)) || null
+      const hit = byId ? s.productIds.map((id) => byId.get(id)).find((v) => v != null) : undefined
+      if (hit != null) {
+        cogsUsd = hit
+        cogsSource = "shipgoods"
+      }
+    }
+    if (cogsUsd == null && ctx.quotes.length) {
+      const handles = s.productIds.map((id) => ctx.handleById.get(id)).filter(Boolean) as string[]
+      const q = ctx.quotes.find((x) => x.handle && handles.includes(x.handle)) || findQuote(ctx.quotes, title)
+      if (q) {
+        cogsUsd = q.cog_usd
+        cogsSource = "quote"
       }
     }
 
@@ -624,6 +665,18 @@ export async function GET(req: Request) {
   if (revRes.error) errors.push(`Store revenue: ${revRes.error.message}`)
   if (spendRes.error) errors.push(`Store ad spend: ${spendRes.error.message}`)
 
+  // Launch-sheet quotes + own product handles (COGS fallback when ShipGoods has none yet).
+  const [quoteLists, ownRows] = await Promise.all([
+    Promise.all(storeNames.map((st) => (STORE_SHEET_TAB[st] ? fetchQuotes(st).catch(() => [] as Quote[]) : Promise.resolve([] as Quote[])))),
+    db.from("own_products").select("store,shopify_product_id,handle").then((r) => (r.data || []) as { store: string; shopify_product_id: string; handle: string }[], () => []),
+  ])
+  const quotesByStore = new Map(storeNames.map((st, i) => [st, quoteLists[i]]))
+  const handlesByStore = new Map<string, Map<string, string>>()
+  for (const r of ownRows) {
+    if (!handlesByStore.has(r.store)) handlesByStore.set(r.store, new Map())
+    handlesByStore.get(r.store)!.set(String(r.shopify_product_id), String(r.handle).toLowerCase())
+  }
+
   const perEur = (cur: Currency) => (cur === "EUR" ? 1 : fx[cur])
   const ctxFor = (s: string): StoreContext => {
     const cur = STORE_CURRENCY[s] || "EUR"
@@ -633,7 +686,14 @@ export async function GET(req: Request) {
       productSpend = new Map()
       for (const g of googleSpend) if (g.store === s) productSpend.set(g.productId, g.spend * perEur(cur)) // Windsor spend is EUR → store currency
     }
-    return { productSpend, usdToStore: perEur(cur) / perEur("USD"), txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035, mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0 }
+    return {
+      productSpend,
+      usdToStore: perEur(cur) / perEur("USD"),
+      txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035,
+      mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0,
+      quotes: quotesByStore.get(s) || [],
+      handleById: handlesByStore.get(s) || new Map(),
+    }
   }
 
   let allProducts: CatalogProduct[] = []
