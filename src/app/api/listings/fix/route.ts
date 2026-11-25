@@ -53,7 +53,7 @@ function fixSizeInTitle(title: string): string {
   return t
 }
 
-export function computeFixedTitle(title: string, fixType: string): string {
+function computeFixedTitle(title: string, fixType: string): string {
   switch (fixType) {
     case "repeated_words": return fixRepeatedWords(title)
     case "colour_in_title": return fixColourInTitle(title)
