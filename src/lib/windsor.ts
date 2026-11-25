@@ -55,6 +55,18 @@ export async function fetchShopifyRevenueAndRefunds(
   return { revenue: aggregateRevenue(rows.filter((r) => !r.order_refund_id)), refunds: extractRefunds(rows) }
 }
 
+// Shopify order id -> order total actually paid (shop currency), order rows only.
+export async function fetchShopifyOrderTotals(dateFrom: string, dateTo: string): Promise<Map<string, number>> {
+  const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price", "order_refund_id"], dateFrom, dateTo)
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    if (row.order_refund_id) continue
+    const id = String(row.order_id)
+    if (!totals.has(id)) totals.set(id, Number(row.order_total_price) || 0)
+  }
+  return totals
+}
+
 export async function fetchShopifyRevenue(dateFrom: string, dateTo: string): Promise<ShopifyRevenueRow[]> {
   return (await fetchShopifyRevenueAndRefunds(dateFrom, dateTo)).revenue
 }

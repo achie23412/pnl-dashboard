@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
+import { fetchShopifyOrderTotals } from "@/lib/windsor"
 
 export const maxDuration = 60
 
@@ -103,6 +104,7 @@ interface ShipgoodsItem {
 interface ShipgoodsOrder {
   row_type?: string
   store_name?: string
+  order_id?: string
   items: ShipgoodsItem[] | null
 }
 
@@ -156,12 +158,31 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
     return json
   }
 
+  // sold_price on ShipGoods items is the LIST price per unit, before order-level
+  // discounts (bundles etc.). Scale each order's items to the real Shopify order
+  // total (Windsor, matched on order id) so product revenue matches what was paid.
+  // Started now, awaited after the ShipGoods pages, so both run in parallel.
+  const errors: string[] = []
+  const orderTotalsPromise = fetchShopifyOrderTotals(thirtyDaysAgo, today).catch((e: unknown) => {
+    errors.push(`Windsor order totals (product revenue shown at list price): ${e instanceof Error ? e.message : String(e)}`)
+    return new Map<string, number>()
+  })
+  let orderTotals = new Map<string, number>()
+
   const costAcc = new Map<string, Map<string, { totalCost: number; totalQty: number }>>()
   const salesByStore = new Map<string, SalesMap>()
+  const seenOrders = new Set<string>()
   const addPage = (json: ShipgoodsResponse) => {
     for (const order of json.data.list) {
       if (order.row_type && order.row_type !== "order_charge") continue
       if (!order.items) continue
+      if (order.order_id) {
+        if (seenOrders.has(order.order_id)) continue
+        seenOrders.add(order.order_id)
+      }
+      const listTotal = order.items.reduce((a, i) => a + (Number(i.sold_price) || 0) * (Number(i.quantity) || 0), 0)
+      const paid = order.order_id ? orderTotals.get(order.order_id) : undefined
+      const scale = paid != null && listTotal > 0 ? paid / listTotal : 1
       const storeKey = order.store_name || "unknown"
       if (!costAcc.has(storeKey)) costAcc.set(storeKey, new Map())
       if (!salesByStore.has(storeKey)) salesByStore.set(storeKey, new Map())
@@ -176,27 +197,29 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
         costs.set(item.title, c)
         const s = sales.get(item.title) || { qty: 0, revenue: 0 }
         s.qty += qty
-        s.revenue += (Number(item.sold_price) || 0) * qty
+        s.revenue += (Number(item.sold_price) || 0) * qty * scale
         sales.set(item.title, s)
       }
     }
   }
 
-  const errors: string[] = []
+  const pages: ShipgoodsResponse[] = []
   try {
     const first = await fetchPage(1)
-    addPage(first)
+    pages.push(first)
     const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
     const rest = await Promise.allSettled(
       Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => fetchPage(i + 2)),
     )
     for (const r of rest) {
-      if (r.status === "fulfilled") addPage(r.value)
-      else errors.push(String(r.reason instanceof Error ? r.reason.message : r.reason))
+      if (r.status === "fulfilled") pages.push(r.value)
+      else errors.push(`ShipGoods ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
     }
   } catch (e: unknown) {
-    errors.push(e instanceof Error ? e.message : String(e))
+    errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
   }
+  orderTotals = await orderTotalsPromise
+  for (const p of pages) addPage(p)
 
   const cogsByStore = new Map<string, SgCogsMap>()
   costAcc.forEach((products, storeKey) => {
@@ -210,7 +233,7 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
     cogsByStore.set(storeKey, m)
   })
 
-  return { cogsByStore, salesByStore, error: errors.length > 0 ? `ShipGoods: ${errors.join("; ")}` : null }
+  return { cogsByStore, salesByStore, error: errors.length > 0 ? errors.join("; ") : null }
 }
 
 async function fetchShopifySales(domain: string, token: string): Promise<SalesMap> {
