@@ -108,6 +108,7 @@ async function storeDisputes(store: string, since: string) {
     if (!o.pageInfo.hasNextPage) break
     after = o.pageInfo.endCursor
   }
+  let detailError = ""
   // Details per dispute by id (needs only read_shopify_payments_disputes, not the payments account scope)
   for (const d of disputes) {
     const r = await gql(cfg.domain, token, `query($id: ID!) { dispute(id: $id) {
@@ -115,7 +116,7 @@ async function storeDisputes(store: string, since: string) {
       amount { amount currencyCode } reasonDetails { reason networkReasonCode }
     } }`, { id: d.id })
     const x = r.data?.dispute as Record<string, unknown> | null | undefined
-    if (!x) continue
+    if (!x) { if (r.errors?.length) detailError = r.errors[0].message; continue }
     const amount = x.amount as { amount: string; currencyCode: string } | null
     const reason = x.reasonDetails as { reason: string; networkReasonCode: string | null } | null
     d.status = String(x.status || d.status)
@@ -130,7 +131,7 @@ async function storeDisputes(store: string, since: string) {
     d.finalized_on = (x.finalizedOn as string) || null
   }
   if (disputes.some((d) => d.amount != null) || !disputes.length) return { store, disputes, orders90d, source: "orders" as const, error: null }
-  const why = p.errors?.[0]?.message || ""
+  const why = detailError || p.errors?.[0]?.message || ""
   return { store, disputes, orders90d, source: "orders" as const, error: why ? `dispute details unavailable: ${why.slice(0, 220)}` : null }
 }
 
