@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useState, useEffect } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@supabase/supabase-js"
 
 function Icon({ d, size = 14 }: { d: string; size?: number }) {
@@ -228,6 +228,20 @@ interface NavSection {
   collapsible?: boolean
 }
 
+// Extra words the sidebar search matches, beyond the page name and section.
+const SEARCH_WORDS: Record<string, string> = {
+  "/": "home overview pnl profit roas revenue spend kpi alerts today",
+  "/daily-report": "day yesterday coach report profit %",
+  "/calendar": "events todo to-do tasks must do season holiday black friday shipping cutoff",
+  "/product-performance": "products roas breakeven be roas margin cogs winners date",
+  "/opportunities": "competitor products launch season approve research trends new products",
+  "/product-importer": "import kopy listing redo listing gmc draft shopify",
+  "/product-alerts": "draft drafting sop rules kill exclude alerts problems fix",
+  "/competitors": "competitor tracker trendtrack stores visits trustpilot",
+  "/price-suggestions": "price pricing markup",
+  "/season-board": "season seasonal calendar trends",
+}
+
 const DONE_PAGES = new Set(["/", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts"])
 
 const NAV_SECTIONS: NavSection[] = [
@@ -326,8 +340,9 @@ function StoreSelector() {
 
 export function NavBar() {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [showAll, setShowAll] = useState(false)
+  const router = useRouter()
+  const [query, setQuery] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -345,11 +360,30 @@ export function NavBar() {
       })
   }, [])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)
+      if (e.key === "/" && !typing) {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   if (pathname === "/login") return null
 
-  const toggleSection = (label: string) => {
-    setCollapsed((prev) => ({ ...prev, [label]: !prev[label] }))
+  // All sections always open; the search box filters pages by name, section and keywords.
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const matches = (section: NavSection, item: NavSection["items"][number]) => {
+    if (!terms.length) return true
+    const hay = `${item.label} ${section.label} ${item.href} ${SEARCH_WORDS[item.href] || ""}`.toLowerCase()
+    return terms.every((t) => hay.includes(t))
   }
+  const visibleSections = NAV_SECTIONS.map((section) => ({ section, items: section.items.filter((i) => matches(section, i)) })).filter((x) => x.items.length > 0)
+  const firstHit = visibleSections[0]?.items[0]
 
   return (
     <>
@@ -406,46 +440,55 @@ export function NavBar() {
 
       <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
+      {/* Search */}
+      <div className="px-2.5 pt-2">
+        <div className="relative">
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth={2} strokeLinecap="round" className="absolute left-2.5 top-1/2 -translate-y-1/2">
+            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" />
+          </svg>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && firstHit) {
+                router.push(firstHit.href)
+                setQuery("")
+                setMobileOpen(false)
+              }
+              if (e.key === "Escape") setQuery("")
+            }}
+            placeholder="Search pages…  ( / )"
+            aria-label="Search pages"
+            className="w-full rounded-lg pl-7 pr-2 py-1.5 text-[11px] outline-none"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text)" }}
+          />
+        </div>
+      </div>
+
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}>
-        {NAV_SECTIONS.map((section) => {
-          const items = showAll ? section.items : section.items.filter(i => DONE_PAGES.has(i.href))
-          if (items.length === 0) return null
+        {visibleSections.length === 0 && (
+          <div className="text-[10px] px-2.5 py-2" style={{ color: "var(--text-dim)" }}>No page matches “{query}”.</div>
+        )}
+        {visibleSections.map(({ section, items }) => {
           return (
             <div key={section.label || "bottom"}>
               {section.label && (
                 <div
-                  className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-0.5 mt-2 cursor-pointer select-none flex items-center justify-between"
+                  className="text-[9px] font-semibold uppercase tracking-wider px-2.5 mb-0.5 mt-2 select-none"
                   style={{ color: "var(--text-dim)" }}
-                  onClick={() => section.label && toggleSection(section.label)}
                 >
                   {section.label}
-                  {items.length > 3 && (
-                    <svg
-                      width={8}
-                      height={8}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      style={{
-                        transform: collapsed[section.label] ? "rotate(-90deg)" : "rotate(0deg)",
-                        transition: "transform 0.15s",
-                      }}
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  )}
                 </div>
               )}
-              {!collapsed[section.label] &&
-                items.map((item) => {
+              {items.map((item) => {
                   const active = pathname === item.href
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={() => { setMobileOpen(false); setQuery("") }}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all mb-px relative overflow-hidden"
                       style={{
                         background: active ? "rgba(255,255,255,0.07)" : "transparent",
@@ -480,14 +523,6 @@ export function NavBar() {
           )
         })}
 
-        {/* Show all / show live toggle */}
-        <button
-          onClick={() => setShowAll(p => !p)}
-          className="w-full text-[9px] font-medium px-2.5 py-2 mt-1 rounded-lg text-left transition-colors"
-          style={{ color: "var(--text-dim)", background: "transparent" }}
-        >
-          {showAll ? "← Show live pages only" : `Show all pages (${NAV_SECTIONS.reduce((n, s) => n + s.items.filter(i => !DONE_PAGES.has(i.href)).length, 0)} more)`}
-        </button>
       </nav>
 
       <div className="mx-3 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
