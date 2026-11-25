@@ -366,7 +366,11 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreCo
         errors.push(`${store}: no Shopify token (${shopifyConfig.envKey} or client credentials)`)
       }
     } catch (e: unknown) {
-      errors.push(`${store}: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = e instanceof Error ? e.message : String(e)
+      // 403 = the store's app token has no read_orders scope (it was made for
+      // sessions / read_reports). Not an outage: ShipGoods sales below cover it,
+      // scaled to the real paid order totals, so don't show it as an error.
+      if (!/HTTP 403/.test(msg)) errors.push(`${store}: ${msg}`)
     }
   }
   if (sales.size === 0) {
