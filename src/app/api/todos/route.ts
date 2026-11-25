@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchEurRates } from "@/lib/currency"
 import { buildAutoTodos, amsterdamToday } from "@/lib/todo-rules"
+import { complaintEvents, riskyProducts, daysAgo } from "@/lib/product-complaints"
 
 export const dynamic = "force-dynamic"
 
@@ -19,6 +20,16 @@ export async function GET() {
     db.from("refresh_log").select("status,error,completed_at").order("id", { ascending: false }).limit(1),
     db.from("todos").select("*").order("created_at", { ascending: true }),
   ])
+  // Risky products (2+ complaints in 7 days) not told to the supplier yet
+  const [rref, rtix, rflags] = await Promise.all([
+    db.from("cs_refunds").select("store,refund_date,order_number,reason,reason_note,conversation_url,items").gte("refund_date", daysAgo(7)),
+    db.from("cs_tickets").select("*").eq("complaint", true),
+    db.from("cs_product_flags").select("store,product_title,status").eq("kind", "risky"),
+  ])
+  const handled = new Set((rflags.data || []).filter((f) => ["supplier_told", "cleared"].includes(f.status)).map((f) => `${f.store}|${String(f.product_title).trim().toLowerCase()}`))
+  const risky = riskyProducts(complaintEvents(rref.data || [], rtix.data || []))
+    .filter((r) => !handled.has(r.key))
+    .map((r) => ({ store: r.store, product: r.product, complaints: r.events.length, reasons: Array.from(new Set(r.events.map((e) => e.reasonLabel))).join(", ") }))
   // Latest Season Board keyword upload per country (for the 3-monthly refresh reminder)
   const seasonUpdated: Record<string, string | null> = {}
   await Promise.all(["US", "UK", "IE"].map(async (c) => {
@@ -40,6 +51,7 @@ export async function GET() {
     hasSessions: (ses.data || []).length > 0,
     lastRefresh: log.data?.[0] || null,
     seasonUpdated,
+    riskyProducts: risky,
   })
 
   const rows = todos.data || []

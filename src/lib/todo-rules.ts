@@ -40,6 +40,8 @@ export type TodoInput = {
   lastRefresh: { status: string; error: string | null; completed_at: string | null; started_at?: string | null } | null
   // Season Board: latest keyword upload per country (US / UK / IE), null = never uploaded
   seasonUpdated?: Record<string, string | null>
+  // Risky Products: 2+ complaints in 7 days, supplier not told yet
+  riskyProducts?: { store: string; product: string; complaints: number; reasons: string }[]
 }
 
 export function buildAutoTodos(input: TodoInput): AutoTodo[] {
@@ -243,6 +245,20 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
       fix: `Ask Claude "refresh the Season Board keywords for ${country}": it pulls Keyword Planner ideas (winter + summer seed words, last 12 months) and the Google Trends pattern per clothing type, then re-uploads. Or upload a Keyword Planner export yourself on the Season Board.`,
       href: "/season-board",
       hrefLabel: "Season Board",
+    })
+  }
+
+  for (const r of input.riskyProducts || []) {
+    todos.push({
+      key: `risky:${r.store}:${r.product.toLowerCase()}:${today}`,
+      priority: "high",
+      store: r.store,
+      title: `Tell the supplier: ${r.product}`,
+      why: `${r.complaints} complaints in the last 7 days (${r.reasons}).`,
+      source: "Risky Products (2+ complaints in 7 days)",
+      fix: "On Risky Products, copy the supplier message, send it with photos and order numbers in the supplier WhatsApp group, log it in the inbound sheet, then mark it 'supplier told' (CS playbook 9.5).",
+      href: "/risky-products",
+      hrefLabel: "Risky Products",
     })
   }
 
