@@ -55,6 +55,36 @@ export async function fetchShopifyRevenueAndRefunds(
   return { revenue: aggregateRevenue(rows.filter((r) => !r.order_refund_id)), refunds: extractRefunds(rows) }
 }
 
+export interface GoogleProductSpend {
+  store: string
+  productId: string // Shopify product id
+  title: string // product title without the " / variant" suffix
+  spend: number
+}
+
+// Google Shopping spend per product. product_item_id looks like
+// "shopify_<country>_<productId>_<variantId>"; variants are summed per product.
+export async function fetchGoogleProductSpend(dateFrom: string, dateTo: string): Promise<GoogleProductSpend[]> {
+  const rows = await fetchWindsor("google_ads", ["date", "account_name", "product_item_id", "product_title", "spend"], dateFrom, dateTo)
+  const byKey = new Map<string, GoogleProductSpend>()
+  for (const r of rows) {
+    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+    if (mapping?.channel !== "Google") continue
+    const m = String(r.product_item_id || "").match(/^shopify_[a-z]+_(\d+)_/i)
+    if (!m) continue
+    const key = `${mapping.store}|${m[1]}`
+    const entry = byKey.get(key) || {
+      store: mapping.store,
+      productId: m[1],
+      title: String(r.product_title || "").replace(/\s+\/\s+[^/]+$/, "").trim(),
+      spend: 0,
+    }
+    entry.spend += Number(r.spend) || 0
+    byKey.set(key, entry)
+  }
+  return Array.from(byKey.values())
+}
+
 // Shopify order id -> order total actually paid (shop currency), order rows only.
 export async function fetchShopifyOrderTotals(dateFrom: string, dateTo: string): Promise<Map<string, number>> {
   const rows = await fetchWindsor("shopify", ["date", "account_name", "order_id", "order_total_price", "order_refund_id"], dateFrom, dateTo)

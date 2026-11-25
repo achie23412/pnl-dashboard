@@ -2,6 +2,9 @@
 import { useEffect, useState, useMemo } from "react"
 import { STORES, STORE_COLORS } from "@/lib/constants"
 import type { StoreName } from "@/lib/constants"
+import { STORE_CURRENCY } from "@/lib/currency"
+import { DatePicker } from "@/components/DatePicker"
+import { getDateRange } from "@/lib/date-range"
 
 interface CatalogProduct {
   product_name: string
@@ -13,10 +16,23 @@ interface CatalogProduct {
   units_sold: number
   sales_revenue: number
   cogs_source: "shipgoods" | "sheet" | "none"
+  ad_spend: number | null
+  roas: number | null
+  be_roas: number | null
+}
+
+interface StoreSummary {
+  store: string
+  revenue: number
+  ad_spend: number
+  roas: number | null
+  be_roas: number | null
+  product_level_spend: boolean
 }
 
 interface CatalogResponse {
   products: CatalogProduct[]
+  stores?: StoreSummary[]
   total_products: number
   products_with_sales: number
   products_with_cogs: number
@@ -30,7 +46,13 @@ function fmt(n: number, decimals = 0): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
-type SortKey = "units" | "revenue" | "profit" | "margin" | "cogs"
+const CURRENCY_SYMBOL: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" }
+const sym = (store: string) => CURRENCY_SYMBOL[STORE_CURRENCY[store] || "EUR"] || ""
+const fmtRoas = (r: number | null) => (r == null ? "—" : `${r.toFixed(2)}x`)
+const roasColor = (roas: number | null, be: number | null) =>
+  roas == null ? "var(--text-dim)" : be == null ? "var(--text)" : roas >= be ? "var(--green)" : "var(--red)"
+
+type SortKey = "units" | "revenue" | "profit" | "margin" | "cogs" | "spend" | "roas" | "be"
 type SortDir = "asc" | "desc"
 
 export default function ProductPerformancePage() {
@@ -42,11 +64,17 @@ export default function ProductPerformancePage() {
   const [dataErrors, setDataErrors] = useState<string[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [salesSources, setSalesSources] = useState<Record<string, string>>({})
+  const [storeSummaries, setStoreSummaries] = useState<StoreSummary[]>([])
+  const [preset, setPreset] = useState("last_30d")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
+  const [dateFrom, dateTo] = getDateRange(preset, customFrom, customTo)
   const [summary, setSummary] = useState({ total: 0, withSales: 0, withCogs: 0, totalUnits: 0, totalRevenue: 0 })
 
   useEffect(() => {
     setLoading(true)
-    fetch("/api/product-catalog?store=all")
+    setLoadError(null)
+    fetch(`/api/product-catalog?store=all&from=${dateFrom}&to=${dateTo}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`Product API returned HTTP ${r.status}`)
         return r.json()
@@ -55,6 +83,7 @@ export default function ProductPerformancePage() {
         setProducts(data.products || [])
         setDataErrors(data.errors || [])
         setSalesSources(data.sales_sources || {})
+        setStoreSummaries(data.stores || [])
         setSummary({
           total: data.total_products,
           withSales: data.products_with_sales,
@@ -68,11 +97,12 @@ export default function ProductPerformancePage() {
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
       })
-  }, [])
+  }, [dateFrom, dateTo])
 
   const filtered = useMemo(() => {
     let list = store === "Overall" ? products : products.filter((p) => p.store === store)
-    list = list.filter((p) => p.units_sold > 0)
+    // products with sales, plus products with ad spend but no sales (ROAS 0)
+    list = list.filter((p) => p.units_sold > 0 || (p.ad_spend || 0) > 0)
 
     return [...list].sort((a, b) => {
       const profitA = a.cogs_usd != null ? a.sales_revenue - a.cogs_usd * a.units_sold : a.sales_revenue
@@ -87,6 +117,9 @@ export default function ProductPerformancePage() {
         case "profit": valA = profitA; valB = profitB; break
         case "margin": valA = marginA; valB = marginB; break
         case "cogs": valA = a.cogs_usd || 0; valB = b.cogs_usd || 0; break
+        case "spend": valA = a.ad_spend ?? -1; valB = b.ad_spend ?? -1; break
+        case "roas": valA = a.roas ?? -1; valB = b.roas ?? -1; break
+        case "be": valA = a.be_roas ?? -1; valB = b.be_roas ?? -1; break
         default: valA = a.sales_revenue; valB = b.sales_revenue
       }
       return sortDir === "desc" ? valB - valA : valA - valB
@@ -111,10 +144,24 @@ export default function ProductPerformancePage() {
   return (
     <div className="p-6 min-h-screen" style={{ background: "var(--bg)" }}>
       <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>Front End → Product Performance</div>
-      <h1 className="text-[20px] font-bold mb-1" style={{ color: "var(--text)" }}>Product Performance</h1>
-      <p className="text-[12px] mb-5 max-w-3xl" style={{ color: "var(--text-muted)" }}>
-        Every product ranked by contribution margin. Last 30 days.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-[20px] font-bold mb-1" style={{ color: "var(--text)" }}>Product Performance</h1>
+          <p className="text-[12px] max-w-3xl" style={{ color: "var(--text-muted)" }}>
+            Every product with its ROAS against its breakeven ROAS. {dateFrom} → {dateTo}.
+          </p>
+        </div>
+        <DatePicker
+          preset={preset}
+          customFrom={customFrom}
+          customTo={customTo}
+          onChange={(p, f, t) => {
+            setPreset(p)
+            if (f) setCustomFrom(f)
+            if (t) setCustomTo(t)
+          }}
+        />
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
@@ -123,7 +170,7 @@ export default function ProductPerformancePage() {
           { label: "With sales", value: summary.withSales.toString() },
           { label: "With COGS", value: summary.withCogs.toString() },
           { label: "Units sold", value: fmt(summary.totalUnits) },
-          { label: "Revenue", value: `$${fmt(summary.totalRevenue)}`, color: "var(--green)" },
+          { label: "Product revenue (mixed currencies)", value: fmt(summary.totalRevenue), color: "var(--green)" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl px-4 py-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <div className="text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>{s.label}</div>
@@ -139,6 +186,46 @@ export default function ProductPerformancePage() {
           {dataErrors.map((e) => (
             <div key={e} className="text-[10px]" style={{ color: "var(--orange)" }}>{e}</div>
           ))}
+        </div>
+      )}
+
+      {/* ROAS vs breakeven per store (revenue + ad spend as on the Main Hub, all channels) */}
+      {!loading && storeSummaries.length > 0 && (
+        <div className="glass rounded-xl overflow-hidden mb-5">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr>
+                {["Store", "Revenue", "Ad spend", "ROAS", "Breakeven ROAS", "Status", "Product-level spend"].map((h, i) => (
+                  <th key={h} className={`${i === 0 ? "text-left" : "text-right"} px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider`} style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {storeSummaries
+                .filter((s) => store === "Overall" || s.store === store)
+                .map((s) => {
+                  const above = s.roas != null && s.be_roas != null ? s.roas >= s.be_roas : null
+                  return (
+                    <tr key={s.store}>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: "var(--text)" }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: STORE_COLORS[s.store] || "#666" }} />
+                          {s.store}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>{sym(s.store)}{fmt(s.revenue)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{sym(s.store)}{fmt(s.ad_spend)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: roasColor(s.roas, s.be_roas) }}>{fmtRoas(s.roas)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{fmtRoas(s.be_roas)}</td>
+                      <td className="px-3 py-2 text-right text-[10px] font-medium" style={{ color: above == null ? "var(--text-dim)" : above ? "var(--green)" : "var(--red)" }}>
+                        {above == null ? "—" : above ? "Above breakeven" : "Below breakeven"}
+                      </td>
+                      <td className="px-3 py-2 text-right text-[10px]" style={{ color: "var(--text-dim)" }}>{s.product_level_spend ? "Yes (Google)" : "No (Meta/TikTok: store level only)"}</td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -186,6 +273,9 @@ export default function ProductPerformancePage() {
                   <th className="text-left px-3 py-2.5 text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Store</th>
                   <SortHeader label="Units" k="units" />
                   <SortHeader label="Revenue" k="revenue" />
+                  <SortHeader label="Ad spend" k="spend" />
+                  <SortHeader label="ROAS" k="roas" />
+                  <SortHeader label="BE ROAS" k="be" />
                   <SortHeader label="COGS/unit" k="cogs" />
                   <SortHeader label="Profit" k="profit" />
                   <SortHeader label="Margin" k="margin" />
@@ -194,7 +284,7 @@ export default function ProductPerformancePage() {
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales in this period</td></tr>
+                  <tr><td colSpan={11} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales or ad spend in this period</td></tr>
                 ) : filtered.map((p, i) => {
                   const totalCogs = p.cogs_usd != null ? p.cogs_usd * p.units_sold : null
                   const profit = totalCogs != null ? p.sales_revenue - totalCogs : null
@@ -220,7 +310,10 @@ export default function ProductPerformancePage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{p.units_sold}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>${fmt(p.sales_revenue)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>{sym(p.store)}{fmt(p.sales_revenue)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{p.ad_spend != null ? `${sym(p.store)}${fmt(p.ad_spend)}` : "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold" style={{ color: roasColor(p.roas, p.be_roas) }}>{fmtRoas(p.roas)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{fmtRoas(p.be_roas)}</td>
                       <td className="px-3 py-2 text-right tabular-nums" style={{ color: p.cogs_usd != null ? "var(--orange)" : "var(--text-dim)" }}>
                         {p.cogs_usd != null ? `$${p.cogs_usd.toFixed(2)}` : "—"}
                       </td>
@@ -242,7 +335,7 @@ export default function ProductPerformancePage() {
             </table>
           </div>
           <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            {filtered.length} products · Revenue and COGS in original store currency (not EUR-converted) · SG = ShipGoods actual, Sheet = launch sheet
+            {filtered.length} products · Revenue and ad spend in store currency, COGS/unit in USD · ROAS per product = Google Shopping spend (Meta/TikTok stores show — ; see the store table) · BE ROAS = 1 ÷ (1 − COGS% − transaction fee%) · Green = ROAS at or above breakeven · SG = ShipGoods actual, Sheet = launch sheet
             {Object.keys(salesSources).length > 0 && (
               <> · Sales from: {Object.entries(salesSources).map(([s, src]) => `${s} ${src === "shopify" ? "Shopify" : src === "shipgoods" ? "ShipGoods (fulfilled orders)" : "none"}`).join(", ")}</>
             )}

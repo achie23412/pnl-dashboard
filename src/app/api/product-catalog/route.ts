@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server"
-import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES } from "@/lib/constants"
+import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
-import { fetchShopifyOrderTotals } from "@/lib/windsor"
+import { fetchShopifyOrderTotals, fetchGoogleProductSpend } from "@/lib/windsor"
+import type { GoogleProductSpend } from "@/lib/windsor"
+import { STORE_CURRENCY, fetchLatestEurRates } from "@/lib/currency"
+import type { Currency } from "@/lib/currency"
+import { getServiceClient } from "@/lib/supabase"
 
 export const maxDuration = 60
 
 interface ShopifyLineItem {
+  product_id?: number | null
   title: string
   quantity: number
   price: string
@@ -94,6 +99,7 @@ async function fetchCogsProducts(store: string): Promise<CogsRow[]> {
 }
 
 interface ShipgoodsItem {
+  product_id?: string
   title: string
   unit_cost: number
   quantity: number
@@ -117,7 +123,7 @@ interface ShipgoodsResponse {
 }
 
 type SgCogsMap = Map<string, { avgCogs: number; totalQty: number }>
-type SalesMap = Map<string, { qty: number; revenue: number }>
+type SalesMap = Map<string, { qty: number; revenue: number; productIds: string[] }>
 
 interface ShipgoodsData {
   // keyed by ShipGoods store_name (= the *.myshopify.com prefix, e.g. "xq9pn7-dw")
@@ -138,16 +144,14 @@ const SG_MAX_PAGES = 30
 // One pass over ShipGoods order-cost-items for the last 30 days, split per store.
 // Page 1 tells us total_pages; the remaining pages are fetched in parallel
 // (one page takes ~7s, so sequential reads would hit the 60s function limit).
-async function fetchShipgoodsData(): Promise<ShipgoodsData> {
+async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<ShipgoodsData> {
   const token = process.env.SHIPGOODS_TOKEN
   const base = process.env.SHIPGOODS_BASE || "https://dashboard.shipgoods.eu"
   const empty: ShipgoodsData = { cogsByStore: new Map(), salesByStore: new Map(), error: null }
   if (!token) return { ...empty, error: "ShipGoods: SHIPGOODS_TOKEN not set" }
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-  const today = new Date().toISOString().slice(0, 10)
   const fetchPage = async (page: number): Promise<ShipgoodsResponse> => {
-    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${thirtyDaysAgo}&date_to=${today}&per_page=100&page=${page}`
+    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${dateFrom}&date_to=${dateTo}&per_page=100&page=${page}`
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(SG_TIMEOUT_MS),
@@ -163,7 +167,7 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
   // total (Windsor, matched on order id) so product revenue matches what was paid.
   // Started now, awaited after the ShipGoods pages, so both run in parallel.
   const errors: string[] = []
-  const orderTotalsPromise = fetchShopifyOrderTotals(thirtyDaysAgo, today).catch((e: unknown) => {
+  const orderTotalsPromise = fetchShopifyOrderTotals(dateFrom, dateTo).catch((e: unknown) => {
     errors.push(`Windsor order totals (product revenue shown at list price): ${e instanceof Error ? e.message : String(e)}`)
     return new Map<string, number>()
   })
@@ -195,9 +199,10 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
         c.totalCost += (Number(item.unit_cost) || 0) * qty
         c.totalQty += qty
         costs.set(item.title, c)
-        const s = sales.get(item.title) || { qty: 0, revenue: 0 }
+        const s = sales.get(item.title) || { qty: 0, revenue: 0, productIds: [] }
         s.qty += qty
         s.revenue += (Number(item.sold_price) || 0) * qty * scale
+        if (item.product_id && s.productIds.indexOf(String(item.product_id)) < 0) s.productIds.push(String(item.product_id))
         sales.set(item.title, s)
       }
     }
@@ -236,11 +241,10 @@ async function fetchShipgoodsData(): Promise<ShipgoodsData> {
   return { cogsByStore, salesByStore, error: errors.length > 0 ? errors.join("; ") : null }
 }
 
-async function fetchShopifySales(domain: string, token: string): Promise<SalesMap> {
+async function fetchShopifySales(domain: string, token: string, dateFrom: string, dateTo: string): Promise<SalesMap> {
   const sales: SalesMap = new Map()
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-  let url: string | null = `https://${domain}/admin/api/2024-10/orders.json?status=any&created_at_min=${thirtyDaysAgo}T00:00:00Z&limit=250&fields=id,created_at,line_items,cancelled_at,financial_status`
+  let url: string | null = `https://${domain}/admin/api/2024-10/orders.json?status=any&created_at_min=${dateFrom}T00:00:00Z&created_at_max=${dateTo}T23:59:59Z&limit=250&fields=id,created_at,line_items,cancelled_at,financial_status`
   let pages = 0
 
   while (url && pages < 10) {
@@ -259,9 +263,10 @@ async function fetchShopifySales(domain: string, token: string): Promise<SalesMa
       if (order.cancelled_at) continue
       for (const item of order.line_items) {
         const title = item.title
-        const existing = sales.get(title) || { qty: 0, revenue: 0 }
+        const existing = sales.get(title) || { qty: 0, revenue: 0, productIds: [] }
         existing.qty += item.quantity
         existing.revenue += parseFloat(item.price) * item.quantity
+        if (item.product_id && existing.productIds.indexOf(String(item.product_id)) < 0) existing.productIds.push(String(item.product_id))
         sales.set(title, existing)
       }
     }
@@ -284,6 +289,28 @@ interface CatalogProduct {
   units_sold: number
   sales_revenue: number
   cogs_source: "shipgoods" | "sheet" | "none"
+  // Ad spend attributed to this product (Google Shopping, matched on Shopify
+  // product id). null = no per-product spend for this store (Meta/TikTok).
+  ad_spend: number | null
+  roas: number | null
+  // Breakeven ROAS = 1 / (1 - COGS% - transaction fee %), from this product's
+  // COGS per unit (converted to store currency) and its average selling price.
+  be_roas: number | null
+}
+
+interface StoreContext {
+  // Shopify product id -> spend, for stores with per-product (Google) spend
+  productSpend: Map<string, number> | null
+  // multiply a USD COGS amount by this to get store currency
+  usdToStore: number
+  txnRate: number
+}
+
+function beRoas(cogsUsdPerUnit: number | null, units: number, revenue: number, ctx: StoreContext): number | null {
+  if (cogsUsdPerUnit == null || units <= 0 || revenue <= 0) return null
+  const cogsPct = (cogsUsdPerUnit * ctx.usdToStore * units) / revenue
+  const margin = 1 - cogsPct - ctx.txnRate
+  return margin > 0 ? 1 / margin : null
 }
 
 function findShipgoodsCogs(
@@ -314,7 +341,7 @@ interface StoreBuildResult {
   errors: string[]
 }
 
-async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<StoreBuildResult> {
+async function buildStoreProducts(store: string, sg: ShipgoodsData, ctx: StoreContext, dateFrom: string, dateTo: string): Promise<StoreBuildResult> {
   const errors: string[] = []
   const cogsProducts = await fetchCogsProducts(store)
   const sgKey = shipgoodsStoreKey(store)
@@ -330,7 +357,7 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<Sto
     try {
       const token = await getShopifyToken(shopifyConfig.domain, shopifyConfig.envKey)
       if (token) {
-        sales = await fetchShopifySales(shopifyConfig.domain, token)
+        sales = await fetchShopifySales(shopifyConfig.domain, token, dateFrom, dateTo)
         salesSource = "shopify"
       } else {
         errors.push(`${store}: no Shopify token (${shopifyConfig.envKey} or client credentials)`)
@@ -390,6 +417,12 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<Sto
       }
     }
 
+    let adSpend: number | null = null
+    if (ctx.productSpend) {
+      adSpend = 0
+      for (const id of s.productIds) adSpend += ctx.productSpend.get(id) || 0
+      for (const id of s.productIds) ctx.productSpend.delete(id) // count each product's spend once
+    }
     catalog.push({
       product_name: title,
       store,
@@ -400,6 +433,9 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<Sto
       units_sold: s.qty,
       sales_revenue: s.revenue,
       cogs_source: cogsSource,
+      ad_spend: adSpend,
+      roas: adSpend != null && adSpend > 0 ? s.revenue / adSpend : null,
+      be_roas: beRoas(cogsUsd, s.qty, s.revenue, ctx),
     })
   }
 
@@ -434,6 +470,9 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<Sto
       units_sold: 0,
       sales_revenue: 0,
       cogs_source: sgMatch ? "shipgoods" : "sheet",
+      ad_spend: null,
+      roas: null,
+      be_roas: null,
     })
   }
 
@@ -468,11 +507,47 @@ async function buildStoreProducts(store: string, sg: ShipgoodsData): Promise<Sto
         units_sold: 0,
         sales_revenue: 0,
         cogs_source: "shipgoods",
+        ad_spend: null,
+        roas: null,
+        be_roas: null,
       })
     }
   }
 
   return { products: catalog, salesSource, errors }
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+type DbRow = { store: string; revenue?: number | string; spend?: number | string }
+
+// Supabase returns at most 1000 rows per request, so page through long ranges.
+async function selectAllInRange(
+  db: ReturnType<typeof getServiceClient>,
+  table: string,
+  columns: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<{ data: DbRow[]; error: { message: string } | null }> {
+  const out: DbRow[] = []
+  const PAGE = 1000
+  for (let offset = 0; offset < 50000; offset += PAGE) {
+    const { data, error } = await db.from(table).select(columns).gte("date", dateFrom).lte("date", dateTo).order("date").range(offset, offset + PAGE - 1)
+    if (error) return { data: out, error: { message: error.message } }
+    const rows = (data || []) as unknown as DbRow[]
+    out.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return { data: out, error: null }
+}
+
+interface StoreSummary {
+  store: string
+  revenue: number // Shopify revenue (daily_revenue, same source as Main Hub), store currency
+  ad_spend: number // all channels (daily_spend), same as Main Hub
+  roas: number | null
+  be_roas: number | null // from product COGS% in this period + transaction fees
+  product_level_spend: boolean // true when per-product spend exists (Google)
 }
 
 export async function GET(req: Request) {
@@ -483,23 +558,106 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "store param required" }, { status: 400 })
   }
 
-  // Always fetch ShipGoods — primary COGS source and sales fallback
-  const sg = await fetchShipgoodsData()
+  const today = new Date().toISOString().slice(0, 10)
+  const defFrom = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10)
+  const qFrom = searchParams.get("from") || ""
+  const qTo = searchParams.get("to") || ""
+  const dateFrom = ISO_DATE.test(qFrom) ? qFrom : defFrom
+  const dateTo = ISO_DATE.test(qTo) ? qTo : today
+
+  const errors: string[] = []
+  const storeNames = store === "all" ? Object.keys(SHOPIFY_STORES) : [store]
+
+  // ShipGoods (COGS + sales fallback), Google per-product spend, FX and the
+  // store totals from Supabase all load in parallel.
+  const db = getServiceClient()
+  const [sg, googleSpend, fx, revRes, spendRes] = await Promise.all([
+    fetchShipgoodsData(dateFrom, dateTo),
+    fetchGoogleProductSpend(dateFrom, dateTo).catch((e: unknown) => {
+      errors.push(`Google product spend: ${e instanceof Error ? e.message : String(e)}`)
+      return [] as GoogleProductSpend[]
+    }),
+    fetchLatestEurRates(),
+    selectAllInRange(db, "daily_revenue", "date,store,revenue", dateFrom, dateTo),
+    selectAllInRange(db, "daily_spend", "date,store,channel,spend", dateFrom, dateTo),
+  ])
+  if (sg.error) errors.push(sg.error)
+  if (revRes.error) errors.push(`Store revenue: ${revRes.error.message}`)
+  if (spendRes.error) errors.push(`Store ad spend: ${spendRes.error.message}`)
+
+  const perEur = (cur: Currency) => (cur === "EUR" ? 1 : fx[cur])
+  const ctxFor = (s: string): StoreContext => {
+    const cur = STORE_CURRENCY[s] || "EUR"
+    const isGoogle = Object.values(WINDSOR_ACCOUNT_MAP).some((m) => m.store === s && m.channel === "Google")
+    let productSpend: Map<string, number> | null = null
+    if (isGoogle) {
+      productSpend = new Map()
+      for (const g of googleSpend) if (g.store === s) productSpend.set(g.productId, g.spend)
+    }
+    return { productSpend, usdToStore: perEur(cur) / perEur("USD"), txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035 }
+  }
 
   let allProducts: CatalogProduct[] = []
-  const errors: string[] = sg.error ? [sg.error] : []
   const salesSources: Record<string, StoreBuildResult["salesSource"]> = {}
+  const stores: StoreSummary[] = []
 
-  const storeNames = store === "all" ? Object.keys(SHOPIFY_STORES) : [store]
-  const results = await Promise.allSettled(storeNames.map((s) => buildStoreProducts(s, sg)))
+  const contexts = storeNames.map(ctxFor)
+  const results = await Promise.allSettled(storeNames.map((s, i) => buildStoreProducts(s, sg, contexts[i], dateFrom, dateTo)))
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") {
-      allProducts = allProducts.concat(r.value.products)
-      errors.push(...r.value.errors)
-      salesSources[storeNames[i]] = r.value.salesSource
-    } else {
-      errors.push(`${storeNames[i]}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+    const s = storeNames[i]
+    const ctx = contexts[i]
+    if (r.status !== "fulfilled") {
+      errors.push(`${s}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+      return
     }
+    const products = r.value.products
+    errors.push(...r.value.errors)
+    salesSources[s] = r.value.salesSource
+
+    // Google spend on products that had no sales in this period (ROAS 0)
+    if (ctx.productSpend) {
+      ctx.productSpend.forEach((spend, productId) => {
+        if (spend <= 0) return
+        const g = googleSpend.find((x) => x.store === s && x.productId === productId)
+        products.push({
+          product_name: g?.title || `Product ${productId}`,
+          store: s,
+          cogs_usd: null,
+          retail_price: "",
+          cog_pct: "",
+          category: "",
+          units_sold: 0,
+          sales_revenue: 0,
+          cogs_source: "none",
+          ad_spend: spend,
+          roas: 0,
+          be_roas: null,
+        })
+      })
+    }
+    allProducts = allProducts.concat(products)
+
+    // Store totals: revenue + spend exactly as the Main Hub (Supabase), BE ROAS
+    // from the COGS% of this store's products with known COGS.
+    const revenue = (revRes.data || []).filter((x) => x.store === s).reduce((a, x) => a + (Number(x.revenue) || 0), 0)
+    const adSpend = (spendRes.data || []).filter((x) => x.store === s).reduce((a, x) => a + (Number(x.spend) || 0), 0)
+    let cogsRev = 0
+    let cogsAmt = 0
+    for (const p of products) {
+      if (p.cogs_usd != null && p.units_sold > 0) {
+        cogsRev += p.sales_revenue
+        cogsAmt += p.cogs_usd * ctx.usdToStore * p.units_sold
+      }
+    }
+    const margin = cogsRev > 0 ? 1 - cogsAmt / cogsRev - ctx.txnRate : null
+    stores.push({
+      store: s,
+      revenue: Math.round(revenue * 100) / 100,
+      ad_spend: Math.round(adSpend * 100) / 100,
+      roas: adSpend > 0 ? revenue / adSpend : null,
+      be_roas: margin != null && margin > 0 ? 1 / margin : null,
+      product_level_spend: ctx.productSpend != null,
+    })
   })
 
   allProducts.sort((a, b) => b.units_sold - a.units_sold)
@@ -514,6 +672,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     products: allProducts,
+    stores,
     total_products: allProducts.length,
     products_with_sales: withSales.length,
     products_with_cogs: withCogs.length,
@@ -524,7 +683,7 @@ export async function GET(req: Request) {
     most_sold: mostSold
       ? { name: mostSold.product_name, store: mostSold.store, units: mostSold.units_sold }
       : null,
-    period: "last_30d",
+    period: { from: dateFrom, to: dateTo },
     sales_sources: salesSources,
     errors,
   })
