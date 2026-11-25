@@ -151,6 +151,14 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
     })
   }
 
+  todos.push({
+    key: `coach-report:${today}`,
+    priority: "normal",
+    title: "Send P&L to coach",
+    why: "Per store: date, revenue, spend, ROAS, COGS % — plus a screenshot of the full-month dashboard.",
+    source: "Coach requirement (Daily Report page)",
+  })
+
   // ── Data health
   const lr = input.lastRefresh
   if (lr) {
