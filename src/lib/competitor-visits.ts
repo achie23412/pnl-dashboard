@@ -1,8 +1,12 @@
-// Competitor monthly visitors (TrendTrack) → Season Board lines and "Peak starting" alerts. Server only.
+// Competitor monthly visitors (TrendTrack) → Competitor Tracker numbers, Season Board lines and
+// "Peak starting" alerts. Server only.
 //
-// Snapshot (daily cron, free TrendTrack lookups): every competitor's current monthly visits are
-// saved for the current month. Once per store, its monthly traffic history is copied too, so the
-// lines have the past months straight away. Table: competitor_visits (supabase/competitor-visits.sql).
+// Monthly re-check (cron every morning; it only works on stores not refreshed since the 1st, so in
+// practice it runs on the 1st of each month and finishes any rest on the next mornings):
+//   - free TrendTrack lookup per competitor → visits of the last full month + active ads
+//   - Competitor Tracker: Visits, Last month (= last full month), MoM % (vs the month before)
+//   - competitor_visits: one row per store per month, so the Season Board lines build history
+//   - once per store, TrendTrack's monthly traffic history (metered; skipped while out of credits)
 //
 // Lines: total visitors of the competitors in a Season Board category (Coats & Jackets,
 // Knitwear, Dresses…; general stores = "All fashion"), per market.
@@ -29,9 +33,24 @@ const addMonths = (ym: string, n: number) => {
   d.setUTCMonth(d.getUTCMonth() + n)
   return monthStart(d)
 }
+// TrendTrack's "monthly visits" is the latest full month: on 26 Nov that's October.
+export const lastFullMonth = (d = new Date()) => addMonths(monthStart(d), -1)
 const toMarket = (m: string) => (m.toUpperCase() === "GB" ? "UK" : m.toUpperCase())
 
-type Competitor = { domain: string; store_name: string | null; niche: string | null; markets: string[] | null; status: string | null; season_category: string | null; trendtrack_id: string | null; tt_history_at: string | null }
+type Competitor = {
+  domain: string
+  store_name: string | null
+  niche: string | null
+  markets: string[] | null
+  status: string | null
+  season_category: string | null
+  trendtrack_id: string | null
+  tt_history_at: string | null
+  visits_month: string | null // "2026-10": the month last_full_month_visits is for
+  last_full_month_visits: number | null
+  prior_month_visits: number | null
+  last_synced: string | null
+}
 
 // Season Board category of a competitor: its own setting, else from niche and name, else general.
 export function competitorCategory(c: Pick<Competitor, "season_category" | "niche" | "store_name">): string {
@@ -44,77 +63,93 @@ export function competitorCategory(c: Pick<Competitor, "season_category" | "nich
 async function loadCompetitors(): Promise<Competitor[]> {
   const { data, error } = await getServiceClient()
     .from("competitors")
-    .select("domain,store_name,niche,markets,status,season_category,trendtrack_id,tt_history_at")
+    .select("domain,store_name,niche,markets,status,season_category,trendtrack_id,tt_history_at,visits_month,last_full_month_visits,prior_month_visits,last_synced")
     .not("domain", "is", null)
   if (error) throw new Error(`competitors: ${error.message}`)
   return ((data || []) as Competitor[]).filter((c) => c.domain && c.status !== "removed" && c.status !== "rejected")
 }
 
-// ------------------------------------------------------------------ snapshot
+// ------------------------------------------------------------------ monthly re-check
 
 export interface SnapshotResult {
   ok: boolean
+  month: string // the full month the numbers are for
   stores: number
-  snapshots: number
+  refreshed: number
   histories: number
   notFound: string[]
   errors: string[]
   remaining: number
+  historySkipped?: string
 }
 
-// Saves this month's visitors for every competitor not saved yet today, and copies the traffic
-// history of up to `historyLimit` stores that don't have it yet. Stops starting new stores after
-// `budgetMs`, so it fits one serverless call; the next run picks up the rest.
-export async function snapshotCompetitorVisits(opts: { budgetMs?: number; historyLimit?: number } = {}): Promise<SnapshotResult> {
+// Refreshes every competitor not refreshed since the 1st of this month (force = all), and copies
+// the traffic history of up to `historyLimit` stores that don't have it yet. Stops starting new
+// stores after `budgetMs`, so it fits one serverless call; the next run picks up the rest.
+export async function snapshotCompetitorVisits(opts: { budgetMs?: number; historyLimit?: number; force?: boolean } = {}): Promise<SnapshotResult> {
   const budget = opts.budgetMs ?? 45000
-  const historyLimit = opts.historyLimit ?? 25
+  let historiesLeft = opts.historyLimit ?? 25
   const started = Date.now()
-  const out: SnapshotResult = { ok: true, stores: 0, snapshots: 0, histories: 0, notFound: [], errors: [], remaining: 0 }
+  const month = lastFullMonth()
+  const ym = month.slice(0, 7)
+  const out: SnapshotResult = { ok: true, month: ym, stores: 0, refreshed: 0, histories: 0, notFound: [], errors: [], remaining: 0 }
   if (!hasTrendTrackKey()) return { ...out, ok: false, errors: ["TRENDTRACK_API_KEY is not set in Vercel"] }
 
   const db = getServiceClient()
   const comps = await loadCompetitors()
-  const month = monthStart()
-  const today = new Date().toISOString().slice(0, 10)
-  const { data: done } = await db.from("competitor_visits").select("domain,captured_at,source").eq("month", month)
-  const doneToday = new Set((done || []).filter((r) => r.source === "snapshot" && String(r.captured_at).slice(0, 10) === today).map((r) => r.domain))
-  // stores without history first, then the ones not refreshed today
-  const todo = comps.filter((c) => !doneToday.has(c.domain) || !c.tt_history_at).sort((a, b) => Number(!!a.tt_history_at) - Number(!!b.tt_history_at))
+  const thisMonthStart = monthStart()
+  const done = (c: Competitor) => c.visits_month === ym && !!c.last_synced && c.last_synced.slice(0, 10) >= thisMonthStart
+  const todo = comps.filter((c) => opts.force || !done(c) || !c.tt_history_at)
   out.stores = comps.length
-  let historiesLeft = historyLimit
+
+  // the month before, from saved history (for MoM when the store had no number for it yet)
+  const prevMonth = addMonths(month, -1)
+  const { data: prevRows } = await db.from("competitor_visits").select("domain,monthly_visits").eq("month", prevMonth)
+  const prevByDomain = new Map((prevRows || []).map((r) => [r.domain as string, Number(r.monthly_visits)]))
 
   const work = async (c: Competitor) => {
-    let id = c.trendtrack_id
-    let visits: number | null = null
-    const shop = await lookupShop(c.domain)
-    if (!shop) {
-      out.notFound.push(c.domain)
-      return
-    }
-    id = shop.id
-    visits = shop.monthlyVisits
-    const patch: Record<string, unknown> = { trendtrack_id: id, last_synced: new Date().toISOString() }
-    if (visits != null) {
-      patch.monthly_visits = visits
-      // history rows for this month win over a snapshot
-      await db.from("competitor_visits").upsert({ domain: c.domain, month, monthly_visits: visits, source: "snapshot", captured_at: new Date().toISOString() }, { onConflict: "domain,month" })
-      out.snapshots++
-    }
-    if (!c.tt_history_at && historiesLeft > 0) {
-      historiesLeft--
-      const t = await shopTraffic(id)
-      const rows = t.history.filter((h) => h.month < month).map((h) => ({ domain: c.domain, month: h.month, monthly_visits: h.visits, source: "history", captured_at: new Date().toISOString() }))
-      if (rows.length) await db.from("competitor_visits").upsert(rows, { onConflict: "domain,month" })
-      if (t.growth30d != null) patch.growth_30d = t.growth30d
-      if (visits == null && t.monthlyVisits != null) {
-        patch.monthly_visits = t.monthlyVisits
-        await db.from("competitor_visits").upsert({ domain: c.domain, month, monthly_visits: t.monthlyVisits, source: "snapshot", captured_at: new Date().toISOString() }, { onConflict: "domain,month" })
-        out.snapshots++
+    const now = new Date().toISOString()
+    const patch: Record<string, unknown> = {}
+    if (opts.force || !done(c)) {
+      const shop = await lookupShop(c.domain)
+      if (!shop) {
+        out.notFound.push(c.domain)
+        await db.from("competitors").update({ last_synced: now }).eq("domain", c.domain)
+        return
       }
-      patch.tt_history_at = new Date().toISOString()
-      out.histories++
+      Object.assign(patch, { trendtrack_id: shop.id, last_synced: now, last_checked: now.slice(0, 10) })
+      if (shop.activeAds != null) patch.active_ads = shop.activeAds
+      if (shop.monthlyVisits != null) {
+        patch.monthly_visits = shop.monthlyVisits
+        // new month: last month's number becomes the "prior" one
+        if (c.visits_month !== ym) {
+          patch.prior_month_visits = c.visits_month === prevMonth.slice(0, 7) ? c.last_full_month_visits : prevByDomain.get(c.domain) ?? null
+        }
+        patch.last_full_month_visits = shop.monthlyVisits
+        patch.visits_month = ym
+        await db.from("competitor_visits").upsert({ domain: c.domain, month, monthly_visits: shop.monthlyVisits, source: "snapshot", captured_at: now }, { onConflict: "domain,month" })
+      }
+      c.trendtrack_id = shop.id
+      out.refreshed++
     }
-    await db.from("competitors").update(patch).eq("domain", c.domain)
+    if (!c.tt_history_at && historiesLeft > 0 && c.trendtrack_id && !out.historySkipped) {
+      historiesLeft--
+      try {
+        const t = await shopTraffic(c.trendtrack_id)
+        const rows = t.history.filter((h) => h.month <= month).map((h) => ({ domain: c.domain, month: h.month, monthly_visits: h.visits, source: "history", captured_at: now }))
+        if (rows.length) await db.from("competitor_visits").upsert(rows, { onConflict: "domain,month" })
+        const prior = t.history.find((h) => h.month === prevMonth)
+        if (prior && patch.prior_month_visits == null && c.prior_month_visits == null) patch.prior_month_visits = prior.visits
+        if (t.growth30d != null) patch.growth_30d = t.growth30d
+        patch.tt_history_at = now
+        out.histories++
+      } catch (e) {
+        // out of credits (or no access to shop details): keep refreshing visits, skip histories
+        if (e instanceof TrendTrackError && (e.status === 402 || e.status === 403 || e.status === 429)) out.historySkipped = e.message
+        else throw e
+      }
+    }
+    if (Object.keys(patch).length) await db.from("competitors").update(patch).eq("domain", c.domain)
   }
 
   let i = 0
@@ -125,8 +160,8 @@ export async function snapshotCompetitorVisits(opts: { budgetMs?: number; histor
         await work(c)
       } catch (e) {
         out.errors.push(`${c.domain}: ${e instanceof Error ? e.message : String(e)}`)
-        // a bad key or no credits: stop instead of failing 140 times
-        if (e instanceof TrendTrackError && (e.status === 401 || e.status === 402 || e.status === 403)) i = todo.length
+        // a bad key: stop instead of failing 140 times
+        if (e instanceof TrendTrackError && e.status === 401) i = todo.length
       }
     }
   })

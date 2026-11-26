@@ -78,6 +78,8 @@ export default function CompetitorsPage() {
   const [countryFilter, setCountryFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [nicheFilter, setNicheFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [search, setSearch] = useState("")
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<string>("monthly_visits")
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
   const [coverageSums, setCoverageSums] = useState<Record<string, CoverageSum>>({})
@@ -225,7 +227,19 @@ export default function CompetitorsPage() {
 
   const scalingCount = competitors.filter((c) => c.status === "scaling").length
   const watchingCount = competitors.filter((c) => c.status === "watching").length
-  const lastSynced = competitors.find((c) => c.last_synced)?.last_synced
+  const lastSynced = competitors.reduce<string | null>((a, c) => (c.last_synced && (!a || c.last_synced > a) ? c.last_synced : a), null)
+
+  // Re-read every competitor from TrendTrack now (Owner). Runs by itself on the 1st of each month.
+  const refreshNow = async () => {
+    setRefreshing(true)
+    setRefreshMsg(null)
+    const r = await fetch("/api/season-visits?force=1", { method: "POST" }).catch(() => null)
+    const j = r ? await r.json().catch(() => null) : null
+    setRefreshing(false)
+    if (!r?.ok || !j) return setRefreshMsg(j?.error || "Couldn't reach TrendTrack")
+    setRefreshMsg(j.errors?.length && !j.refreshed ? j.errors[0] : `${j.refreshed} competitors refreshed for ${j.month}${j.notFound?.length ? `, ${j.notFound.length} not found in TrendTrack` : ""}${j.remaining ? `, ${j.remaining} left: click again` : ""}`)
+    load()
+  }
 
   const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
@@ -235,7 +249,7 @@ export default function CompetitorsPage() {
     <PageShell
       title="Competitor Tracker"
       breadcrumb="Front End → Competitor Tracker"
-      description={`Google dropshipping competitors with visits, ads, products and Trustpilot reviews from TrendTrack. Revenue estimates are USD, shown in EUR at today's ECB rate.${lastSynced ? ` Last TrendTrack sync: ${new Date(lastSynced).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.` : ""}`}
+      description={`Google dropshipping competitors with visits, ads, products and Trustpilot reviews from TrendTrack. Revenue estimates are USD, shown in EUR at today's ECB rate.${lastSynced ? ` Last TrendTrack sync: ${new Date(lastSynced).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.` : ""} Re-checked automatically on the 1st of every month: Last month = the month that just ended, MoM % = vs the month before.`}
       stats={[
         { label: "Tracked", value: String(competitors.length) },
         { label: "Scaling", value: String(scalingCount), color: "var(--green)" },
@@ -244,6 +258,8 @@ export default function CompetitorsPage() {
       ]}
       actions={
         <>
+          {refreshMsg && <span className="text-[10px] self-center" style={{ color: "var(--text-muted)" }}>{refreshMsg}</span>}
+          <Button onClick={refreshNow} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh from TrendTrack"}</Button>
           <Button href="/keyword-maker">Find new competitors</Button>
           <Button variant="primary" onClick={() => setShowForm(!showForm)}>
             Add competitor

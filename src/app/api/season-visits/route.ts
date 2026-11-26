@@ -20,11 +20,11 @@ export async function GET() {
   }
 }
 
-// POST → read TrendTrack now (Owner): same as the daily job.
-export async function POST() {
+// POST → read TrendTrack now (Owner): same as the monthly re-check; ?force=1 re-reads every store.
+export async function POST(req: Request) {
   if ((await getRole()) !== "owner") return NextResponse.json({ error: "Only the Owner can do this" }, { status: 403 })
   try {
-    const r = await snapshotCompetitorVisits({ budgetMs: 45000 })
+    const r = await snapshotCompetitorVisits({ budgetMs: 45000, force: new URL(req.url).searchParams.get("force") === "1" })
     cache = null
     return NextResponse.json(r)
   } catch (e: unknown) {

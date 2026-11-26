@@ -34,16 +34,18 @@ async function tt<T>(path: string, retry = true): Promise<T> {
 
 const bare = (d: string) => d.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")
 
-type LookupResp = { data?: { shop?: { id?: string; domain?: string } | null; signals?: { monthlyVisits?: number | null } | null; matchType?: string }[] }
+type LookupResp = { data?: { shop?: { id?: string; domain?: string } | null; signals?: { monthlyVisits?: number | null; activeAds?: number | null } | null; matchType?: string }[] }
 
-// Shop id and current monthly visits for a domain; null when TrendTrack doesn't know the shop.
-export async function lookupShop(domain: string): Promise<{ id: string; monthlyVisits: number | null } | null> {
+// Shop id, monthly visits (TrendTrack's latest full month) and active ads for a domain;
+// null when TrendTrack doesn't know the shop. Free (0 credits).
+export async function lookupShop(domain: string): Promise<{ id: string; monthlyVisits: number | null; activeAds: number | null } | null> {
   const j = await tt<LookupResp>(`/v1/lookup?q=${encodeURIComponent(bare(domain))}&type=shop&limit=3`)
   const rows = (j.data || []).filter((r) => r.shop?.id)
   const hit = rows.find((r) => bare(r.shop?.domain || "") === bare(domain)) || rows.find((r) => r.matchType === "exact")
   if (!hit?.shop?.id) return null
   const v = hit.signals?.monthlyVisits
-  return { id: hit.shop.id, monthlyVisits: v != null && Number.isFinite(Number(v)) ? Number(v) : null }
+  const ads = hit.signals?.activeAds
+  return { id: hit.shop.id, monthlyVisits: v != null && Number.isFinite(Number(v)) ? Number(v) : null, activeAds: ads != null && Number.isFinite(Number(ads)) ? Number(ads) : null }
 }
 
 type ShopResp = { data?: { traffic?: { monthlyVisits?: number | null; growth30d?: number | null; history?: { period: string; value: number }[] | null } | null } }

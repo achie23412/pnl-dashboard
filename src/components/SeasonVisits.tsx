@@ -151,7 +151,7 @@ export function VisitorLinesPanel({ data, error, market, onReload }: { data: Sea
     const j = r ? await r.json().catch(() => null) : null
     setBusy(false)
     if (!r?.ok) return setMsg(j?.error || "Couldn't read TrendTrack")
-    setMsg(`${j.snapshots} stores read${j.histories ? `, history copied for ${j.histories}` : ""}${j.remaining ? `, ${j.remaining} left for the next run` : ""}${j.errors?.length ? ` · ${j.errors[0]}` : ""}`)
+    setMsg(`${j.refreshed} stores refreshed (${j.month})${j.histories ? `, history copied for ${j.histories}` : ""}${j.remaining ? `, ${j.remaining} left for the next run` : ""}${j.historySkipped ? ` · history skipped: ${j.historySkipped}` : ""}${j.errors?.length ? ` · ${j.errors[0]}` : ""}`)
     onReload()
   }
 
