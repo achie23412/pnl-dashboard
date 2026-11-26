@@ -309,6 +309,26 @@ export async function seasonVisits(): Promise<{ lines: SeasonLine[]; alerts: Pea
     raw.push({ market: l.market, category: l.category, kind: rising ? "rising" : "peak_soon", title: `Peak starting: ${l.category} · ${l.market}`, why, mom: l.mom, visits: last.visits, peakMonth, peakSource })
   }
 
+  // Types without tracked competitors yet: the Keyword Planner peak alone can still say "peak soon"
+  const seen = new Set(raw.map((r) => `${r.market}|${r.category}`).concat(lines.map((l) => `${l.market}|${l.category}`)))
+  kwPeaks.forEach((peakMonth, key) => {
+    const [market, category] = key.split("|")
+    if (seen.has(key) || category === ALL_FASHION || category === "Other" || !(SEASON_MARKETS as readonly string[]).includes(market)) return
+    const days = daysUntilMonth(peakMonth)
+    if (days < 0 || days > PEAK_WEEKS * 7) return
+    raw.push({
+      market,
+      category,
+      kind: "peak_soon",
+      title: `Peak starting: ${category} · ${market}`,
+      why: `${days === 0 ? "peak month starts today" : `${days} days to last year's peak (${MONTHS[peakMonth]}, from Keyword Planner searches; no tracked competitors in this type yet)`}`,
+      mom: null,
+      visits: 0,
+      peakMonth,
+      peakSource: "keywords",
+    })
+  })
+
   // What to push: our live products in the category, competitors' best-sellers in it
   const alerts: PeakAlert[] = []
   if (raw.length) {
