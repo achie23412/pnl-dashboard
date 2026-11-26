@@ -155,8 +155,8 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   const empty: ShipgoodsData = { cogsByStore: new Map(), cogsByIdByStore: new Map(), salesByStore: new Map(), error: null }
   if (!token) return { ...empty, error: "ShipGoods: SHIPGOODS_TOKEN not set" }
 
-  const fetchPage = async (page: number): Promise<ShipgoodsResponse> => {
-    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${dateFrom}&date_to=${dateTo}&per_page=100&page=${page}`
+  const fetchPage = async (win: [string, string], page: number): Promise<ShipgoodsResponse> => {
+    const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${win[0]}&date_to=${win[1]}&per_page=100&page=${page}`
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(SG_TIMEOUT_MS),
@@ -224,21 +224,31 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     }
   }
 
-  const pages: ShipgoodsResponse[] = []
-  try {
-    const first = await fetchPage(1)
-    pages.push(first)
-    const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
-    const rest = await Promise.allSettled(
-      Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => fetchPage(i + 2)),
-    )
-    for (const r of rest) {
-      if (r.status === "fulfilled") pages.push(r.value)
-      else errors.push(`ShipGoods ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
-    }
-  } catch (e: unknown) {
-    errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
+  // ShipGoods accepts at most 90 days per request (HTTP 422 otherwise), so longer ranges
+  // (Quality Checks asks for 91 days) are split into windows of up to 85 days.
+  const windows: [string, string][] = []
+  for (let start = dateFrom; start <= dateTo; ) {
+    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 84 * 86400000).toISOString().slice(0, 10)
+    windows.push([start, end < dateTo ? end : dateTo])
+    start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
   }
+  const pages: ShipgoodsResponse[] = []
+  await Promise.all(windows.map(async (win) => {
+    try {
+      const first = await fetchPage(win, 1)
+      pages.push(first)
+      const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
+      const rest = await Promise.allSettled(
+        Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => fetchPage(win, i + 2)),
+      )
+      for (const r of rest) {
+        if (r.status === "fulfilled") pages.push(r.value)
+        else errors.push(`ShipGoods ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+      }
+    } catch (e: unknown) {
+      errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }))
   orderTotals = await orderTotalsPromise
   for (const p of pages) addPage(p)
 
