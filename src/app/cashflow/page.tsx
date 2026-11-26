@@ -15,9 +15,80 @@ function processorStatus(name: string, data: CashflowData): { connected: boolean
     if (data.whop_balance?.available) return { connected: true, how: `Balance $${data.whop_balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · pending $${data.whop_balance.pending_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` }
     return { connected: false, how: "Add WHOP_API_KEY in Vercel (Whop → Developer → API keys)." }
   }
-  if (name === "PayPal") return { connected: false, how: "Add PayPal connector in Windsor to see balance and fees." }
-  if (name === "Whale Checkout") return { connected: false, how: "No API — enter balance manually or export from Whale dashboard." }
+  // Manual-entry processors show saved balance instead of setup instructions
+  if (name === "PayPal" || name === "Whale Checkout" || name === "Other") return { connected: false, how: "" }
   return { connected: false, how: "Unknown gateway." }
+}
+
+const MANUAL_KEY = "cashflow:manual-balances"
+function loadManualBalances(): Record<string, { balance: string; date: string }> {
+  try {
+    const raw = localStorage.getItem(MANUAL_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+function saveManualBalance(proc: string, balance: string) {
+  try {
+    const all = loadManualBalances()
+    all[proc] = { balance, date: new Date().toISOString().slice(0, 10) }
+    localStorage.setItem(MANUAL_KEY, JSON.stringify(all))
+  } catch { /* optional */ }
+}
+
+function ManualBalanceCell({ processor }: { processor: string }) {
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState<{ balance: string; date: string } | null>(null)
+  const [input, setInput] = useState("")
+
+  useEffect(() => {
+    const all = loadManualBalances()
+    if (all[processor]) setSaved(all[processor])
+  }, [processor])
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>€</span>
+        <input
+          autoFocus
+          className="bg-transparent border rounded px-1.5 py-0.5 text-[10px] w-20 tabular-nums"
+          style={{ borderColor: "rgba(255,255,255,0.15)", color: "var(--text)" }}
+          placeholder="0.00"
+          value={input}
+          onChange={(e) => setInput(e.target.value.replace(/[^0-9.,]/g, ""))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const val = input.replace(",", ".")
+              if (val) { saveManualBalance(processor, val); setSaved({ balance: val, date: new Date().toISOString().slice(0, 10) }) }
+              setEditing(false)
+            }
+            if (e.key === "Escape") setEditing(false)
+          }}
+          onBlur={() => {
+            const val = input.replace(",", ".")
+            if (val) { saveManualBalance(processor, val); setSaved({ balance: val, date: new Date().toISOString().slice(0, 10) }) }
+            setEditing(false)
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (saved) {
+    return (
+      <button onClick={() => { setInput(saved.balance); setEditing(true) }} className="text-left group">
+        <span className="tabular-nums" style={{ color: "var(--green)" }}>€{Number(saved.balance).toLocaleString("en-IE", { maximumFractionDigits: 2 })}</span>
+        <span className="text-[9px] ml-1" style={{ color: "var(--text-dim)" }}>({saved.date})</span>
+        <span className="text-[9px] ml-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "var(--text-dim)" }}>edit</span>
+      </button>
+    )
+  }
+
+  return (
+    <button onClick={() => setEditing(true)} className="text-[10px] underline decoration-dotted underline-offset-2 hover:decoration-solid" style={{ color: "var(--text-dim)" }}>
+      Enter balance
+    </button>
+  )
 }
 
 const CACHE_KEY = "cashflow:v1"
@@ -167,7 +238,9 @@ export default function CashflowPage() {
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{eur(p.incoming_30d)}</td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{share.toFixed(1)}%</td>
                       <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{p.stores.join(", ")}</td>
-                      <td className={`${TD} text-[10px] max-w-[320px]`} style={{ color: st.connected ? "var(--green)" : "var(--orange)" }}>{st.how}</td>
+                      <td className={`${TD} text-[10px] max-w-[320px]`} style={{ color: st.connected ? "var(--green)" : "var(--orange)" }}>
+                        {st.how ? st.how : <ManualBalanceCell processor={p.processor} />}
+                      </td>
                     </tr>
                   )
                 })}
