@@ -242,7 +242,7 @@ export async function GET() {
 
   const candidates: DraftingCandidate[] = []
 
-  for (const p of products.values()) {
+  for (const p of Array.from(products.values())) {
     const sales = salesByStore[p.store]?.get(p.id) || { sales_7d: 0, sales_14d: 0, sales_30d: 0, revenue_7d: 0, revenue_14d: 0, revenue_30d: 0, title: "" }
     const title = p.title || sales.title || `Product ${p.id}`
 
