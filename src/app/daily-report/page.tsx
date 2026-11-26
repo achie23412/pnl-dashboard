@@ -262,6 +262,7 @@ export default function DailyReportPage() {
                       <th className={`${TH} text-right`}>ROAS</th>
                       <th className={`${TH} text-right`}>Ad spend</th>
                       <th className={`${TH} text-right`}>COGS</th>
+                      <th className={`${TH} text-right`}>COGS %</th>
                       <th className={`${TH} text-right`}>Refunds</th>
                       <th className={`${TH} text-right`} title="Transaction fee (% of revenue) + media buyer fee (% of ad spend, from its start date in Store Settings)">Fees</th>
                       <th className={`${TH} text-right`} title="Revenue − refunds − ad spend − COGS − transaction fee − media buyer fee">Profit</th>
@@ -296,6 +297,7 @@ export default function DailyReportPage() {
                             )}
                           </td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }} title={s.cogsPending ? `${s.cogsPending} order(s) not priced by ShipGoods yet: store average used` : "ShipGoods price of these orders"}>{fmt(s.cogs)}{s.cogsPending > 0 && <span style={{ color: "var(--amber)" }}>*</span>}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: s.revenue > 0 ? (s.cogs / s.revenue * 100 > 35 ? "var(--red)" : s.cogs / s.revenue * 100 > 25 ? "var(--orange)" : "var(--text-muted)") : "var(--text-dim)" }}>{s.revenue > 0 ? `${(s.cogs / s.revenue * 100).toFixed(1)}%` : "—"}</td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }} title={`Transaction fee ${fmt(s.txnFee)}${s.mbFee > 0 ? ` + media buyer fee ${fmt(s.mbFee)}` : " · no media buyer fee"}`}>
                             {fmt(s.txnFee + s.mbFee)}
@@ -318,6 +320,7 @@ export default function DailyReportPage() {
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.roas >= 2.5 ? "var(--green)" : totals.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{totals.roas.toFixed(2)}x</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.spend)}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.revenue > 0 ? (totals.cogs / totals.revenue * 100 > 35 ? "var(--red)" : totals.cogs / totals.revenue * 100 > 25 ? "var(--orange)" : "var(--text-muted)") : "var(--text-dim)" }}>{totals.revenue > 0 ? `${(totals.cogs / totals.revenue * 100).toFixed(1)}%` : "—"}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(totals.refunds)}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>
                         {fmt(totals.txnFee + totals.mbFee)}

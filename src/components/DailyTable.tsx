@@ -77,6 +77,7 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
     { key: "roas", label: "ROAS", align: "right" as const },
     { key: "refund", label: "Refund", align: "right" as const },
     { key: "cogs", label: "COGS", align: "right" as const },
+    { key: "cogsPct", label: "COGS %", align: "right" as const },
     { key: "profit", label: "Net Profit", align: "right" as const },
   ]
 
@@ -130,6 +131,9 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RoasCell roas={row.roas} /></td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RefundCell rate={row.refundRate} /></td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--orange)" }}>€{fmt(row.cogs)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums" style={{ color: row.revenue > 0 ? (row.cogs / row.revenue * 100 > 35 ? "var(--red)" : row.cogs / row.revenue * 100 > 25 ? "var(--orange)" : "var(--text-muted)") : "var(--text-dim)" }}>
+                    {row.revenue > 0 ? `${(row.cogs / row.revenue * 100).toFixed(1)}%` : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <ProfitBar profit={row.profit} maxProfit={maxProfit} revenue={row.revenue} />
                   </td>
