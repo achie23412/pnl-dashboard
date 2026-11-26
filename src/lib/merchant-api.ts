@@ -117,7 +117,7 @@ const num = (v: unknown) => (v == null || v === "" ? null : Number(v))
 
 // Google's price suggestions (Merchant Center "price insights")
 export async function listPriceInsights(merchantId: string, maxPages = 20): Promise<PriceInsight[]> {
-  const query = "SELECT offer_id, title, price, suggested_price, predicted_impressions_change_fraction, predicted_clicks_change_fraction, predicted_conversions_change_fraction, effectiveness FROM price_insights_product_view"
+  const query = "SELECT id, offer_id, title, price, suggested_price, predicted_impressions_change_fraction, predicted_clicks_change_fraction, predicted_conversions_change_fraction, effectiveness FROM price_insights_product_view"
   const out: PriceInsight[] = []
   let pageToken = ""
   for (let i = 0; i < maxPages; i++) {
