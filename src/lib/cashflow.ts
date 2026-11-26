@@ -236,10 +236,10 @@ export async function buildCashflow(): Promise<CashflowData> {
     notes: [
       "Shopify Payments balance = sales not yet paid out (pending) + payouts on their way to the bank (in transit). Older pending sales than 30 days are not included (Windsor trial limit).",
       whopError
-        ? `Whop API error: ${whopError}. Key is set but the API call failed.`
+        ? `Whop API error: ${whopError}`
         : whopBalance?.available
           ? "Whop balance connected via API."
-          : "Whop: WHOP_API_KEY not set in Vercel. PayPal needs a Windsor connector. Whale Checkout has no API — balance is manual.",
+          : "Whop: WHOP_API_KEY not set. PayPal needs a Windsor connector. Whale Checkout has no API — balance is manual.",
       "Outgoing = ad spend + COGS (ShipGoods) + refunds + Shopify Payments fees. Agency fees, apps and team costs are not included.",
     ],
   }
