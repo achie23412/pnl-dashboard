@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/warm?run=afternoon",
       "schedule": "20 13 * * *"
+    },
+    {
+      "path": "/api/cron/gmc",
+      "schedule": "40 6 * * *"
     }
   ]
 }
