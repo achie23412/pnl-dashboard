@@ -1,7 +1,36 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
-import { Panel, Badge, TH, TD, ROW_BORDER } from "@/components/ui"
+import { Panel, Badge, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
+
+interface ProductMetrics {
+  spend_7d: number; spend_14d: number; spend_30d: number
+  clicks_7d: number; clicks_14d: number; clicks_30d: number
+  cpc_30d: number
+  sales_7d: number; sales_14d: number; sales_30d: number
+  revenue_7d: number; revenue_14d: number; revenue_30d: number
+  roas_7d: number; roas_14d: number; roas_30d: number
+}
+
+interface DraftingCandidate {
+  store: string
+  product_id: string
+  product_title: string
+  rule_number: number
+  rule_type: "hard" | "review"
+  action: "draft" | "raise_price" | "keep"
+  reason: string
+  metrics: ProductMetrics
+}
+
+interface DraftingResponse {
+  generated_at: string
+  period: { from: string; to: string }
+  summary: { total_products: number; actionable: number; draft: number; raise_price: number }
+  by_store: Record<string, DraftingCandidate[]>
+  errors: string[]
+  notes: string[]
+}
 
 const HARD_RULES = [
   {
@@ -109,8 +138,97 @@ function RuleRow({ id, situation, action, extra, actionTone }: {
   )
 }
 
+function ProductRow({ c }: { c: DraftingCandidate }) {
+  const [open, setOpen] = useState(false)
+  const m = c.metrics
+  const actionTone = c.action === "draft" ? "red" as const : c.action === "raise_price" ? "amber" as const : "green" as const
+  const actionLabel = c.action === "draft" ? "Draft" : c.action === "raise_price" ? "Price +10%" : "Keep"
+
+  return (
+    <>
+      <tr
+        style={ROW_BORDER}
+        className="hover:bg-white/[0.02] transition-colors cursor-pointer"
+        onClick={() => setOpen(!open)}
+      >
+        <td className={`${TD} text-center tabular-nums font-bold`} style={{ color: "var(--text-dim)", width: 40 }}>
+          {c.rule_number}
+        </td>
+        <td className={TD}>
+          <div className="text-[11px] font-medium" style={{ color: "var(--text)" }}>
+            {c.product_title}
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>
+            {c.reason}
+          </div>
+        </td>
+        <td className={`${TD} text-center`} style={{ width: 90 }}>
+          <Badge tone={actionTone}>{actionLabel}</Badge>
+        </td>
+        <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)", width: 80 }}>
+          €{m.spend_30d.toFixed(0)}
+        </td>
+        <td className={`${TD} text-right tabular-nums`} style={{ color: m.roas_30d >= 2 ? "var(--green)" : m.roas_30d >= 1 ? "var(--text)" : "var(--red)", width: 65 }}>
+          {m.roas_30d.toFixed(2)}
+        </td>
+        <td className={`${TD} text-center`} style={{ width: 30 }}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </td>
+      </tr>
+      {open && (
+        <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+          <td colSpan={6} className="px-3 py-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 text-[10px]">
+              {[
+                ["Spend 7d", `€${m.spend_7d.toFixed(0)}`],
+                ["Spend 14d", `€${m.spend_14d.toFixed(0)}`],
+                ["CPC 30d", `€${m.cpc_30d.toFixed(2)}`],
+                ["Sales 7d", String(m.sales_7d)],
+                ["Sales 14d", String(m.sales_14d)],
+                ["Sales 30d", String(m.sales_30d)],
+                ["ROAS 7d", m.roas_7d.toFixed(2)],
+                ["ROAS 14d", m.roas_14d.toFixed(2)],
+                ["Rev 30d", `€${m.revenue_30d.toFixed(0)}`],
+                ["Clicks 7d", String(m.clicks_7d)],
+                ["Clicks 14d", String(m.clicks_14d)],
+                ["Clicks 30d", String(m.clicks_30d)],
+              ].map(([label, val]) => (
+                <div key={label}>
+                  <div style={{ color: "var(--text-dim)" }}>{label}</div>
+                  <div className="font-medium tabular-nums" style={{ color: "var(--text)" }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
 export default function DraftingSystemPage() {
   const [checklist, setChecklist] = useState<boolean[]>(WEEKLY_STEPS.map(() => false))
+  const [data, setData] = useState<DraftingResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/drafting-products")
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+      setData(await res.json())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchProducts() }, [fetchProducts])
 
   const toggle = (i: number) =>
     setChecklist((prev) => prev.map((v, j) => (j === i ? !v : v)))
@@ -127,7 +245,7 @@ export default function DraftingSystemPage() {
         { label: "Hard rules", value: "5" },
         { label: "Review rules", value: "6" },
         { label: "Spend threshold", value: "€30 / 70% AOV" },
-        { label: "Daily limit", value: "50 / store" },
+        { label: "Need action", value: data ? String(data.summary.actionable) : "—" },
       ]}
     >
       {/* Basics */}
@@ -224,6 +342,76 @@ export default function DraftingSystemPage() {
             ))}
           </tbody>
         </table>
+      </Panel>
+
+      {/* Products needing action */}
+      <Panel
+        title={
+          data
+            ? `Products needing action (${data.summary.actionable})`
+            : "Products needing action"
+        }
+        pad={false}
+      >
+        {loading && (
+          <div className="p-6"><Loading /></div>
+        )}
+        {error && (
+          <div className="p-3 text-[11px]" style={{ color: "var(--red)" }}>
+            Failed to load: {error}{" "}
+            <button onClick={fetchProducts} className="underline" style={{ color: "var(--accent)" }}>Retry</button>
+          </div>
+        )}
+        {data && data.summary.actionable === 0 && !loading && (
+          <div className="p-6"><EmptyState>No products need drafting right now.</EmptyState></div>
+        )}
+        {data && data.summary.actionable > 0 && (
+          <>
+            <div className="px-3 py-2 flex flex-wrap items-center gap-3 text-[10px]" style={{ color: "var(--text-dim)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <span>{data.period.from} — {data.period.to}</span>
+              <Badge tone="red">{data.summary.draft} draft</Badge>
+              {data.summary.raise_price > 0 && <Badge tone="amber">{data.summary.raise_price} price raise</Badge>}
+              <span>{data.summary.total_products} products evaluated</span>
+              <button onClick={fetchProducts} className="ml-auto underline decoration-dotted hover:decoration-solid" style={{ color: "var(--accent)" }}>
+                Refresh
+              </button>
+            </div>
+            {Object.entries(data.by_store).map(([store, candidates]) => (
+              <div key={store}>
+                <div className="px-3 py-1.5 text-[10px] font-medium" style={{ color: "var(--accent)", background: "rgba(255,255,255,0.02)" }}>
+                  {store} ({candidates.length})
+                </div>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <th className={`${TH} text-center`} style={{ color: "var(--text-dim)", width: 40 }}>Rule</th>
+                      <th className={`${TH} text-left`} style={{ color: "var(--text-dim)" }}>Product</th>
+                      <th className={`${TH} text-center`} style={{ color: "var(--text-dim)", width: 90 }}>Action</th>
+                      <th className={`${TH} text-right`} style={{ color: "var(--text-dim)", width: 80 }}>Spend 30d</th>
+                      <th className={`${TH} text-right`} style={{ color: "var(--text-dim)", width: 65 }}>ROAS</th>
+                      <th className={TH} style={{ width: 30 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((c) => (
+                      <ProductRow key={`${c.product_id}-${c.rule_number}`} c={c} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+            {data.errors.length > 0 && (
+              <div className="px-3 py-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
+                {data.errors.map((e, i) => <div key={i}>⚠ {e}</div>)}
+              </div>
+            )}
+            {data.notes.length > 0 && (
+              <div className="px-3 py-2 text-[10px] space-y-0.5" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                {data.notes.map((n, i) => <div key={i}>• {n}</div>)}
+              </div>
+            )}
+          </>
+        )}
       </Panel>
 
       {/* Single variants */}

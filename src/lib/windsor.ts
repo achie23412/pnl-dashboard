@@ -67,6 +67,40 @@ export interface GoogleProductSpend {
   spend: number
 }
 
+export interface GoogleProductDaily {
+  store: string
+  productId: string
+  title: string
+  date: string
+  spend: number
+  clicks: number
+}
+
+export async function fetchGoogleProductDaily(dateFrom: string, dateTo: string): Promise<GoogleProductDaily[]> {
+  const rows = await fetchWindsor("google_ads", ["date", "account_name", "product_item_id", "product_title", "spend", "clicks"], dateFrom, dateTo, 3600)
+  const byKey = new Map<string, GoogleProductDaily>()
+  for (const r of rows) {
+    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+    if (mapping?.channel !== "Google") continue
+    const m = String(r.product_item_id || "").match(/^shopify_[a-z]+_(\d+)_/i)
+    if (!m) continue
+    const date = String(r.date).slice(0, 10)
+    const key = `${mapping.store}|${m[1]}|${date}`
+    const entry = byKey.get(key) || {
+      store: mapping.store,
+      productId: m[1],
+      title: String(r.product_title || "").replace(/\s+\/\s+[^/]+$/, "").trim(),
+      date,
+      spend: 0,
+      clicks: 0,
+    }
+    entry.spend += Number(r.spend) || 0
+    entry.clicks += Number(r.clicks) || 0
+    byKey.set(key, entry)
+  }
+  return Array.from(byKey.values())
+}
+
 // Google Shopping spend per product. product_item_id looks like
 // "shopify_<country>_<productId>_<variantId>"; variants are summed per product.
 export async function fetchGoogleProductSpend(dateFrom: string, dateTo: string): Promise<GoogleProductSpend[]> {
