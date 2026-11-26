@@ -5,6 +5,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/refresh?run=afternoon",
+      "schedule": "0 13 * * *"
+    },
+    {
       "path": "/api/cron/opportunities",
       "schedule": "30 5 * * *"
     },

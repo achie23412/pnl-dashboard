@@ -1,5 +1,7 @@
+import { unstable_cache } from "next/cache"
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
+import { SESSION_COOKIE } from "@/lib/session"
 import { TRANSACTION_FEE_RATE } from "@/lib/constants"
 
 export const maxDuration = 30
@@ -178,22 +180,35 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
   return suggestions.sort((a, b) => rank[a.priority] - rank[b.priority])
 }
 
+// The catalog behind this (Shopify orders, Windsor spend, ShipGoods, quote sheet) takes ~8 s and
+// only changes with the daily data, so the suggestions are saved for 30 minutes. The cookie is part
+// of the key because the catalog route needs the logged-in session.
+const cachedSuggestions = unstable_cache(
+  async (origin: string, cookie: string) => {
+    const catalogRes = await fetch(`${origin}/api/product-catalog?store=all`, {
+      signal: AbortSignal.timeout(25000),
+      headers: { cookie },
+      cache: "no-store",
+    })
+    if (!catalogRes.ok) throw new Error("Failed to fetch product catalog")
+    const catalog = await catalogRes.json()
+    const products: CatalogProduct[] = catalog.products || []
+    const stores: StoreSummary[] = catalog.stores || []
+    return { suggestions: generateSuggestions(products, stores), period: catalog.period }
+  },
+  ["price-suggestions-v1"],
+  { revalidate: 1800 },
+)
+
 export async function GET(req: NextRequest) {
   const origin = req.nextUrl.origin
 
   try {
-    const catalogRes = await fetch(`${origin}/api/product-catalog?store=all`, {
-      signal: AbortSignal.timeout(25000),
-      headers: { cookie: req.headers.get("cookie") || "" },
-    })
-    if (!catalogRes.ok) {
-      return NextResponse.json({ error: "Failed to fetch product catalog" }, { status: 502 })
-    }
-    const catalog = await catalogRes.json()
-    const products: CatalogProduct[] = catalog.products || []
-    const stores: StoreSummary[] = catalog.stores || []
-
-    const suggestions = generateSuggestions(products, stores)
+    // Only the session cookie, so other cookies don't split the cache
+    const session = req.cookies.get(SESSION_COOKIE)?.value
+    const base = await cachedSuggestions(origin, session ? `${SESSION_COOKIE}=${session}` : "")
+    const suggestions: PriceSuggestion[] = base.suggestions.map((s) => ({ ...s }))
+    const catalog = { period: base.period }
 
     // Fetch recent price changes to add cooldown info
     const sb = getServiceClient()

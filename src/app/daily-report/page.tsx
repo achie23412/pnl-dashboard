@@ -202,7 +202,7 @@ export default function DailyReportPage() {
             >
               <span className="font-medium" style={{ color: "var(--text-muted)" }}>{s}</span>
               <span style={{ color: "var(--text-dim)" }}>{market}</span>
-              <span className="font-mono tabular-nums" style={{ color: "var(--text)" }}>{localTime}</span>
+              <span className="font-mono tabular-nums" style={{ color: "var(--text)" }} suppressHydrationWarning>{localTime}</span>
               {isFuture && <Badge tone="amber">Still {localDate.slice(5)}</Badge>}
               {isSelectedDate && <Badge tone="green">Today</Badge>}
             </div>

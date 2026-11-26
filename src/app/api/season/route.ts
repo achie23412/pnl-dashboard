@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { revalidateTag, unstable_cache } from "next/cache"
 import { getServiceClient } from "@/lib/supabase"
 import { categoryOf, timing, MONTHS, COUNTRY_STORES, indexTitles, coveredBy } from "@/lib/season-keywords"
 import { liveTitles } from "@/lib/live-titles"
@@ -23,55 +24,73 @@ async function allKeywords(country?: string): Promise<DbKeyword[]> {
   return out
 }
 
+// Keywords and live titles change at most a few times a day, so the heavy part is saved for an
+// hour (calendar: 6 hours) and shared by everyone; a keyword upload clears it.
+const SEASON_TAG = "season"
+
+async function buildCountry(country: string) {
+  const [kws, titles] = await Promise.all([allKeywords(country), liveTitles(COUNTRY_STORES[country] || [])])
+  // Only clothing searches: drops brand and off-topic keywords (src/lib/fashion-words.ts)
+  const words = titleWordSet(titles.map((t) => t.title))
+  const clean = kws.filter((k) => isFashionKeyword(k.keyword, words))
+  return {
+    country,
+    keywords: clean,
+    hidden: kws.length - clean.length,
+    updatedAt: kws.reduce((a, k) => (k.uploaded_at > a ? k.uploaded_at : a), ""),
+    stores: COUNTRY_STORES[country] || [],
+    titles, // live product titles per store, for coverage
+  }
+}
+const cachedCountry = unstable_cache(buildCountry, ["season-country-v1"], { revalidate: 3600, tags: [SEASON_TAG] })
+
+// "List by" / "push" events per country and month, for the Calendar and the to-do list
+async function buildCalendar() {
+  const [kws, live] = await Promise.all([
+    allKeywords(),
+    Promise.all(Object.keys(COUNTRY_STORES).map(async (c) => [c, (await liveTitles(COUNTRY_STORES[c])).map((t) => t.title)] as const)),
+  ])
+  const today = new Date()
+  const events: { date: string; label: string; type: "prep" | "launch"; note: string; store?: string }[] = []
+  for (const [country, titlesList] of live) {
+    const words = titleWordSet(titlesList)
+    const titles = indexTitles(titlesList)
+    // Timing and coverage once per keyword instead of once per keyword per month
+    const list = kws
+      .filter((k) => k.country === country && isFashionKeyword(k.keyword, words))
+      .map((k) => ({ k, t: timing(k.months) }))
+      .filter((x) => !x.t.evergreen)
+    if (!list.length) continue
+    const missing = new Set(list.filter((x) => coveredBy(x.k.keyword, titles) === 0).map((x) => x.k))
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + i, 1))
+      const m = d.getUTCMonth()
+      const toList = list.filter((x) => x.t.listBy === m && missing.has(x.k)).map((x) => x.k)
+      const toPush = list.filter((x) => x.t.pushFrom === m).map((x) => x.k)
+      const date = d.toISOString().slice(0, 10)
+      const top = (arr: DbKeyword[]) => arr.slice().sort((a, b) => b.avg_monthly - a.avg_monthly).slice(0, 6).map((k) => k.keyword).join(", ")
+      if (toList.length) events.push({ date, type: "prep", label: `List ${toList.length} season keywords (${country})`, store: COUNTRY_STORES[country].join(", "), note: `Season Board: demand starts climbing in ${MONTHS[(m + 1) % 12]}; list now so the products get indexed. Missing in the store: ${top(toList)}${toList.length > 6 ? "…" : ""}.` })
+      if (toPush.length) events.push({ date, type: "launch", label: `Push budget on ${toPush.length} season keywords (${country})`, store: COUNTRY_STORES[country].join(", "), note: `Season Board: the climb starts this month for ${top(toPush)}${toPush.length > 6 ? "…" : ""}.` })
+    }
+  }
+  return events
+}
+const cachedCalendar = unstable_cache(buildCalendar, ["season-calendar-v1"], { revalidate: 21600, tags: [SEASON_TAG] })
+
 // GET ?country=US → keywords + suggestions
 // GET ?view=calendar → "list by" events per country and month (for the Calendar and the to-do list)
 export async function GET(req: NextRequest) {
   const p = new URL(req.url).searchParams
   try {
-    if (p.get("view") === "calendar") {
-      const kws = await allKeywords()
-      const today = new Date()
-      const events: { date: string; label: string; type: "prep" | "launch"; note: string; store?: string }[] = []
-      for (const country of Object.keys(COUNTRY_STORES)) {
-        const live = (await liveTitles(COUNTRY_STORES[country])).map((t) => t.title)
-        const words = titleWordSet(live)
-        const list = kws.filter((k) => k.country === country && isFashionKeyword(k.keyword, words))
-        if (!list.length) continue
-        const titles = indexTitles(live)
-        for (let i = 0; i < 12; i++) {
-          const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + i, 1))
-          const m = d.getUTCMonth()
-          const toList = list.filter((k) => { const t = timing(k.months); return !t.evergreen && t.listBy === m && coveredBy(k.keyword, titles) === 0 })
-          const toPush = list.filter((k) => { const t = timing(k.months); return !t.evergreen && t.pushFrom === m })
-          const date = d.toISOString().slice(0, 10)
-          const top = (arr: DbKeyword[]) => arr.slice().sort((a, b) => b.avg_monthly - a.avg_monthly).slice(0, 6).map((k) => k.keyword).join(", ")
-          if (toList.length) events.push({ date, type: "prep", label: `List ${toList.length} season keywords (${country})`, store: COUNTRY_STORES[country].join(", "), note: `Season Board: demand starts climbing in ${MONTHS[(m + 1) % 12]}; list now so the products get indexed. Missing in the store: ${top(toList)}${toList.length > 6 ? "…" : ""}.` })
-          if (toPush.length) events.push({ date, type: "launch", label: `Push budget on ${toPush.length} season keywords (${country})`, store: COUNTRY_STORES[country].join(", "), note: `Season Board: the climb starts this month for ${top(toPush)}${toPush.length > 6 ? "…" : ""}.` })
-        }
-      }
-      return NextResponse.json({ events })
-    }
+    if (p.get("view") === "calendar") return NextResponse.json({ events: await cachedCalendar() })
 
     const country = p.get("country") || "US"
-    const db = getServiceClient()
-    const [kws, sug, titles] = await Promise.all([
-      allKeywords(country),
-      db.from("season_keyword_suggestions").select("*").order("created_at", { ascending: false }).limit(200),
-      liveTitles(COUNTRY_STORES[country] || []),
+    const [data, sug] = await Promise.all([
+      cachedCountry(country),
+      getServiceClient().from("season_keyword_suggestions").select("*").order("created_at", { ascending: false }).limit(200),
     ])
     if (sug.error) throw new Error(sug.error.message)
-    // Only clothing searches: drops brand and off-topic keywords (src/lib/fashion-words.ts)
-    const words = titleWordSet(titles.map((t) => t.title))
-    const clean = kws.filter((k) => isFashionKeyword(k.keyword, words))
-    return NextResponse.json({
-      country,
-      keywords: clean,
-      hidden: kws.length - clean.length,
-      updatedAt: kws.reduce((a, k) => (k.uploaded_at > a ? k.uploaded_at : a), ""),
-      suggestions: sug.data || [],
-      stores: COUNTRY_STORES[country] || [],
-      titles, // live product titles per store, for coverage
-    })
+    return NextResponse.json({ ...data, suggestions: sug.data || [] })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
@@ -107,6 +126,7 @@ export async function POST(req: NextRequest) {
         const { error } = await db.from("season_keywords").upsert(chunk, { onConflict: "country,keyword" })
         if (error) throw new Error(error.message)
       }
+      revalidateTag(SEASON_TAG)
       return NextResponse.json({ ok: true, saved: rows.length, skipped: all.length - rows.length })
     }
     if (body.action === "suggest") {
