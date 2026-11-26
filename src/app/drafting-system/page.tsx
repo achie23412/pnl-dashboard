@@ -363,7 +363,7 @@ export default function DraftingSystemPage() {
           </div>
         )}
         {data && data.summary.actionable === 0 && !loading && (
-          <div className="p-6"><EmptyState>No products need drafting right now.</EmptyState></div>
+          <div className="p-6"><EmptyState title="No products need drafting right now." /></div>
         )}
         {data && data.summary.actionable > 0 && (
           <>
