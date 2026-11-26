@@ -1,8 +1,9 @@
 "use client"
 // Customer Service → Store Credit: a log of store credits given instead of a refund.
 // Issue the credit (gift card / code) in Shopify, then log it here.
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { RefundSheetsBar, type SheetSync } from "@/components/RefundSheetsBar"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
@@ -28,6 +29,18 @@ function Field({ label, children, hint }: { label: string; children: React.React
 }
 
 export default function StoreCreditPage() {
+  // Store credits CS writes in the refund sheets (reason "Store credit") come in with the sheet sync
+  const [sheetSync, setSheetSync] = useState<SheetSync>(null)
+  const [syncing, setSyncing] = useState(false)
+  const syncSheets = async () => {
+    setSyncing(true)
+    const res = await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
+    const j = res ? await res.json().catch(() => null) : null
+    if (j?.sheets) setSheetSync(j.sheets)
+    setSyncing(false)
+    reloadRef.current?.()
+  }
+  const reloadRef = useRef<(() => void) | null>(null)
   const [rows, setRows] = useState<CsStoreCredit[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -63,6 +76,7 @@ export default function StoreCreditPage() {
       .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [])
+  reloadRef.current = load
 
   useEffect(() => {
     load()
@@ -141,6 +155,7 @@ export default function StoreCreditPage() {
         { label: "Used", value: loading ? "—" : String(rows.filter((r) => r.status === "used").length) },
       ]}
     >
+      <RefundSheetsBar result={sheetSync} syncing={syncing} onSync={syncSheets} />
       {loadError && <Notice tone="error">Couldn&apos;t load the store credit log: {loadError}</Notice>}
 
       <Panel title="Log a store credit" sub="Goodwill ladder: 60% → 80% → 100% store credit (or 10 / 20 / 30% refund). The customer picks one per stage." className="mb-4">

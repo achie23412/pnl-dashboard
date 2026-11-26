@@ -5,6 +5,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
 import { FixBanner } from "@/components/FixBanner"
+import { RefundSheetsBar, type SheetSync } from "@/components/RefundSheetsBar"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
@@ -69,6 +70,7 @@ export default function RefundsPage() {
   const [threat, setThreat] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
+  const [sheetSync, setSheetSync] = useState<SheetSync>(null)
   const [reason, setReason] = useState("")
   const [note, setNote] = useState("")
   const [pct, setPct] = useState("100")
@@ -114,7 +116,9 @@ export default function RefundsPage() {
 
   const runCheck = useCallback(async () => {
     setChecking(true)
-    await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
+    const res = await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
+    const j = res ? await res.json().catch(() => null) : null
+    if (j?.sheets) setSheetSync(j.sheets)
     try {
       localStorage.setItem("refunds:checked", String(Date.now()))
     } catch {
@@ -279,6 +283,7 @@ export default function RefundsPage() {
       actions={<Button onClick={runCheck} disabled={checking}>{checking ? "Checking Shopify…" : "Check Shopify now"}</Button>}
     >
       <FixBanner />
+      <RefundSheetsBar result={sheetSync} syncing={checking} onSync={runCheck} />
       {loadError && <Notice tone="error">Couldn&apos;t load the refund log: {loadError}</Notice>}
 
       {(() => {
