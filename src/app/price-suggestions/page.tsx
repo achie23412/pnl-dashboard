@@ -30,6 +30,8 @@ interface Suggestion {
   priority: "high" | "normal" | "low"
   metrics: Metrics
   cooldown_until: string | null
+  target_price: number | null
+  steps_info: string
 }
 
 interface Summary {
@@ -161,7 +163,7 @@ export default function PriceSuggestionsPage() {
 
       {/* Rules legend */}
       {!loading && suggestions.length > 0 && (
-        <Panel className="mb-4" title="Rules applied" sub="7-day cooldown per product after each price change. Only products with €5+ ad spend are evaluated.">
+        <Panel className="mb-4" title="Rules applied" sub="7-day cooldown per product after each price change. Only products with €5+ ad spend are evaluated. Max +10% per step (like Price Ladder).">
           <div className="flex flex-wrap gap-2">
             <Badge tone="red">Thin margin: margin &lt; 25% → raise to 35%</Badge>
             <Badge tone="amber">ROAS downtrend: 1.0–2.2 → +10% (SOP rule 9)</Badge>
@@ -221,12 +223,13 @@ export default function PriceSuggestionsPage() {
                       {isExpanded && (
                         <div className="mt-2 p-2 rounded-lg text-[10px] leading-relaxed" style={{ background: "rgba(255,255,255,0.02)", color: "var(--text-muted)" }}>
                           <div className="mb-1">{s.reason}</div>
-                          <div className="flex gap-4 mt-1 text-[9px]" style={{ color: "var(--text-dim)" }}>
+                          <div className="flex flex-wrap gap-4 mt-1 text-[9px]" style={{ color: "var(--text-dim)" }}>
                             <span>Sold: {s.metrics.units_sold}</span>
                             <span>Spend: {eur(s.metrics.ad_spend)}</span>
                             {s.metrics.be_roas && <span>BE ROAS: {s.metrics.be_roas.toFixed(2)}x</span>}
                             {s.metrics.margin_pct !== null && <span>Margin: {s.metrics.margin_pct}%</span>}
                             {s.metrics.cogs_usd !== null && <span>COGS: ${s.metrics.cogs_usd.toFixed(2)} USD</span>}
+                            {s.target_price !== null && <span style={{ color: "var(--orange)" }}>Target: {money(s.target_price, s.store)}</span>}
                           </div>
                           {result && (
                             <div className="mt-2 text-[10px]" style={{ color: result.ok ? "var(--green)" : "var(--red)" }}>
@@ -241,7 +244,12 @@ export default function PriceSuggestionsPage() {
                       <Badge tone={ruleTone}>{s.rule}</Badge>
                     </td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text)" }}>{money(s.current_price, s.store)}</td>
-                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.change_pct > 0 ? "var(--green)" : "var(--blue)" }}>{money(s.suggested_price, s.store)}</td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.change_pct > 0 ? "var(--green)" : "var(--blue)" }}>
+                      {money(s.suggested_price, s.store)}
+                      {s.steps_info && (
+                        <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>{s.steps_info}</div>
+                      )}
+                    </td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: s.change_pct > 0 ? "var(--green)" : "var(--blue)" }}>
                       {s.change_pct > 0 ? "+" : ""}{s.change_pct}%
                     </td>

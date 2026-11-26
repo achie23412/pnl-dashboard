@@ -48,6 +48,8 @@ export interface PriceSuggestion {
     margin_pct: number | null
   }
   cooldown_until: string | null
+  target_price: number | null
+  steps_info: string
 }
 
 const GOOGLE_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
@@ -71,6 +73,33 @@ function parseMoney(raw: string | undefined | null): number {
 function resolvePrice(p: CatalogProduct): number {
   if (p.sales_revenue > 0 && p.units_sold > 0) return Math.round((p.sales_revenue / p.units_sold) * 100) / 100
   return parseMoney(p.retail_price)
+}
+
+// --- Ladder stepping: cap price increases to small steps (like Price Ladder) ---
+const MAX_STEP_PCT = 10
+const MIN_STEP_PCT = 3
+
+function ladderStep(
+  currentPrice: number,
+  targetPrice: number,
+): { price: number; pct: number; stepsInfo: string; targetFull: number } | null {
+  if (targetPrice <= currentPrice) return null
+
+  const totalPct = ((targetPrice - currentPrice) / currentPrice) * 100
+
+  if (totalPct <= MAX_STEP_PCT) {
+    return { price: Math.ceil(targetPrice * 100) / 100, pct: Math.round(totalPct * 10) / 10, stepsInfo: "", targetFull: targetPrice }
+  }
+
+  const stepPrice = Math.min(
+    Math.ceil(currentPrice * (1 + MAX_STEP_PCT / 100) * 100) / 100,
+    Math.ceil(targetPrice * 100) / 100,
+  )
+  const stepPct = Math.round(((stepPrice - currentPrice) / currentPrice) * 1000) / 10
+  if (stepPct < MIN_STEP_PCT) return null
+
+  const totalSteps = Math.ceil(totalPct / MAX_STEP_PCT)
+  return { price: stepPrice, pct: stepPct, stepsInfo: `Step 1 of ~${totalSteps}`, targetFull: targetPrice }
 }
 
 function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[]): PriceSuggestion[] {
@@ -101,15 +130,17 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
     if (productMargin !== null && productMargin < 0.25 && p.cogs_usd !== null && p.cogs_usd > 0) {
       const targetMargin = 0.35
       const targetPrice = p.cogs_usd / (1 - targetMargin - txnRate)
-      const changePct = ((targetPrice - price) / price) * 100
-      if (changePct > 3) {
+      const step = ladderStep(price, targetPrice)
+      if (step) {
         suggestions.push({
           product_name: p.product_name, store: p.store, current_price: price,
-          suggested_price: Math.ceil(targetPrice * 100) / 100,
-          change_pct: Math.round(changePct * 10) / 10,
+          suggested_price: step.price,
+          change_pct: step.pct,
           rule: "Thin margin", rule_id: "thin_margin",
-          reason: `Margin is ${(productMargin * 100).toFixed(0)}% (target 35%). COGS $${p.cogs_usd.toFixed(2)} + ${(txnRate * 100).toFixed(1)}% fees leave too little.`,
+          reason: `Margin is ${(productMargin * 100).toFixed(0)}% (target 35%).${step.stepsInfo ? ` ${step.stepsInfo} toward target.` : ""} COGS $${p.cogs_usd.toFixed(2)} + ${(txnRate * 100).toFixed(1)}% fees leave too little.`,
           priority: "high", metrics, cooldown_until: null,
+          target_price: step.stepsInfo ? Math.ceil(targetPrice * 100) / 100 : null,
+          steps_info: step.stepsInfo,
         })
         continue
       }
@@ -124,6 +155,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
         rule: "ROAS downtrend", rule_id: "roas_downtrend",
         reason: `ROAS ${roas.toFixed(2)}x (between 1.0–2.2). Ascend Drafting SOP rule 9: raise price ≥10%, re-check after 7 days.`,
         priority: "high", metrics, cooldown_until: null,
+        target_price: null, steps_info: "",
       })
       continue
     }
@@ -137,6 +169,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
         rule: "Possibly overpriced", rule_id: "overpriced",
         reason: `High ROAS ${roas.toFixed(2)}x but only ${p.units_sold} sales. Price may be too high for conversion volume.`,
         priority: "low", metrics, cooldown_until: null,
+        target_price: null, steps_info: "",
       })
       continue
     }
@@ -145,7 +178,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
     if (beRoas !== null && hasRoas && roas < beRoas && roas > 0 && spend >= MIN_SPEND_GOOGLE) {
       const gap = ((beRoas - roas) / beRoas) * 100
       if (gap > 15) {
-        const increase = Math.min(gap * 0.4, 15)
+        const increase = Math.min(gap * 0.4, MAX_STEP_PCT)
         const newPrice = Math.ceil(price * (1 + increase / 100) * 100) / 100
         suggestions.push({
           product_name: p.product_name, store: p.store, current_price: price,
@@ -153,6 +186,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
           rule: "Below break-even", rule_id: "below_be",
           reason: `ROAS ${roas.toFixed(2)}x vs ${beRoas.toFixed(2)}x break-even (${gap.toFixed(0)}% gap). Raise price to close the margin gap.`,
           priority: "normal", metrics, cooldown_until: null,
+          target_price: null, steps_info: "",
         })
         continue
       }
@@ -162,15 +196,17 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
     if (p.cogs_usd !== null && p.cogs_usd > 0 && price > 0 && (p.cogs_usd / price) > 0.40) {
       const cogsPct = (p.cogs_usd / price) * 100
       const targetPrice = p.cogs_usd / 0.30
-      const changePct = ((targetPrice - price) / price) * 100
-      if (changePct > 5) {
+      const step = ladderStep(price, targetPrice)
+      if (step) {
         suggestions.push({
           product_name: p.product_name, store: p.store, current_price: price,
-          suggested_price: Math.ceil(targetPrice * 100) / 100,
-          change_pct: Math.round(changePct * 10) / 10,
+          suggested_price: step.price,
+          change_pct: step.pct,
           rule: "COGS% too high", rule_id: "high_cogs",
-          reason: `COGS is ${cogsPct.toFixed(0)}% of price ($${p.cogs_usd.toFixed(2)} / $${price.toFixed(2)}). Target: under 30%.`,
+          reason: `COGS is ${cogsPct.toFixed(0)}% of price ($${p.cogs_usd.toFixed(2)} / $${price.toFixed(2)}).${step.stepsInfo ? ` ${step.stepsInfo} toward target 30%.` : " Target: under 30%."}`,
           priority: "normal", metrics, cooldown_until: null,
+          target_price: step.stepsInfo ? Math.ceil(targetPrice * 100) / 100 : null,
+          steps_info: step.stepsInfo,
         })
       }
     }
