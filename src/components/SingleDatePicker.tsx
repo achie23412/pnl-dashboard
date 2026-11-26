@@ -2,6 +2,7 @@
 // Compact single-date picker in the dashboard's dark style: quick choices
 // (Today, Tomorrow, next Monday, in a week, no date) plus a month grid.
 // Value is "YYYY-MM-DD" or "" (no date).
+import { FloatingMenu } from "@/components/FloatingMenu"
 import { useEffect, useRef, useState } from "react"
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -45,11 +46,12 @@ export function SingleDatePicker({
   const base = value ? fromIso(value) : now
   const [view, setView] = useState({ y: base.getFullYear(), m: base.getMonth() })
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false)
@@ -127,11 +129,7 @@ export function SingleDatePicker({
       </button>
 
       {open && (
-        <div
-          role="dialog"
-          className={`absolute ${align === "left" ? "left-0" : "right-0"} top-full mt-1.5 z-50 rounded-xl p-3 w-[248px]`}
-          style={{ background: "rgba(15,19,32,0.98)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 12px 32px rgba(0,0,0,0.45)", backdropFilter: "blur(16px)" }}
-        >
+        <FloatingMenu anchor={ref} menuRef={menuRef} role="dialog" align={align === "left" ? "left" : "right"} className="rounded-xl p-3 w-[248px]">
           <div className="flex flex-wrap gap-1 mb-3">
             {quick.map((q) => {
               const active = q.v === value
@@ -189,7 +187,7 @@ export function SingleDatePicker({
               )
             })}
           </div>
-        </div>
+        </FloatingMenu>
       )}
     </div>
   )

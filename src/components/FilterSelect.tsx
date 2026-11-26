@@ -1,6 +1,7 @@
 "use client"
 // Multi-select filter in the dashboard's dark style. Pick several values and
 // choose whether to show only those (Include) or hide them (Exclude).
+import { FloatingMenu } from "@/components/FloatingMenu"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 export type FilterMode = "include" | "exclude"
@@ -46,13 +47,14 @@ export function FilterSelect({
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const opts: FilterOption[] = useMemo(() => options.map((o) => (typeof o === "string" ? { value: o } : o)), [options])
   const nameOf = (v: string) => opts.find((o) => o.value === v)?.label || v
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false)
@@ -101,10 +103,7 @@ export function FilterSelect({
       </button>
 
       {open && (
-        <div
-          className="absolute left-0 top-full mt-1.5 z-50 rounded-xl p-2 w-[240px]"
-          style={{ background: "rgba(15,19,32,0.98)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 12px 32px rgba(0,0,0,0.45)", backdropFilter: "blur(16px)" }}
-        >
+        <FloatingMenu anchor={ref} menuRef={menuRef} className="rounded-xl p-2 w-[240px]">
           {allowExclude && (
             <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg mb-2" style={{ background: "rgba(255,255,255,0.04)" }}>
               {(["include", "exclude"] as FilterMode[]).map((m) => (
@@ -171,7 +170,7 @@ export function FilterSelect({
               Clear
             </button>
           </div>
-        </div>
+        </FloatingMenu>
       )}
     </div>
   )

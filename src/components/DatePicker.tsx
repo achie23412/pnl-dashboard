@@ -1,4 +1,5 @@
 "use client"
+import { FloatingMenu } from "@/components/FloatingMenu"
 import { useState, useRef, useEffect, useMemo } from "react"
 import { DATE_PRESETS } from "@/lib/constants"
 
@@ -27,6 +28,7 @@ export function DatePicker({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const now = new Date()
   const [viewYear, setViewYear] = useState(now.getFullYear())
@@ -38,7 +40,7 @@ export function DatePicker({
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
@@ -135,16 +137,7 @@ export function DatePicker({
       </button>
 
       {open && (
-        <div
-          className="absolute right-0 top-full mt-2 rounded-2xl shadow-2xl z-50 overflow-hidden"
-          style={{
-            background: "rgba(13,18,36,0.97)",
-            backdropFilter: "blur(32px)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
-            width: 340,
-          }}
-        >
+        <FloatingMenu anchor={ref} menuRef={menuRef} align="right" gap={8} className="rounded-2xl overflow-hidden" style={{ width: 340, boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
           {/* Top glow accent */}
           <div style={{
             height: 3,
@@ -261,7 +254,7 @@ export function DatePicker({
               Click end date to complete range
             </div>
           )}
-        </div>
+        </FloatingMenu>
       )}
     </div>
   )

@@ -2,6 +2,7 @@
 // Single-choice dropdown in the same look as FilterSelect ("Label: value ⌄").
 // Use it everywhere a native <select> was used: sort orders, modes, form fields.
 // For filters where picking several values makes sense, use FilterSelect.
+import { FloatingMenu } from "@/components/FloatingMenu"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 export interface PillOption {
@@ -36,6 +37,7 @@ export function PillSelect({
   const [q, setQ] = useState("")
   const [hi, setHi] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const opts: PillOption[] = useMemo(() => options.map((o) => (typeof o === "string" ? { value: o } : o)), [options])
   const current = opts.find((o) => o.value === value)
   const shown = q ? opts.filter((o) => (o.label || o.value).toLowerCase().includes(q.toLowerCase())) : opts
@@ -44,7 +46,7 @@ export function PillSelect({
     if (!open) return
     setHi(Math.max(0, shown.findIndex((o) => o.value === value)))
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener("mousedown", onDown)
     return () => document.removeEventListener("mousedown", onDown)
@@ -104,10 +106,7 @@ export function PillSelect({
       </button>
 
       {open && (
-        <div
-          className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-1.5 z-50 rounded-xl p-1.5 ${fullWidth ? "w-full min-w-[200px]" : "min-w-[200px] max-w-[320px]"}`}
-          style={{ background: "rgba(15,19,32,0.98)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 12px 32px rgba(0,0,0,0.45)", backdropFilter: "blur(16px)" }}
-        >
+        <FloatingMenu anchor={ref} menuRef={menuRef} align={align} matchWidth={fullWidth} className={`rounded-xl p-1.5 ${fullWidth ? "min-w-[200px]" : "min-w-[200px] max-w-[320px]"}`}>
           {opts.length > 8 && (
             <input
               autoFocus
@@ -152,7 +151,7 @@ export function PillSelect({
               )
             })}
           </div>
-        </div>
+        </FloatingMenu>
       )}
     </div>
   )
