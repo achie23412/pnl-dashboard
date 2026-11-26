@@ -9,6 +9,7 @@ import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import type { Dispute } from "@/app/api/disputes/route"
+import { DisputeEvidence } from "@/components/DisputeEvidence"
 
 type StoreInfo = { store: string; source: string | null; orders90d: number | null; disputes90d: number; error: string | null }
 const EVIDENCE = [
@@ -136,6 +137,7 @@ export default function DisputesPage() {
                               ? "Inquiry: a full refund closes it. A partial refund can still turn into a full chargeback. The CS Manager decides (playbook E5)."
                               : "Chargeback: do not refund (Shopify would pay out twice). The CS Manager submits evidence in Shopify before the respond-by date: the full conversation, tracking and proof of delivery, and the offers made. Tag the order dispute-open (playbook 1.5 / E5)."}
                           </div>
+                          {!/INQUIRY/i.test(d.type) && d.source === "payments" && <DisputeEvidence store={d.store} disputeId={d.id} />}
                           <div className="flex flex-wrap gap-2 mb-2">
                             {[{ v: "fight", l: "Fight (submit evidence)" }, { v: "accept", l: "Accept" }, ...(/INQUIRY/i.test(d.type) ? [{ v: "refund_inquiry", l: "Full refund (inquiry)" }] : [])].map((o) => (
                               <Button key={o.v} size="sm" variant={draft.decision === o.v ? "primary" : "secondary"} onClick={() => setDraft({ ...draft, decision: o.v })}>{o.l}</Button>
