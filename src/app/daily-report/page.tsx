@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useMemo } from "react"
 import { db } from "@/lib/db-client"
-import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE_MARKET } from "@/lib/constants"
+import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE_MARKET, dropStopped, stoppedWithData } from "@/lib/constants"
 import { mediaBuyerRate } from "@/lib/fee-settings"
 import { useFeeSettings } from "@/lib/use-fee-settings"
 import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, FALLBACK_RATES } from "@/lib/currency"
@@ -90,11 +90,12 @@ export default function DailyReportPage() {
         supabase.from("refunds").select("*").eq("date", date),
         supabase.from("daily_sessions").select("store,sessions").eq("date", date),
       ])
-      setRevenue((rev as RevenueRow[]) || [])
-      setSpend((sp as SpendRow[]) || [])
-      setCogs((cg as CogsRow[]) || [])
-      setRefunds((ref as RefundRow[]) || [])
-      setSessions((ses as { store: string; sessions: number }[]) || [])
+      // Stopped stores (Blinky) only show for days before their stop date
+      setRevenue(dropStopped(rev as RevenueRow[]))
+      setSpend(dropStopped(sp as SpendRow[]))
+      setCogs(dropStopped(cg as CogsRow[]))
+      setRefunds(dropStopped(ref as RefundRow[]))
+      setSessions(dropStopped(((ses as { store: string; sessions: number }[]) || []).map((x) => ({ ...x, date }))))
       setRates(await fetchEurRates(date, date))
       // Actual supplier cost of the orders placed this day (ShipGoods, per order)
       setOrderCogs(null)
@@ -113,7 +114,7 @@ export default function DailyReportPage() {
   }, [date])
 
   const storeRows = useMemo((): StoreRow[] => {
-    const storeNames = STORES.filter((s) => s !== "Overall")
+    const storeNames: string[] = [...STORES.filter((s) => s !== "Overall"), ...stoppedWithData(revenue, spend)]
     return storeNames.map((s) => {
       const rev = revenue.filter((r) => r.store === s)
       const sp = spend.filter((r) => r.store === s)

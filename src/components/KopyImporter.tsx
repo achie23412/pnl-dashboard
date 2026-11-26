@@ -8,7 +8,7 @@ import { fetchSourceProduct, listCollectionProducts } from "@/lib/competitor-sca
 import { ImportJobActions, type ImportJob } from "@/components/ImportJobActions"
 import { PillSelect } from "@/components/PillSelect"
 
-const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES", "Blinky"]
+const STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES"]
 type Mode = "single" | "multiple" | "collection"
 type Rule = "keep" | "multiply" | "fixed"
 

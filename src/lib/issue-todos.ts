@@ -36,7 +36,7 @@ function byStore<T extends { store: string }>(xs: T[]): Map<string, T[]> {
   return m
 }
 
-const OUR_STORES = new Set(["LUMEGLASSES", "Blinky", "Walsh & Farley", "Carter & Collins", "Susan & Allen"])
+const OUR_STORES = new Set(["LUMEGLASSES", "Walsh & Farley", "Carter & Collins", "Susan & Allen"]) // Blinky stopped 26 Nov 2026
 const ours = <T extends { store: string }>(xs: T[]) => xs.filter((x) => OUR_STORES.has(x.store))
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ")
 

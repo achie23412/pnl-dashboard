@@ -4,6 +4,7 @@ import { fetchEurRates } from "@/lib/currency"
 import { loadFeeSettings } from "@/lib/fee-settings-server"
 import { buildAutoTodos, amsterdamToday } from "@/lib/todo-rules"
 import { complaintEvents, riskyProducts, daysAgo } from "@/lib/product-complaints"
+import { dropStopped } from "@/lib/constants"
 
 export const dynamic = "force-dynamic"
 
@@ -45,9 +46,10 @@ export async function GET() {
   const rates = await fetchEurRates(from, today)
   const auto = buildAutoTodos({
     today,
-    revenue: rev.data || [],
-    spend: sp.data || [],
-    cogs: cg.data || [],
+    // Stopped stores (Blinky) drop out from their stop date
+    revenue: dropStopped(rev.data),
+    spend: dropStopped(sp.data),
+    cogs: dropStopped(cg.data),
     rates,
     hasSessions: (ses.data || []).length > 0,
     lastRefresh: log.data?.[0] || null,

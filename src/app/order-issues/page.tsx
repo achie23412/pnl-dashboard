@@ -96,7 +96,7 @@ export default function OrderIssuesPage() {
     <PageShell
       title="Order Issues"
       breadcrumb="Supply Chain → Order Issues"
-      description="Orders with problems from ShipGoods: address errors, stuck processing, quote pending. Only LUMEGLASSES and Blinky fulfilled through ShipGoods."
+      description="Orders with problems from ShipGoods: address errors, stuck processing, quote pending. Only LUMEGLASSES is fulfilled through ShipGoods (Blinky stopped on 26 Nov 2026)."
       stats={[
         { label: "Open issues", value: summary ? String(orders.length) : "—" },
         { label: "Address errors", value: summary ? String(summary.address_errors) : "—" },

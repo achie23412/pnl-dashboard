@@ -1,13 +1,33 @@
 export const STORES = [
   "Overall",
   "LUMEGLASSES",
-  "Blinky",
   "Walsh & Farley",
   "Carter & Collins",
   "Susan & Allen",
 ] as const
 
 export type StoreName = (typeof STORES)[number]
+
+// Stores that stopped trading → the first day they are hidden. Their numbers still count up to
+// the day before (past months stay as they were); from this date on their rows are left out
+// everywhere, and they're no longer in the store lists. Data in Supabase is not deleted.
+export const STOPPED_STORES: Record<string, string> = {
+  Blinky: "2026-11-26",
+}
+
+export function isHiddenRow(store?: string | null, date?: string | null): boolean {
+  const from = store ? STOPPED_STORES[store] : undefined
+  return !!from && (!date || String(date).slice(0, 10) >= from)
+}
+
+export function dropStopped<T extends { store?: string | null; date?: string | null }>(rows: T[] | null | undefined): T[] {
+  return (rows || []).filter((r) => !isHiddenRow(r.store, r.date))
+}
+
+// Stopped stores that still have rows in these lists (a past period), to show them there
+export function stoppedWithData(...lists: { store?: string | null }[][]): string[] {
+  return Object.keys(STOPPED_STORES).filter((s) => lists.some((l) => l.some((r) => r.store === s)))
+}
 
 export const STORE_COLORS: Record<string, string> = {
   LUMEGLASSES: "#4E6AA7",

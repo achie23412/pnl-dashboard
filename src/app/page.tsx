@@ -15,7 +15,7 @@ import {
   RevenueByStoreChart,
   SpendByAccountChart,
 } from "@/components/Charts"
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES, breakEvenRoas } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES, breakEvenRoas, dropStopped, stoppedWithData } from "@/lib/constants"
 import { mediaBuyerRate, mediaBuyerRateNow } from "@/lib/fee-settings"
 import { useFeeSettings } from "@/lib/use-fee-settings"
 import type { StoreName } from "@/lib/constants"
@@ -88,11 +88,11 @@ export default function Dashboard() {
       }>("hub-data")
 
       if (cached) {
-        setRevenue(cached.rev)
-        setSpend(cached.sp)
-        setCogs(cached.cg)
-        setSessions(cached.ses)
-        setRefunds(cached.ref)
+        setRevenue(dropStopped(cached.rev))
+        setSpend(dropStopped(cached.sp))
+        setCogs(dropStopped(cached.cg))
+        setSessions(dropStopped(cached.ses))
+        setRefunds(dropStopped(cached.ref))
         setLastRefresh(cached.lr)
         setRates(cached.rt)
         setLoading(false)
@@ -108,11 +108,12 @@ export default function Dashboard() {
         supabase.from("daily_sessions").select("*").order("date"),
         supabase.from("refunds").select("date,store,amount").order("date"),
       ])
-      const revRows = (rev as RevenueRow[]) || []
-      const spRows = (sp as SpendRow[]) || []
-      const cogsRows = (cg as CogsRow[]) || []
-      const sesRows = (ses as SessionsRow[]) || []
-      const refRows = (ref as RefundRow[]) || []
+      // Stopped stores (Blinky) count until their stop date, then drop out
+      const revRows = dropStopped(rev as RevenueRow[])
+      const spRows = dropStopped(sp as SpendRow[])
+      const cogsRows = dropStopped(cg as CogsRow[])
+      const sesRows = dropStopped(ses as SessionsRow[])
+      const refRows = dropStopped(ref as RefundRow[])
       const lr = log?.[0]?.completed_at || null
       const firstDate = [revRows[0]?.date, cogsRows[0]?.date].filter(Boolean).sort()[0]
       const today = new Date().toISOString().slice(0, 10)
@@ -264,7 +265,8 @@ export default function Dashboard() {
 
   const storeKPIs = useMemo((): StoreKPI[] => {
     if (store !== "Overall") return []
-    const storeNames = STORES.filter((s) => s !== "Overall")
+    // A stopped store keeps its card only for periods where it still has numbers
+    const storeNames: string[] = [...STORES.filter((s) => s !== "Overall"), ...stoppedWithData(filtered.revenue, filtered.spend)]
     return storeNames.map((s) => {
       const rev = filtered.revenue.filter((r) => r.store === s)
       const sp = filtered.spend.filter((r) => r.store === s)

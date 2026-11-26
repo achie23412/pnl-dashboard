@@ -3,7 +3,7 @@ import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { readStoredShipgoods } from "@/lib/shipgoods-store"
-import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, STOPPED_STORES, breakEvenRoas } from "@/lib/constants"
 import { mediaBuyerRateNow } from "@/lib/fee-settings"
 import { loadFeeSettings } from "@/lib/fee-settings-server"
 import { getShopifyToken } from "@/lib/shopify-sessions"
@@ -735,7 +735,8 @@ async function buildResponse(req: Request) {
   const dateTo = ISO_DATE.test(qTo) ? qTo : today
 
   const errors: string[] = []
-  const storeNames = store === "all" ? Object.keys(SHOPIFY_STORES) : [store]
+  // Stopped stores (Blinky) are left out of the "all" catalog
+  const storeNames = store === "all" ? Object.keys(SHOPIFY_STORES).filter((s) => !STOPPED_STORES[s]) : [store]
 
   // ShipGoods (COGS + sales fallback), Google per-product spend, FX and the
   // store totals from Supabase all load in parallel.

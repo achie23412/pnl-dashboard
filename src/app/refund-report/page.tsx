@@ -11,6 +11,7 @@ import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY, fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
 import { reasonLabel, money, type CsRefund } from "@/lib/cs-log"
+import { dropStopped, isHiddenRow } from "@/lib/constants"
 
 // Database reads go through our logged-in server (/api/db), not the public Supabase key
 const supabase = db
@@ -49,9 +50,10 @@ export default function RefundReportPage() {
         if (r.error) errs.push(`revenue: ${r.error.message}`)
         if (f.error) errs.push(`Shopify refunds: ${f.error.message}`)
         if (l.error) errs.push(`CS refund log: ${l.error}`)
-        setRev((r.data || []) as Rev[])
-        setRefunds((f.data || []) as Ref[])
-        setLog(((l.rows || []) as CsRefund[]).filter((y) => y.refund_date >= from))
+        // Stopped stores (Blinky) count until their stop date, then drop out
+        setRev(dropStopped(r.data as Rev[]))
+        setRefunds(dropStopped(f.data as Ref[]))
+        setLog(((l.rows || []) as CsRefund[]).filter((y) => y.refund_date >= from && !isHiddenRow(y.store, y.refund_date)))
         setRates(x)
       })
       .catch((e: unknown) => errs.push(e instanceof Error ? e.message : String(e)))

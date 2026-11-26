@@ -21,7 +21,7 @@ export type AutoTodo = {
 const q = (s: string) => encodeURIComponent(s)
 
 export const GOOGLE_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
-export const META_STORES = ["LUMEGLASSES", "Blinky"]
+export const META_STORES = ["LUMEGLASSES"] // Blinky stopped 26 Nov 2026
 const ALL_STORES = [...META_STORES, ...GOOGLE_STORES]
 
 const addDays = (d: string, n: number) => {

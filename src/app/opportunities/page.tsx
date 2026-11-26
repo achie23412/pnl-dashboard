@@ -98,7 +98,7 @@ const TABS: { key: string; label: string; statuses: OppStatus[] }[] = [
 const PRIORITY_TONE = { high: "green", medium: "amber", low: "grey" } as const
 const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" }
 const STORE_TZ: Record<string, string> = Object.fromEntries(TARGET_STORES.map((s) => [s.name, s.timezone]))
-const STORE_NAMES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES", "Blinky"]
+const STORE_NAMES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen", "LUMEGLASSES"]
 
 const border = { borderColor: "rgba(255,255,255,0.1)", color: "var(--text)" }
 

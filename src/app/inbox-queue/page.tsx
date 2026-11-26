@@ -22,7 +22,7 @@ function readLS<T>(k: string): Record<string, T> {
 function writeLS(k: string, v: unknown) {
   try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* storage full or blocked: works without it */ }
 }
-const STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley", "LUMEGLASSES", "Blinky"]
+const STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley", "LUMEGLASSES"]
 const field = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 
 function ago(iso: string | null) {

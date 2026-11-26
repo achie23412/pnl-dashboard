@@ -8,7 +8,7 @@ import { PageShell } from "@/components/PageShell"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, dropStopped } from "@/lib/constants"
 import { mediaBuyerRate } from "@/lib/fee-settings"
 import { useFeeSettings } from "@/lib/use-fee-settings"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
@@ -18,7 +18,8 @@ const supabase = db
 
 // Transaction fee as the sheet's Setup tab. The media buyer fee comes from Store Settings (from its start date).
 const SHEET_STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley"]
-const ALL_STORES = [...SHEET_STORES, "LUMEGLASSES", "Blinky"]
+// Blinky stopped on 26 Nov 2026: still listed in months where it has numbers (dataStores)
+const ALL_STORES = [...SHEET_STORES, "LUMEGLASSES"]
 const FEES: Record<string, { mediaBuyer: number; txn: number }> = {
   "Susan & Allen": { mediaBuyer: 0.1, txn: 0.06 },
   "Carter & Collins": { mediaBuyer: 0.1, txn: 0.06 },
@@ -81,7 +82,8 @@ export default function ProfitLossPage() {
         ])
         const err = rev.error || sp.error || cg.error || ref.error
         if (err) throw new Error(err.message)
-        setRaw({ rev: (rev.data || []) as Raw["rev"], sp: (sp.data || []) as Raw["sp"], cg: (cg.data || []) as Raw["cg"], ref: (ref.data || []) as Raw["ref"] })
+        // Stopped stores (Blinky) count until their stop date, then drop out
+        setRaw({ rev: dropStopped(rev.data as Raw["rev"]), sp: dropStopped(sp.data as Raw["sp"]), cg: dropStopped(cg.data as Raw["cg"]), ref: dropStopped(ref.data as Raw["ref"]) })
         setRates(await fetchEurRates("2026-09-01", new Date().toISOString().slice(0, 10)))
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
@@ -291,7 +293,7 @@ export default function ProfitLossPage() {
 
           <div className="text-[10px] space-y-1" style={{ color: "var(--text-dim)" }}>
             <div>Same formulas as the Ascend profit sheet: net revenue = gross − refunds · profit before refunds = gross − cost of goods − ad spend − media buyer fee − transaction fee · profit = profit before refunds − refunds · ROAS = net ÷ ad spend · gross ROAS = gross ÷ ad spend.</div>
-            <div>Fees: transaction 6% of gross revenue on the Google stores (Setup tab); media buyer fee (% of ad spend) only from the start date set in Store Settings. LUMEGLASSES and Blinky: transaction fee {(FEES.LUMEGLASSES.txn * 100).toFixed(1)}%.</div>
+            <div>Fees: transaction 6% of gross revenue on the Google stores (Setup tab); media buyer fee (% of ad spend) only from the start date set in Store Settings. LUMEGLASSES (and Blinky until it stopped on 25 Nov): transaction fee {(FEES.LUMEGLASSES.txn * 100).toFixed(1)}%.</div>
             <div>* Cost of goods with a star includes an estimate (average COGS per order) for days without ShipGoods COGS. The sheet currently types a flat 30%.</div>
             <div>Differences vs the sheet: amounts use the daily ECB rate (the sheet one rate per month); ad spend is the full Google Ads day from Windsor (the sheet&apos;s daily split is typed by hand). Dashboard data starts {firstData ? new Date(firstData + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "late Oct 2026"}, so September only exists in the sheet.</div>
           </div>
