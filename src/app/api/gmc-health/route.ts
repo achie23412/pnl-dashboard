@@ -193,8 +193,8 @@ export async function POST(req: NextRequest) {
       const s = (await getSettings()).find((x) => x.store === b.store)
       const email = String(b.email || "").trim()
       if (!s?.merchant_id) return NextResponse.json({ error: "Fill in this store's Merchant Center ID first" }, { status: 400 })
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: "Fill in your Google account email" }, { status: 400 })
-      await registerGcp(s.merchant_id, email)
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: "That email doesn't look right" }, { status: 400 })
+      await registerGcp(s.merchant_id, email || null)
       return NextResponse.json({ ok: true })
     }
     if (b.action === "draft") {

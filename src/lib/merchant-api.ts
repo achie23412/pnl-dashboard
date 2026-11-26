@@ -148,11 +148,11 @@ export async function listPriceInsights(merchantId: string, maxPages = 20): Prom
 }
 
 // One-time: link the Google Cloud project to a Merchant Center account (Merchant API requirement).
-// developerEmail becomes an API developer contact on that account.
-export async function registerGcp(merchantId: string, developerEmail: string) {
+// developerEmail (optional) becomes an API developer contact on that account.
+export async function registerGcp(merchantId: string, developerEmail: string | null) {
   return call<Record<string, unknown>>(
     `/accounts/v1/accounts/${encodeURIComponent(merchantId)}/developerRegistration:registerGcp`,
-    { method: "POST", body: { developerEmail } },
+    { method: "POST", body: developerEmail ? { developerEmail } : {} },
   )
 }
 

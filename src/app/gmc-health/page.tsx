@@ -134,7 +134,7 @@ export default function GmcHealthPage() {
                       {owner && <Button size="sm" onClick={() => post(`id-${s.store}`, { action: "settings", store: s.store, merchant_id: ids[s.store] }, () => `Saved ${s.store}'s Merchant Center ID.`)} disabled={!!busy}>Save</Button>}
                     </div>
                     {owner && data.configured && s.merchant_id && (
-                      <Button size="sm" variant="ghost" onClick={() => post(`reg-${s.store}`, { action: "register", store: s.store, email }, () => `API access registered for ${s.store}.`)} disabled={!!busy || !email}>Register API access</Button>
+                      <Button size="sm" variant="ghost" onClick={() => post(`reg-${s.store}`, { action: "register", store: s.store, email }, () => `API access registered for ${s.store}.`)} disabled={!!busy}>Register API access</Button>
                     )}
                     <div className="text-[10px] mt-1" style={{ color: s.last_sync_error ? "var(--red)" : "var(--text-dim)" }}>
                       {s.last_sync_error ? s.last_sync_error : s.last_sync_at ? `Last sync ${new Date(s.last_sync_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Not synced yet"}
@@ -145,7 +145,7 @@ export default function GmcHealthPage() {
               </div>
               {owner && data.configured && (
                 <div className="flex items-center gap-2 mt-2">
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your Google login email (for Register API access)" className="flex-1 max-w-sm px-2 py-1 rounded-md text-[10px]" style={box} />
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Contact email for Google API notices (optional)" className="flex-1 max-w-sm px-2 py-1 rounded-md text-[10px]" style={box} />
                 </div>
               )}
             </Panel>
