@@ -16,6 +16,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
+  // Vercel cron passes Authorization: Bearer <CRON_SECRET> — let cron-triggered API calls through
+  if (pathname.startsWith("/api/") && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.next()
+  }
+
   // The session must carry a valid signature and not be expired; the cookie existing isn't enough
   const role = await verifySession(req.cookies.get(SESSION_COOKIE)?.value)
   if (!role) {

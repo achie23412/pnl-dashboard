@@ -17,6 +17,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/drafting-products",
+      "schedule": "15 6 * * *"
+    },
+    {
       "path": "/api/cron/warm",
       "schedule": "20 6 * * *"
     },
