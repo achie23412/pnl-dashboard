@@ -1,13 +1,12 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { fetchLatestEurRates } from "@/lib/currency"
 import { db } from "@/lib/db-client"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { PageShell } from "@/components/PageShell"
-import { Panel, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
+import { Panel, Button, Badge, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { FilterSelect, EMPTY_FILTER, passes, passesAny, type FilterValue } from "@/components/FilterSelect"
 
-// Database reads go through our logged-in server (/api/db), not the public Supabase key
 const supabase = db
 
 interface Competitor {
@@ -30,6 +29,21 @@ interface Competitor {
   last_checked: string
   last_synced: string | null
   trendtrack_id: string | null
+  last_full_month_visits: number | null
+  prior_month_visits: number | null
+  visits_month: string | null
+}
+
+interface CoverageSum { total: number; covered: number; partly: number }
+interface CpProduct {
+  id: number; competitor_domain: string; title: string; handle: string
+  url: string; image: string | null; product_type: string | null
+  price: number | null; currency: string | null; bestseller_rank: number | null
+}
+interface CoverageRow {
+  id: number; competitor_product_id: number; own_product_id: number | null
+  own_product_title: string | null; status: string; auto_matched: boolean
+  verified: boolean; verified_at: string | null; notes: string | null
 }
 
 function fmt(n: number | null): string {
@@ -39,13 +53,17 @@ function fmt(n: number | null): string {
   return n.toLocaleString()
 }
 
-// TrendTrack revenue estimates are USD; shown in EUR at today's ECB rate
 function fmtRev(usd: number | null, usdPerEur: number): string {
   if (usd == null) return "—"
   const n = usd / usdPerEur
   if (n >= 1_000_000) return `€${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `€${(n / 1_000).toFixed(0)}K`
   return `€${n.toFixed(0)}`
+}
+
+function momPct(last: number | null, prior: number | null): number | null {
+  if (last == null || prior == null || prior === 0) return null
+  return ((last - prior) / prior) * 100
 }
 
 export default function CompetitorsPage() {
@@ -60,6 +78,12 @@ export default function CompetitorsPage() {
   const [search, setSearch] = useState("")
   const [sortBy, setSortBy] = useState<string>("monthly_visits")
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc")
+  const [coverageSums, setCoverageSums] = useState<Record<string, CoverageSum>>({})
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [covProducts, setCovProducts] = useState<CpProduct[]>([])
+  const [covRows, setCovRows] = useState<CoverageRow[]>([])
+  const [covLoading, setCovLoading] = useState(false)
+  const [autoMatchLoading, setAutoMatchLoading] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
   const [usdPerEur, setUsdPerEur] = useState(1.11)
@@ -74,6 +98,77 @@ export default function CompetitorsPage() {
       .limit(200)
     setCompetitors((data as Competitor[]) || [])
     setLoading(false)
+    loadCoverageSummary()
+  }
+
+  async function loadCoverageSummary() {
+    try {
+      const res = await fetch("/api/competitors/coverage")
+      const json = await res.json()
+      if (json.summary) setCoverageSums(json.summary)
+    } catch { /* ignore */ }
+  }
+
+  const loadCoverageDetail = useCallback(async (domain: string) => {
+    setCovLoading(true)
+    setCovProducts([])
+    setCovRows([])
+    try {
+      const res = await fetch(`/api/competitors/coverage?domain=${encodeURIComponent(domain)}`)
+      const json = await res.json()
+      setCovProducts(json.products || [])
+      setCovRows(json.coverage || [])
+    } catch { /* ignore */ }
+    setCovLoading(false)
+  }, [])
+
+  function toggleExpand(domain: string) {
+    if (expanded === domain) {
+      setExpanded(null)
+    } else {
+      setExpanded(domain)
+      loadCoverageDetail(domain)
+    }
+  }
+
+  async function runAutoMatch(domain: string) {
+    setAutoMatchLoading(domain)
+    try {
+      await fetch("/api/competitors/coverage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auto_match", domain }),
+      })
+      await loadCoverageDetail(domain)
+      await loadCoverageSummary()
+    } catch { /* ignore */ }
+    setAutoMatchLoading(null)
+  }
+
+  async function verifyCoverage(cpId: number, verified: boolean) {
+    await fetch("/api/competitors/coverage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify", competitor_product_id: cpId, verified }),
+    })
+    setCovRows((prev) => prev.map((r) =>
+      r.competitor_product_id === cpId
+        ? { ...r, verified, verified_at: verified ? new Date().toISOString() : null }
+        : r,
+    ))
+    loadCoverageSummary()
+  }
+
+  async function setCoverageStatus(cpId: number, status: string) {
+    await fetch("/api/competitors/coverage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set_status", competitor_product_id: cpId, status }),
+    })
+    setCovRows((prev) => prev.map((r) =>
+      r.competitor_product_id === cpId ? { ...r, status, verified: false, verified_at: null } : r,
+    ))
+    loadCoverageSummary()
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -113,10 +208,16 @@ export default function CompetitorsPage() {
     .filter((c) => !search || c.domain.toLowerCase().includes(search.toLowerCase()) || (c.store_name || "").toLowerCase().includes(search.toLowerCase()) || (c.niche || "").toLowerCase().includes(search.toLowerCase()))
 
   const sorted = [...filtered].sort((a, b) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const av = (a as any)[sortBy] as number ?? -1
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bv = (b as any)[sortBy] as number ?? -1
+    let av: number, bv: number
+    if (sortBy === "mom_pct") {
+      av = momPct(a.last_full_month_visits, a.prior_month_visits) ?? -9999
+      bv = momPct(b.last_full_month_visits, b.prior_month_visits) ?? -9999
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      av = (a as any)[sortBy] as number ?? -1
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      bv = (b as any)[sortBy] as number ?? -1
+    }
     return sortDir === "desc" ? bv - av : av - bv
   })
 
@@ -125,6 +226,8 @@ export default function CompetitorsPage() {
   const lastSynced = competitors.find((c) => c.last_synced)?.last_synced
 
   const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
+
+  const covMapLocal = new Map(covRows.map((r) => [r.competitor_product_id, r]))
 
   return (
     <PageShell
@@ -159,6 +262,10 @@ export default function CompetitorsPage() {
           options={[
             { value: "monthly_visits:desc", label: "Visits: high → low" },
             { value: "monthly_visits:asc", label: "Visits: low → high" },
+            { value: "last_full_month_visits:desc", label: "Last month: high → low" },
+            { value: "last_full_month_visits:asc", label: "Last month: low → high" },
+            { value: "mom_pct:desc", label: "MoM %: high → low" },
+            { value: "mom_pct:asc", label: "MoM %: low → high" },
             { value: "growth_30d:desc", label: "Growth: high → low" },
             { value: "growth_30d:asc", label: "Growth: low → high" },
             { value: "active_ads:desc", label: "Ads: most → least" },
@@ -207,80 +314,45 @@ export default function CompetitorsPage() {
             <thead>
               <tr style={{ color: "var(--text-dim)" }}>
                 <th className={`${TH} text-left`}>Competitor</th>
-                <ThSort label="Monthly visits" field="monthly_visits" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="Visits" field="monthly_visits" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="Last month" field="last_full_month_visits" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="MoM %" field="mom_pct" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="30d growth" field="growth_30d" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className={`${TH} text-center`}>Markets</th>
-                <ThSort label="Active ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <ThSort label="Ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="Products" field="products_count" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
-                <ThSort label="TP reviews" field="tp_reviews" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
-                <th className={`${TH} text-right`}>Est. revenue</th>
+                <ThSort label="TP" field="tp_reviews" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
+                <th className={`${TH} text-right`}>Revenue</th>
+                <th className={`${TH} text-center`}>Coverage</th>
                 <th className={`${TH} text-center`}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((c) => (
-                <tr key={c.id} className="group" style={ROW_BORDER}>
-                  <td className={TD}>
-                    <a href={c.store_url || `https://${c.domain}`} target="_blank" rel="noopener noreferrer"
-                      className="hover:underline font-medium" style={{ color: "var(--accent)" }}>
-                      {c.domain || c.store_name}
-                    </a>
-                    {c.niche && <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>{c.niche}</div>}
-                  </td>
-                  <td className={`${TD} text-right tabular-nums`}>{fmt(c.monthly_visits)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>
-                    {c.growth_30d != null ? (
-                      <span style={{ color: c.growth_30d > 0 ? "var(--green)" : c.growth_30d < 0 ? "var(--red)" : "var(--text-muted)" }}>
-                        {c.growth_30d > 0 ? "▲" : c.growth_30d < 0 ? "▼" : ""} {c.growth_30d > 0 ? "+" : ""}{c.growth_30d.toFixed(1)}%
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className={`${TD} text-center`} style={{ color: "var(--text-muted)" }}>
-                    {Array.isArray(c.markets) && c.markets.length > 0
-                      ? c.markets.slice(0, 4).map((m) => m.toUpperCase()).join(" ")
-                      : "—"}
-                  </td>
-                  <td className={`${TD} text-right tabular-nums`}>{c.active_ads != null ? fmt(c.active_ads) : "—"}</td>
-                  <td className={`${TD} text-right tabular-nums`}>{fmt(c.products_count)}</td>
-                  <td className={`${TD} text-right tabular-nums`}>
-                    {c.tp_reviews != null ? (
-                      <a
-                        href={`https://www.trustpilot.com/review/${c.domain}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                        style={{ color: "var(--green)" }}
-                      >
-                        {fmt(c.tp_reviews)}
-                      </a>
-                    ) : "—"}
-                  </td>
-                  <td className={`${TD} text-right tabular-nums`}>{fmtRev(c.est_monthly_revenue, usdPerEur)}</td>
-                  <td className={`${TD} text-center`}>
-                    <div className="inline-flex items-center gap-1.5">
-                      <PillSelect
-                        value={c.status}
-                        onChange={(v) => c.id && updateStatus(c.id, v as Competitor["status"])}
-                        options={["new", "watching", "scaling", "dead"]}
-                      />
-                      <button
-                        type="button"
-                        title={`Remove ${c.domain} from the tracker`}
-                        aria-label={`Remove ${c.domain}`}
-                        className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-1 rounded transition-opacity"
-                        style={{ color: "var(--red)" }}
-                        onClick={() => c.id && window.confirm(`Remove ${c.domain} from the Competitor Tracker? This can't be undone.`) && remove(c.id)}
-                      >
-                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {sorted.map((c) => {
+                const mom = momPct(c.last_full_month_visits, c.prior_month_visits)
+                const cov = coverageSums[c.domain]
+                const isExpanded = expanded === c.domain
+                return (
+                  <CompetitorRow
+                    key={c.id}
+                    c={c}
+                    mom={mom}
+                    cov={cov}
+                    isExpanded={isExpanded}
+                    usdPerEur={usdPerEur}
+                    onToggleExpand={() => toggleExpand(c.domain)}
+                    onUpdateStatus={(status) => c.id && updateStatus(c.id, status)}
+                    onRemove={() => c.id && window.confirm(`Remove ${c.domain} from the Competitor Tracker? This can't be undone.`) && remove(c.id!)}
+                    covProducts={isExpanded ? covProducts : []}
+                    covMap={isExpanded ? covMapLocal : new Map()}
+                    covLoading={isExpanded && covLoading}
+                    autoMatchLoading={autoMatchLoading === c.domain}
+                    onAutoMatch={() => runAutoMatch(c.domain)}
+                    onVerify={verifyCoverage}
+                    onSetStatus={setCoverageStatus}
+                  />
+                )
+              })}
             </tbody>
           </table>
           </div>
@@ -290,9 +362,239 @@ export default function CompetitorsPage() {
   )
 }
 
+function CompetitorRow({
+  c, mom, cov, isExpanded, usdPerEur, onToggleExpand, onUpdateStatus, onRemove,
+  covProducts, covMap, covLoading, autoMatchLoading, onAutoMatch, onVerify, onSetStatus,
+}: {
+  c: Competitor; mom: number | null; cov: CoverageSum | undefined
+  isExpanded: boolean; usdPerEur: number
+  onToggleExpand: () => void; onUpdateStatus: (s: Competitor["status"]) => void; onRemove: () => void
+  covProducts: CpProduct[]; covMap: Map<number, CoverageRow>; covLoading: boolean
+  autoMatchLoading: boolean; onAutoMatch: () => void
+  onVerify: (cpId: number, verified: boolean) => void
+  onSetStatus: (cpId: number, status: string) => void
+}) {
+  return (
+    <>
+      <tr className="group" style={ROW_BORDER}>
+        <td className={TD}>
+          <a href={c.store_url || `https://${c.domain}`} target="_blank" rel="noopener noreferrer"
+            className="hover:underline font-medium" style={{ color: "var(--accent)" }}>
+            {c.domain || c.store_name}
+          </a>
+          {c.niche && <div className="text-[10px] mt-0.5" style={{ color: "var(--text-dim)" }}>{c.niche}</div>}
+        </td>
+        <td className={`${TD} text-right tabular-nums`}>{fmt(c.monthly_visits)}</td>
+        <td className={`${TD} text-right tabular-nums`}>
+          {c.last_full_month_visits != null ? (
+            <span title={c.visits_month ? `Data from ${c.visits_month}` : undefined}>
+              {fmt(c.last_full_month_visits)}
+            </span>
+          ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
+        </td>
+        <td className={`${TD} text-right tabular-nums`}>
+          {mom != null ? (
+            <span style={{ color: mom > 0 ? "var(--green)" : mom < 0 ? "var(--red)" : "var(--text-muted)" }}>
+              {mom > 0 ? "▲" : mom < 0 ? "▼" : ""} {mom > 0 ? "+" : ""}{mom.toFixed(1)}%
+            </span>
+          ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
+        </td>
+        <td className={`${TD} text-right tabular-nums`}>
+          {c.growth_30d != null ? (
+            <span style={{ color: c.growth_30d > 0 ? "var(--green)" : c.growth_30d < 0 ? "var(--red)" : "var(--text-muted)" }}>
+              {c.growth_30d > 0 ? "▲" : c.growth_30d < 0 ? "▼" : ""} {c.growth_30d > 0 ? "+" : ""}{c.growth_30d.toFixed(1)}%
+            </span>
+          ) : "—"}
+        </td>
+        <td className={`${TD} text-center`} style={{ color: "var(--text-muted)" }}>
+          {Array.isArray(c.markets) && c.markets.length > 0
+            ? c.markets.slice(0, 4).map((m) => m.toUpperCase()).join(" ")
+            : "—"}
+        </td>
+        <td className={`${TD} text-right tabular-nums`}>{c.active_ads != null ? fmt(c.active_ads) : "—"}</td>
+        <td className={`${TD} text-right tabular-nums`}>{fmt(c.products_count)}</td>
+        <td className={`${TD} text-right tabular-nums`}>
+          {c.tp_reviews != null ? (
+            <a href={`https://www.trustpilot.com/review/${c.domain}`} target="_blank" rel="noopener noreferrer"
+              className="hover:underline" style={{ color: "var(--green)" }}>
+              {fmt(c.tp_reviews)}
+            </a>
+          ) : "—"}
+        </td>
+        <td className={`${TD} text-right tabular-nums`}>{fmtRev(c.est_monthly_revenue, usdPerEur)}</td>
+        <td className={`${TD} text-center`}>
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors hover:opacity-80"
+            style={{
+              background: cov && cov.total > 0
+                ? cov.covered === cov.total ? "rgba(52,211,153,0.15)" : cov.covered > 0 ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.05)"
+                : "rgba(255,255,255,0.05)",
+              color: cov && cov.total > 0
+                ? cov.covered === cov.total ? "var(--green)" : cov.covered > 0 ? "var(--orange)" : "var(--text-muted)"
+                : "var(--text-muted)",
+            }}
+          >
+            {cov && cov.total > 0 ? `${cov.covered}/${cov.total}` : "—"}
+            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+              style={{ transform: isExpanded ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </td>
+        <td className={`${TD} text-center`}>
+          <div className="inline-flex items-center gap-1.5">
+            <PillSelect
+              value={c.status}
+              onChange={(v) => onUpdateStatus(v as Competitor["status"])}
+              options={["new", "watching", "scaling", "dead"]}
+            />
+            <button type="button" title={`Remove ${c.domain}`} aria-label={`Remove ${c.domain}`}
+              className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-1 rounded transition-opacity"
+              style={{ color: "var(--red)" }} onClick={onRemove}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr>
+          <td colSpan={12} style={{ padding: 0, background: "rgba(255,255,255,0.02)" }}>
+            <CoverageDetail
+              domain={c.domain}
+              products={covProducts}
+              covMap={covMap}
+              loading={covLoading}
+              autoMatchLoading={autoMatchLoading}
+              onAutoMatch={onAutoMatch}
+              onVerify={onVerify}
+              onSetStatus={onSetStatus}
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function CoverageDetail({
+  domain, products, covMap, loading, autoMatchLoading, onAutoMatch, onVerify, onSetStatus,
+}: {
+  domain: string; products: CpProduct[]; covMap: Map<number, CoverageRow>; loading: boolean
+  autoMatchLoading: boolean; onAutoMatch: () => void
+  onVerify: (cpId: number, verified: boolean) => void
+  onSetStatus: (cpId: number, status: string) => void
+}) {
+  if (loading) return <div className="p-4 text-[11px]" style={{ color: "var(--text-dim)" }}>Loading best-sellers…</div>
+
+  if (products.length === 0) {
+    return (
+      <div className="p-4 text-[11px]" style={{ color: "var(--text-dim)" }}>
+        No best-sellers scanned for {domain} yet. Run a competitor scan from Product Opportunities first.
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-3">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] font-medium" style={{ color: "var(--text)" }}>
+          Best-sellers — {domain}
+        </span>
+        <Button size="sm" onClick={onAutoMatch} disabled={autoMatchLoading}>
+          {autoMatchLoading ? "Matching…" : "Auto-match with my products"}
+        </Button>
+      </div>
+      <div className="grid gap-2">
+        {products.map((p) => {
+          const cov = covMap.get(p.id)
+          return (
+            <div key={p.id} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              {p.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.image} alt="" className="w-10 h-10 rounded object-cover shrink-0" style={{ background: "rgba(255,255,255,0.05)" }} />
+              )}
+              <div className="flex-1 min-w-0">
+                <a href={p.url} target="_blank" rel="noopener noreferrer"
+                  className="text-[11px] font-medium hover:underline truncate block" style={{ color: "var(--text)" }}>
+                  {p.title}
+                </a>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {p.price != null && (
+                    <span className="text-[10px] tabular-nums" style={{ color: "var(--text-dim)" }}>
+                      {p.currency || ""}{p.price.toFixed(2)}
+                    </span>
+                  )}
+                  {p.bestseller_rank != null && (
+                    <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>#{p.bestseller_rank}</span>
+                  )}
+                  {p.product_type && (
+                    <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{p.product_type}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {cov?.own_product_title && (
+                  <span className="text-[10px] max-w-[200px] truncate" style={{ color: "var(--text-dim)" }} title={cov.own_product_title}>
+                    ↔ {cov.own_product_title}
+                  </span>
+                )}
+                <CoverageStatusPill status={cov?.status || "not_covered"} onSetStatus={(s) => onSetStatus(p.id, s)} />
+                {cov && cov.status !== "not_covered" && (
+                  <button
+                    type="button"
+                    onClick={() => onVerify(p.id, !cov.verified)}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors"
+                    style={{
+                      background: cov.verified ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.05)",
+                      color: cov.verified ? "var(--green)" : "var(--text-muted)",
+                    }}
+                    title={cov.verified ? "Verified — click to unverify" : "Click to verify this match"}
+                  >
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {cov.verified ? "Verified" : "Verify"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function CoverageStatusPill({ status, onSetStatus }: { status: string; onSetStatus: (s: string) => void }) {
+  const tones: Record<string, "green" | "amber" | "grey"> = {
+    covered: "green",
+    partly_covered: "amber",
+    not_covered: "grey",
+  }
+  const labels: Record<string, string> = {
+    covered: "Covered",
+    partly_covered: "Partly",
+    not_covered: "Not covered",
+  }
+  const next: Record<string, string> = {
+    not_covered: "partly_covered",
+    partly_covered: "covered",
+    covered: "not_covered",
+  }
+  return (
+    <button type="button" onClick={() => onSetStatus(next[status] || "not_covered")}>
+      <Badge tone={tones[status] || "grey"}>{labels[status] || status}</Badge>
+    </button>
+  )
+}
+
 function ThSort({ label, field, sortBy, setSortBy, sortDir, setSortDir }: {
-  label: string; field: string;
-  sortBy: string; setSortBy: (f: string) => void;
+  label: string; field: string
+  sortBy: string; setSortBy: (f: string) => void
   sortDir: "desc" | "asc"; setSortDir: (d: "desc" | "asc") => void
 }) {
   const active = sortBy === field
