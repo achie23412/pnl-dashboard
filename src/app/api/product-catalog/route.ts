@@ -114,6 +114,7 @@ interface ShipgoodsItem {
 
 interface ShipgoodsOrder {
   row_type?: string
+  bill_date?: string
   store_name?: string
   order_id?: string
   items: ShipgoodsItem[] | null
@@ -166,12 +167,14 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
       throw e
     }
   }
+  const today = new Date().toISOString().slice(0, 10)
   const fetchPageOnce = async (win: [string, string], page: number): Promise<ShipgoodsResponse> => {
     const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${win[0]}&date_to=${win[1]}&per_page=100&page=${page}`
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(SG_TIMEOUT_MS),
-      next: { revalidate: 3600 }, // ShipGoods is slow (~7s/page); cache each page for 1h
+      // ShipGoods is slow (~6s/page): pages of a finished month are kept a day, this month's an hour
+      next: { revalidate: win[1] < today ? 86400 : 3600 },
     })
     if (!res.ok) throw new Error(`page ${page}: HTTP ${res.status}`)
     const json: ShipgoodsResponse = await res.json()
@@ -197,6 +200,8 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   const addPage = (json: ShipgoodsResponse) => {
     for (const order of json.data.list) {
       if (order.row_type && order.row_type !== "order_charge") continue
+      // Whole months are fetched (see below), so keep only the asked range
+      if (order.bill_date && (order.bill_date < dateFrom || order.bill_date > dateTo)) continue
       if (!order.items) continue
       if (order.order_id) {
         if (seenOrders.has(order.order_id)) continue
@@ -235,22 +240,32 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     }
   }
 
-  // ShipGoods accepts at most 90 days per request (HTTP 422 otherwise), so longer ranges
-  // (Quality Checks asks for 91 days) are split; 30-day windows also answer faster and run in parallel.
+  // ShipGoods allows at most 90 days per request and slows down (504s) when hit with many
+  // pages at once. So the range is read per calendar month (fixed URLs, so the page cache above
+  // is reused from day to day; only the current month is fetched fresh), with 6 pages at a time.
   const windows: [string, string][] = []
-  for (let start = dateFrom; start <= dateTo; ) {
-    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 29 * 86400000).toISOString().slice(0, 10)
-    windows.push([start, end < dateTo ? end : dateTo])
-    start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
+  for (let m = dateFrom.slice(0, 7); m <= dateTo.slice(0, 7); ) {
+    const [y, mo] = m.split("-").map(Number)
+    const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10)
+    windows.push([`${m}-01`, last < today ? last : today])
+    m = new Date(Date.UTC(y, mo, 1)).toISOString().slice(0, 7)
+  }
+  const POOL = 6
+  let running = 0
+  const queue: (() => void)[] = []
+  const limited = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    if (running >= POOL) await new Promise<void>((r) => queue.push(r))
+    running++
+    try { return await fn() } finally { running--; queue.shift()?.() }
   }
   const pages: ShipgoodsResponse[] = []
   await Promise.all(windows.map(async (win) => {
     try {
-      const first = await fetchPage(win, 1)
+      const first = await limited(() => fetchPage(win, 1))
       pages.push(first)
       const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
       const rest = await Promise.allSettled(
-        Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => fetchPage(win, i + 2)),
+        Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => limited(() => fetchPage(win, i + 2))),
       )
       for (const r of rest) {
         if (r.status === "fulfilled") pages.push(r.value)
