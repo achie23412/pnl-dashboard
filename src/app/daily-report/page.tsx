@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useMemo } from "react"
 import { db } from "@/lib/db-client"
-import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE_MARKET, dropStopped, stoppedWithData } from "@/lib/constants"
+import { STORES, AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORE_TIMEZONE, STORE_MARKET, dropStopped, stoppedWithData, breakEvenRoas } from "@/lib/constants"
 import { mediaBuyerRate } from "@/lib/fee-settings"
 import { useFeeSettings } from "@/lib/use-fee-settings"
 import { STORE_CURRENCY, COGS_CURRENCY, fetchEurRates, toEur, FALLBACK_RATES } from "@/lib/currency"
@@ -191,6 +191,28 @@ export default function DailyReportPage() {
   }, [storeRows])
 
   const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
+  // Break-even ROAS for the day, same formula as Main Hub: (1 + MB fee %) ÷ (1 − COGS % − transaction fee %).
+  // At this ROAS the day's profit is €0 before refunds. null = no revenue that day, so no COGS % to base it on.
+  const beRoas = (r: { revenue: number; cogs: number; txnFee: number; mbFee: number; spend: number }): number | null => {
+    if (r.revenue <= 0) return null
+    const be = breakEvenRoas(r.cogs / r.revenue, r.txnFee / r.revenue, r.spend > 0 ? r.mbFee / r.spend : 0)
+    return Number.isFinite(be) ? be : null
+  }
+  const beCell = (roas: number, be: number | null, spend: number) => {
+    if (be === null) return <span style={{ color: "var(--text-dim)" }}>—</span>
+    const above = roas >= be
+    return (
+      <>
+        <span style={{ color: "var(--text)" }}>{be.toFixed(2)}x</span>
+        {spend > 0 && (
+          <span className="block text-[9px] font-normal" style={{ color: above ? "var(--green)" : "var(--red)" }}>
+            {above ? "above" : "below"} ({roas >= be ? "+" : ""}{((roas / be - 1) * 100).toFixed(0)}%)
+          </span>
+        )}
+      </>
+    )
+  }
+  const totalBe = beRoas(totals)
   // Profit margin: profit as a share of revenue
   const profitPct = (profit: number, revenue: number) => (revenue > 0 ? `${((profit / revenue) * 100).toFixed(1)}%` : "—")
   const shiftDay = (n: number) => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() + n); setDate(toInputDate(d)) }
@@ -205,7 +227,7 @@ export default function DailyReportPage() {
         { label: "Revenue", value: hasData ? fmt(totals.revenue) : "—", color: "var(--green)" },
         { label: "Orders", value: hasData ? String(totals.orders) : "—" },
         { label: "Ad spend", value: hasData ? fmt(totals.spend) : "—" },
-        { label: "ROAS", value: hasData ? `${totals.roas.toFixed(2)}x` : "—" },
+        { label: "ROAS", value: hasData ? `${totals.roas.toFixed(2)}x` : "—", sub: hasData && totalBe !== null ? `Break-even ${totalBe.toFixed(2)}x` : undefined, color: hasData && totalBe !== null ? (totals.roas >= totalBe ? "var(--green)" : "var(--red)") : undefined },
         { label: "Profit", value: hasData ? fmt(totals.profit) : "—", sub: hasData ? `${profitPct(totals.profit, totals.revenue)} of revenue` : undefined, color: hasData ? (totals.profit >= 0 ? "var(--green)" : "var(--red)") : undefined },
       ]}
       actions={
@@ -261,6 +283,7 @@ export default function DailyReportPage() {
                       <th className={`${TH} text-right`}>Orders</th>
                       <th className={`${TH} text-right`} title="Orders ÷ human sessions (bots excluded)">CVR</th>
                       <th className={`${TH} text-right`}>ROAS</th>
+                      <th className={`${TH} text-right`} title="Break-even ROAS for this day: (1 + media buyer fee %) ÷ (1 − COGS % − transaction fee %). Below it you lose money on the day (before refunds).">BE ROAS</th>
                       <th className={`${TH} text-right`}>Ad spend</th>
                       <th className={`${TH} text-right`}>COGS</th>
                       <th className={`${TH} text-right`}>COGS %</th>
@@ -289,6 +312,7 @@ export default function DailyReportPage() {
                             {s.sessions !== null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{s.sessions.toLocaleString("en-IE")} sess.</span>}
                           </td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: s.roas >= 2.5 ? "var(--green)" : s.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{s.roas.toFixed(2)}x</td>
+                          <td className={`${TD} text-right tabular-nums`}>{beCell(s.roas, beRoas(s), s.spend)}</td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
                             {fmt(s.spend)}
                             {Object.keys(s.spendByChannel).length > 1 && (
@@ -319,6 +343,7 @@ export default function DailyReportPage() {
                         {totals.sessions !== null && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>{totals.sessions.toLocaleString("en-IE")} sess.</span>}
                       </td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.roas >= 2.5 ? "var(--green)" : totals.roas >= 1.5 ? "var(--orange)" : "var(--red)" }}>{totals.roas.toFixed(2)}x</td>
+                      <td className={`${TD} text-right tabular-nums font-bold`}>{beCell(totals.roas, totalBe, totals.spend)}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.spend)}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: "var(--text-muted)" }}>{fmt(totals.cogs)}</td>
                       <td className={`${TD} text-right tabular-nums font-bold`} style={{ color: totals.revenue > 0 ? (totals.cogs / totals.revenue * 100 > 35 ? "var(--red)" : totals.cogs / totals.revenue * 100 > 25 ? "var(--orange)" : "var(--text-muted)") : "var(--text-dim)" }}>{totals.revenue > 0 ? `${(totals.cogs / totals.revenue * 100).toFixed(1)}%` : "—"}</td>
@@ -334,7 +359,7 @@ export default function DailyReportPage() {
                 </table>
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone · Profit = revenue − refunds − ad spend − COGS (ShipGoods price of the day&apos;s orders) − transaction fee − media buyer fee (from its start date in Store Settings){orderCogs == null ? " · Loading ShipGoods costs…" : totals.cogsPending > 0 ? ` · * ${totals.cogsPending} order(s) not priced by ShipGoods yet, store average used` : ""}
+                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone · Profit = revenue − refunds − ad spend − COGS (ShipGoods price of the day&apos;s orders) − transaction fee − media buyer fee (from its start date in Store Settings) · BE ROAS = the day&apos;s break-even ROAS from its COGS % and fees{orderCogs == null ? " · Loading ShipGoods costs…" : totals.cogsPending > 0 ? ` · * ${totals.cogsPending} order(s) not priced by ShipGoods yet, store average used` : ""}
               </div>
             </Panel>
           )}
