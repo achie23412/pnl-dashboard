@@ -157,7 +157,16 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   const empty: ShipgoodsData = { cogsByStore: new Map(), cogsByIdByStore: new Map(), salesByStore: new Map(), error: null }
   if (!token) return { ...empty, error: "ShipGoods: SHIPGOODS_TOKEN not set" }
 
-  const fetchPage = async (win: [string, string], page: number): Promise<ShipgoodsResponse> => {
+  // ShipGoods sometimes answers 502/504 on a busy moment: try once more before giving up
+  const fetchPage = async (win: [string, string], page: number, retry = true): Promise<ShipgoodsResponse> => {
+    try {
+      return await fetchPageOnce(win, page)
+    } catch (e) {
+      if (retry && /HTTP 5\d\d/.test(e instanceof Error ? e.message : String(e))) return fetchPage(win, page, false)
+      throw e
+    }
+  }
+  const fetchPageOnce = async (win: [string, string], page: number): Promise<ShipgoodsResponse> => {
     const url = `${base}/api/v1/shop/analytics/order-cost-items?date_from=${win[0]}&date_to=${win[1]}&per_page=100&page=${page}`
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
@@ -227,10 +236,10 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   }
 
   // ShipGoods accepts at most 90 days per request (HTTP 422 otherwise), so longer ranges
-  // (Quality Checks asks for 91 days) are split into windows of up to 85 days.
+  // (Quality Checks asks for 91 days) are split; 30-day windows also answer faster and run in parallel.
   const windows: [string, string][] = []
   for (let start = dateFrom; start <= dateTo; ) {
-    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 84 * 86400000).toISOString().slice(0, 10)
+    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 29 * 86400000).toISOString().slice(0, 10)
     windows.push([start, end < dateTo ? end : dateTo])
     start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
   }
