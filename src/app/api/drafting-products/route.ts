@@ -71,7 +71,7 @@ async function fetchStoreSales(
 
   while (url && pages < 10) {
     pages++
-    const res = await fetch(url, {
+    const res: Response = await fetch(url, {
       headers: { "X-Shopify-Access-Token": token },
       signal: AbortSignal.timeout(15000),
     })
