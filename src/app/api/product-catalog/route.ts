@@ -2,6 +2,7 @@ import { fetchProducts, type SGProduct } from "@/lib/shipgoods"
 import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
+import { readStoredShipgoods } from "@/lib/shipgoods-store"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, breakEvenRoas } from "@/lib/constants"
 import { mediaBuyerRateNow } from "@/lib/fee-settings"
 import { loadFeeSettings } from "@/lib/fee-settings-server"
@@ -240,48 +241,55 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     }
   }
 
-  // ShipGoods allows at most 90 days per request and slows down (504s) when hit with many pages
-  // at once. Up to 85 days is one request (the usual 30-day view: ~8 pages); longer ranges
-  // (Quality Checks: 91 days) are read in 30-day blocks. At most 8 pages load at the same time.
-  const windows: [string, string][] = []
-  const spanDays = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000
-  if (spanDays <= 85) windows.push([dateFrom, dateTo])
-  else for (let start = dateFrom; start <= dateTo; ) {
-    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 29 * 86400000).toISOString().slice(0, 10)
-    windows.push([start, end < dateTo ? end : dateTo])
-    start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
-  }
-  const POOL = 8
-  let running = 0
-  const queue: (() => void)[] = []
-  const limited = async <T,>(fn: () => Promise<T>): Promise<T> => {
-    if (running >= POOL) await new Promise<void>((r) => queue.push(r))
-    running++
-    try { return await fn() } finally { running--; queue.shift()?.() }
-  }
+  // Saved copy first (table shipgoods_orders, filled twice a day): well under a second. Only when
+  // it doesn't hold the whole range yet does the catalog read the ShipGoods API itself.
   const pages: ShipgoodsResponse[] = []
-  let expected = 0
-  const work = Promise.all(windows.map(async (win) => {
-    try {
-      const first = await limited(() => fetchPage(win, 1))
-      pages.push(first)
-      const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
-      expected += totalPages
-      const rest = await Promise.allSettled(
-        Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => limited(() => fetchPage(win, i + 2))),
-      )
-      for (const r of rest) {
-        if (r.status === "fulfilled") pages.push(r.value)
-        else errors.push(`ShipGoods ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
-      }
-    } catch (e: unknown) {
-      errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
+  const stored = await readStoredShipgoods(dateFrom, dateTo).catch(() => null)
+  if (stored) {
+    pages.push({ code: 0, data: { list: stored as unknown as ShipgoodsOrder[], pagination: { total_pages: 1, page: 1 } } })
+  } else {
+    // ShipGoods allows at most 90 days per request and slows down (504s) when hit with many pages
+    // at once. Up to 85 days is one request (the usual 30-day view: ~8 pages); longer ranges
+    // (Quality Checks: 91 days) are read in 30-day blocks. At most 8 pages load at the same time.
+    const windows: [string, string][] = []
+    const spanDays = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000
+    if (spanDays <= 85) windows.push([dateFrom, dateTo])
+    else for (let start = dateFrom; start <= dateTo; ) {
+      const end = new Date(Date.parse(`${start}T12:00:00Z`) + 29 * 86400000).toISOString().slice(0, 10)
+      windows.push([start, end < dateTo ? end : dateTo])
+      start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
     }
-  }))
-  // A cold read of several months can take longer than the 60 s function limit. Use what
-  // arrived within 25 s; pages still loading keep going and land in the page cache for next time.
-  const done = await Promise.race([work.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 25000))])
-  if (!done) errors.push(`ShipGoods: ${pages.length} of ${expected || "?"} pages loaded in time; the rest loads in the background (sales/COGS from ShipGoods may be incomplete for a few minutes)`)
+    const POOL = 8
+    let running = 0
+    const queue: (() => void)[] = []
+    const limited = async <T,>(fn: () => Promise<T>): Promise<T> => {
+      if (running >= POOL) await new Promise<void>((r) => queue.push(r))
+      running++
+      try { return await fn() } finally { running--; queue.shift()?.() }
+    }
+    let expected = 0
+    const work = Promise.all(windows.map(async (win) => {
+      try {
+        const first = await limited(() => fetchPage(win, 1))
+        pages.push(first)
+        const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
+        expected += totalPages
+        const rest = await Promise.allSettled(
+          Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => limited(() => fetchPage(win, i + 2))),
+        )
+        for (const r of rest) {
+          if (r.status === "fulfilled") pages.push(r.value)
+          else errors.push(`ShipGoods ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`)
+        }
+      } catch (e: unknown) {
+        errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }))
+    // A cold read of several months can take longer than the 60 s function limit. Use what
+    // arrived within 25 s; pages still loading keep going and land in the page cache for next time.
+    const done = await Promise.race([work.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 25000))])
+    if (!done) errors.push(`ShipGoods: ${pages.length} of ${expected || "?"} pages loaded in time; the rest loads in the background (sales/COGS from ShipGoods may be incomplete for a few minutes)`)
+  }
   orderTotals = await orderTotalsPromise
   for (const p of pages) addPage(p)
 
@@ -908,7 +916,7 @@ const cachedCatalog = unstable_cache(
     if (res.status !== 200) throw new NotCached(res.status, body)
     return body
   },
-  ["product-catalog-v1"],
+  ["product-catalog-v2"],
   { revalidate: 900 },
 )
 
