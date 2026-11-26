@@ -22,9 +22,20 @@ async function buildAdPerformance(date: string): Promise<AdPerfRow[]> {
 
   const byKey = new Map<string, { spend: number; clicks: number; impressions: number; store: string; channel: string }>()
 
-  for (const r of [...google, ...meta, ...tiktok]) {
+  // Windsor's /all endpoint can return every connector's accounts on each call, so keep
+  // only the accounts of the channel that call was for (else each store is counted 3×).
+  const tagged = [
+    ...google.map((r) => ({ r, channel: "Google" })),
+    ...meta.map((r) => ({ r, channel: "Meta" })),
+    ...tiktok.map((r) => ({ r, channel: "TikTok" })),
+  ]
+  const seen = new Set<string>()
+  for (const { r, channel } of tagged) {
     const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-    if (!mapping) continue
+    if (!mapping || mapping.channel !== channel) continue
+    const rowKey = `${r.date}|${r.account_name}|${r.spend}|${r.clicks}|${r.impressions}`
+    if (seen.has(rowKey)) continue
+    seen.add(rowKey)
     const key = `${mapping.store}|${mapping.channel}`
     const e = byKey.get(key) || { store: mapping.store, channel: mapping.channel, spend: 0, clicks: 0, impressions: 0 }
     e.spend += Number(r.spend) || 0
@@ -45,7 +56,7 @@ export async function GET(req: Request) {
   const date = searchParams.get("date") || new Date().toISOString().slice(0, 10)
 
   try {
-    const cached = unstable_cache(() => buildAdPerformance(date), [`ad-perf-${date}`], { revalidate: 300 })
+    const cached = unstable_cache(() => buildAdPerformance(date), [`ad-perf-v2-${date}`], { revalidate: 300 })
     const rows = await cached()
     return NextResponse.json({ date, rows })
   } catch (e) {
