@@ -259,11 +259,13 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     try { return await fn() } finally { running--; queue.shift()?.() }
   }
   const pages: ShipgoodsResponse[] = []
-  await Promise.all(windows.map(async (win) => {
+  let expected = 0
+  const work = Promise.all(windows.map(async (win) => {
     try {
       const first = await limited(() => fetchPage(win, 1))
       pages.push(first)
       const totalPages = Math.min(first.data.pagination?.total_pages || 1, SG_MAX_PAGES)
+      expected += totalPages
       const rest = await Promise.allSettled(
         Array.from({ length: Math.max(totalPages - 1, 0) }, (_, i) => limited(() => fetchPage(win, i + 2))),
       )
@@ -275,6 +277,10 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
       errors.push(`ShipGoods ${e instanceof Error ? e.message : String(e)}`)
     }
   }))
+  // A cold read of several months can take longer than the 60 s function limit. Use what
+  // arrived within 25 s; pages still loading keep going and land in the page cache for next time.
+  const done = await Promise.race([work.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 25000))])
+  if (!done) errors.push(`ShipGoods: ${pages.length} of ${expected || "?"} pages loaded in time; the rest loads in the background (sales/COGS from ShipGoods may be incomplete for a few minutes)`)
   orderTotals = await orderTotalsPromise
   for (const p of pages) addPage(p)
 
@@ -889,15 +895,16 @@ async function buildResponse(req: Request) {
 
 // Building the catalog takes ~5 s (ShipGoods, Windsor, sheets, Shopify) and six pages use it
 // (Quality Checks, Product Alerts/Rules/Performance, Season Board, Price Suggestions), so each
-// store + date range is saved for 15 minutes and shared. Errors are never saved. ?fresh=1 skips it.
+// store + date range is saved for 15 minutes and shared. Failed requests are never saved. ?fresh=1 skips it.
 class NotCached { constructor(public status: number, public body: unknown) {} }
 const cachedCatalog = unstable_cache(
   async (store: string, from: string, to: string) => {
     const qs = new URLSearchParams({ store, ...(from ? { from } : {}), ...(to ? { to } : {}) })
     const res = await buildResponse(new Request(`http://catalog.local/api/product-catalog?${qs}`))
     const body = await res.json()
-    // A partial result (a source failed: "no-store") is returned but not saved
-    if (res.status !== 200 || res.headers.get("Cache-Control") === "no-store") throw new NotCached(res.status, body)
+    // Failed requests are not saved. A partial result (e.g. ShipGoods slow) is: it lists its
+    // errors, and the cache refreshes it in the background after 15 minutes.
+    if (res.status !== 200) throw new NotCached(res.status, body)
     return body
   },
   ["product-catalog-v1"],
