@@ -173,7 +173,7 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(SG_TIMEOUT_MS),
-      // ShipGoods is slow (~6s/page): pages of a finished month are kept a day, this month's an hour
+      // ShipGoods is slow (~6s/page): pages of a range that ended before today are kept a day
       next: { revalidate: win[1] < today ? 86400 : 3600 },
     })
     if (!res.ok) throw new Error(`page ${page}: HTTP ${res.status}`)
@@ -200,7 +200,7 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
   const addPage = (json: ShipgoodsResponse) => {
     for (const order of json.data.list) {
       if (order.row_type && order.row_type !== "order_charge") continue
-      // Whole months are fetched (see below), so keep only the asked range
+      // Only the asked range (a block can reach past it)
       if (order.bill_date && (order.bill_date < dateFrom || order.bill_date > dateTo)) continue
       if (!order.items) continue
       if (order.order_id) {
@@ -240,17 +240,18 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     }
   }
 
-  // ShipGoods allows at most 90 days per request and slows down (504s) when hit with many
-  // pages at once. So the range is read per calendar month (fixed URLs, so the page cache above
-  // is reused from day to day; only the current month is fetched fresh), with 6 pages at a time.
+  // ShipGoods allows at most 90 days per request and slows down (504s) when hit with many pages
+  // at once. Up to 85 days is one request (the usual 30-day view: ~8 pages); longer ranges
+  // (Quality Checks: 91 days) are read in 30-day blocks. At most 8 pages load at the same time.
   const windows: [string, string][] = []
-  for (let m = dateFrom.slice(0, 7); m <= dateTo.slice(0, 7); ) {
-    const [y, mo] = m.split("-").map(Number)
-    const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10)
-    windows.push([`${m}-01`, last < today ? last : today])
-    m = new Date(Date.UTC(y, mo, 1)).toISOString().slice(0, 7)
+  const spanDays = (Date.parse(dateTo) - Date.parse(dateFrom)) / 86400000
+  if (spanDays <= 85) windows.push([dateFrom, dateTo])
+  else for (let start = dateFrom; start <= dateTo; ) {
+    const end = new Date(Date.parse(`${start}T12:00:00Z`) + 29 * 86400000).toISOString().slice(0, 10)
+    windows.push([start, end < dateTo ? end : dateTo])
+    start = new Date(Date.parse(`${end}T12:00:00Z`) + 86400000).toISOString().slice(0, 10)
   }
-  const POOL = 6
+  const POOL = 8
   let running = 0
   const queue: (() => void)[] = []
   const limited = async <T,>(fn: () => Promise<T>): Promise<T> => {
