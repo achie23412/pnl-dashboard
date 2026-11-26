@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { SHOPIFY_STORES } from "@/lib/constants"
+import { feedRoom, logFeedChange } from "@/lib/gmc-health"
 
 export const maxDuration = 30
 
@@ -82,6 +83,10 @@ export async function POST(req: NextRequest) {
     const token = process.env[cfg.envKey]
     if (!token) { results.push({ ...fix, oldTitle: "", ok: false, error: `No token (${cfg.envKey})` }); continue }
 
+    // Google stores: never change more than 10% of the feed per day (GMC Health counter)
+    const room = await feedRoom(fix.store, String(fix.productId), "title")
+    if (!room.ok) { results.push({ ...fix, oldTitle: "", ok: false, error: room.error }); continue }
+
     try {
       // Fetch current product to get the old title
       const getRes = await fetch(
@@ -109,6 +114,7 @@ export async function POST(req: NextRequest) {
         results.push({ productId: fix.productId, store: fix.store, oldTitle, newTitle: fix.newTitle, ok: false, error: `Shopify PUT ${putRes.status}: ${text.slice(0, 200)}` })
         continue
       }
+      await logFeedChange({ store: fix.store, product_id: String(fix.productId), title: oldTitle, kind: "title", old_value: oldTitle, new_value: fix.newTitle, reason: `Listing fix: ${fix.fixType}` })
       results.push({ productId: fix.productId, store: fix.store, oldTitle, newTitle: fix.newTitle, ok: true })
     } catch (e) {
       results.push({ productId: fix.productId, store: fix.store, oldTitle: "", newTitle: fix.newTitle, ok: false, error: e instanceof Error ? e.message : String(e) })

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { SHOPIFY_ACCOUNT_MAP } from "@/lib/constants"
+import { feedRoom, logFeedChange } from "@/lib/gmc-health"
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,6 +37,10 @@ export async function POST(req: NextRequest) {
     }
 
     const domain = store.includes(".") ? store : `${store}.myshopify.com`
+    // Google stores: a new live product is a feed change too, so the 10%-per-day rule applies
+    const storeName = SHOPIFY_ACCOUNT_MAP[domain] || store
+    const room = await feedRoom(storeName, "new", "publish")
+    if (!room.ok) return NextResponse.json({ error: room.error }, { status: 429 })
     const res = await fetch(`https://${domain}/admin/api/2024-01/products.json`, {
       method: "POST",
       headers: {
@@ -50,6 +56,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
+    if (data.product?.id) await logFeedChange({ store: storeName, product_id: String(data.product.id), title: product.title || null, kind: "publish", new_value: data.product.status || "active", reason: "Import: new product" })
     return NextResponse.json({ success: true, product_id: data.product?.id })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error"

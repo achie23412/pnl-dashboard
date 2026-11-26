@@ -246,6 +246,33 @@ async function logPriceChange(c: ChangeRequest, old: string | null, now: string 
   }).then(() => undefined, () => undefined)
 }
 
+// ---- The 10% rule for every other dashboard feature that changes a Google store's feed ----
+// (listing title fixes, publishing, imports). Check before the change, log after it, so the
+// daily counter on GMC Health includes everything the dashboard changes.
+export const isGoogleStore = (store: string) => GMC_STORES.indexOf(store) >= 0
+
+export async function feedRoom(store: string, productId: string, kind: ChangeKind): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isGoogleStore(store)) return { ok: true }
+  const s = (await getSettings()).find((x) => x.store === store)
+  const limit = s ? dailyLimit(s) : 0
+  if (!s || !limit) return { ok: false, error: `${store}: the daily feed limit isn't known yet (GMC Health hasn't synced). Sync GMC Health first.` }
+  const u = await usageFor(store, amsterdamDay())
+  if (!fits(u, s, { product_id: productId, kind })) {
+    const used = Object.keys(u.products).length
+    return { ok: false, error: `${store}: today's feed change limit is used (${used}/${limit} products = ${s.feed_change_pct}% of the feed${kind === "draft" ? `, drafts ${u.drafts}/${s.max_drafts_per_day}` : ""}). Try again tomorrow.` }
+  }
+  return { ok: true }
+}
+
+export async function logFeedChange(c: { store: string; product_id: string; variant_id?: string | null; title?: string | null; kind: ChangeKind; old_value?: string | null; new_value?: string | null; reason: string }, by = "dashboard") {
+  if (!isGoogleStore(c.store)) return
+  await getServiceClient().from("feed_changes").insert({
+    store: c.store, product_id: c.product_id, variant_id: c.variant_id || null, title: c.title || null, kind: c.kind,
+    old_value: c.old_value ?? null, new_value: c.new_value ?? null, reason: c.reason, status: "applied",
+    planned_for: amsterdamDay(), applied_at: new Date().toISOString(), created_by: by,
+  }).then(() => undefined, () => undefined)
+}
+
 export interface ChangeResult { product_id: string; status: "applied" | "queued" | "failed" | "skipped"; planned_for?: string; error?: string }
 
 // Apply now when the store still has room today, otherwise queue for tomorrow

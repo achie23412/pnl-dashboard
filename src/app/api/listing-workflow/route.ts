@@ -5,6 +5,7 @@ import {
   type SourceProduct, type GeneratedListing,
 } from "@/lib/listing-workflow"
 import { checkListing, isReady } from "@/lib/gmc-check"
+import { feedRoom, logFeedChange } from "@/lib/gmc-health"
 
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -153,7 +154,12 @@ export async function PATCH(req: NextRequest) {
           .eq("store", j.store)
           .gte("published_at", since)
         if ((count || 0) >= PUBLISH_PER_DAY) throw new Error(`Already ${count} published today for ${j.store}. Drafting SOP: publish 10 a day; the rest stays as draft until tomorrow.`)
+        // Google stores: never change more than 10% of the feed per day (GMC Health counter)
+        const pid = String(j.shopify_product_id).split("/").pop() || String(j.shopify_product_id)
+        const room = await feedRoom(j.store, pid, "publish")
+        if (!room.ok) throw new Error(room.error)
         const channels = await publishInShopify(j.store, j.shopify_product_id)
+        await logFeedChange({ store: j.store, product_id: pid, kind: "publish", old_value: "draft", new_value: "active", reason: "Listing workflow: published" })
         return NextResponse.json(await update({ status: "published", published_at: now, error: null, notes: `Published to: ${channels.join(", ")}` }))
       }
       default:
