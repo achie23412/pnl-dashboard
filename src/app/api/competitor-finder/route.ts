@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 }
 
 // POST { action: "check", domains: [...] } → store checks
-// POST { action: "add", domain, market, niche, keyword, monthly_visits?, tp_reviews?, products? } → add to Competitor Tracker
+// POST { action: "add", domain, market, niche, keyword, monthly_visits?, tp_reviews?, tp_rating?, products? } → add to Competitor Tracker
 export async function POST(req: Request) {
   const b = await req.json()
   if (b.action === "check") {
@@ -51,6 +51,8 @@ export async function POST(req: Request) {
       markets: m ? [m.ads] : [],
       monthly_visits: visits,
       tp_reviews: tp,
+      ...(num(b.tp_rating) != null && (num(b.tp_rating) as number) >= 1 && (num(b.tp_rating) as number) <= 5
+        ? { tp_rating: num(b.tp_rating), tp_checked: new Date().toISOString().slice(0, 10) } : {}),
       products_count: num(b.products),
       status: "new",
       notes,

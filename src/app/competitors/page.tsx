@@ -24,6 +24,8 @@ interface Competitor {
   est_monthly_revenue: number | null
   est_units_sold: number | null
   tp_reviews: number | null
+  tp_rating: number | null // Trustpilot TrustScore 1.0–5.0
+  tp_checked: string | null
   status: "watching" | "scaling" | "dead" | "new"
   notes: string
   last_checked: string
@@ -276,6 +278,8 @@ export default function CompetitorsPage() {
             { value: "est_monthly_revenue:asc", label: "Revenue: low → high" },
             { value: "tp_reviews:desc", label: "TP reviews: most → least" },
             { value: "tp_reviews:asc", label: "TP reviews: least → most" },
+            { value: "tp_rating:desc", label: "TP rating: high → low" },
+            { value: "tp_rating:asc", label: "TP rating: low → high" },
           ]}
         />
         {(statusFilter.values.length > 0 || countryFilter.values.length > 0 || nicheFilter.values.length > 0 || search) && (
@@ -414,10 +418,16 @@ function CompetitorRow({
         <td className={`${TD} text-right tabular-nums`}>{c.active_ads != null ? fmt(c.active_ads) : "—"}</td>
         <td className={`${TD} text-right tabular-nums`}>{fmt(c.products_count)}</td>
         <td className={`${TD} text-right tabular-nums`}>
-          {c.tp_reviews != null ? (
+          {c.tp_reviews != null || c.tp_rating != null ? (
             <a href={`https://www.trustpilot.com/review/${c.domain}`} target="_blank" rel="noopener noreferrer"
-              className="hover:underline" style={{ color: "var(--green)" }}>
-              {fmt(c.tp_reviews)}
+              className="hover:underline whitespace-nowrap" title={c.tp_checked ? `Trustpilot checked ${c.tp_checked}` : "Trustpilot"}>
+              {c.tp_rating != null && (
+                <span style={{ color: c.tp_rating >= 4 ? "var(--green)" : c.tp_rating >= 3 ? "var(--amber, #fbbf24)" : "var(--red)" }}>
+                  {Number(c.tp_rating).toFixed(1)}★
+                </span>
+              )}
+              {c.tp_rating != null && c.tp_reviews != null && <span style={{ color: "var(--text-dim)" }}> · </span>}
+              {c.tp_reviews != null && <span style={{ color: "var(--text-muted)" }}>{fmt(c.tp_reviews)}</span>}
             </a>
           ) : "—"}
         </td>
