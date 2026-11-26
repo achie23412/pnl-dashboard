@@ -29,6 +29,14 @@ interface StoreSummary {
   be_roas: number | null
 }
 
+export interface LadderStepDetail {
+  step: number
+  price: number
+  change_pct: number
+  cogs_pct: number | null
+  estimated_date: string
+}
+
 export interface PriceSuggestion {
   product_name: string
   store: string
@@ -50,6 +58,7 @@ export interface PriceSuggestion {
   cooldown_until: string | null
   target_price: number | null
   steps_info: string
+  all_steps: LadderStepDetail[]
 }
 
 const GOOGLE_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
@@ -102,6 +111,40 @@ function ladderStep(
   return { price: stepPrice, pct: stepPct, stepsInfo: `Step 1 of ~${totalSteps}`, targetFull: targetPrice }
 }
 
+function generateAllSteps(
+  currentPrice: number,
+  targetPrice: number,
+  cogsUsd: number | null,
+): LadderStepDetail[] {
+  if (targetPrice <= currentPrice) return []
+  const steps: LadderStepDetail[] = []
+  let price = currentPrice
+  let stepNum = 1
+  const now = new Date()
+
+  while (price < targetPrice - 0.01) {
+    const nextPrice = Math.min(
+      Math.ceil(price * (1 + MAX_STEP_PCT / 100) * 100) / 100,
+      Math.ceil(targetPrice * 100) / 100,
+    )
+    const pct = Math.round(((nextPrice - price) / price) * 1000) / 10
+    if (pct < MIN_STEP_PCT && nextPrice < targetPrice - 0.01) break
+
+    const date = new Date(now.getTime() + (stepNum - 1) * 7 * 86400000)
+    steps.push({
+      step: stepNum,
+      price: nextPrice,
+      change_pct: pct,
+      cogs_pct: cogsUsd && nextPrice > 0 ? Math.round((cogsUsd / nextPrice) * 1000) / 10 : null,
+      estimated_date: date.toISOString().split("T")[0],
+    })
+
+    price = nextPrice
+    stepNum++
+  }
+  return steps
+}
+
 function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[]): PriceSuggestion[] {
   const suggestions: PriceSuggestion[] = []
   const storeBeRoas = new Map(stores.map(s => [s.store, s.be_roas]))
@@ -132,6 +175,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
       const targetPrice = p.cogs_usd / (1 - targetMargin - txnRate)
       const step = ladderStep(price, targetPrice)
       if (step) {
+        const allSteps = step.stepsInfo ? generateAllSteps(price, targetPrice, p.cogs_usd) : []
         suggestions.push({
           product_name: p.product_name, store: p.store, current_price: price,
           suggested_price: step.price,
@@ -141,6 +185,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
           priority: "high", metrics, cooldown_until: null,
           target_price: step.stepsInfo ? Math.ceil(targetPrice * 100) / 100 : null,
           steps_info: step.stepsInfo,
+          all_steps: allSteps,
         })
         continue
       }
@@ -155,7 +200,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
         rule: "ROAS downtrend", rule_id: "roas_downtrend",
         reason: `ROAS ${roas.toFixed(2)}x (between 1.0–2.2). Ascend Drafting SOP rule 9: raise price ≥10%, re-check after 7 days.`,
         priority: "high", metrics, cooldown_until: null,
-        target_price: null, steps_info: "",
+        target_price: null, steps_info: "", all_steps: [],
       })
       continue
     }
@@ -169,7 +214,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
         rule: "Possibly overpriced", rule_id: "overpriced",
         reason: `High ROAS ${roas.toFixed(2)}x but only ${p.units_sold} sales. Price may be too high for conversion volume.`,
         priority: "low", metrics, cooldown_until: null,
-        target_price: null, steps_info: "",
+        target_price: null, steps_info: "", all_steps: [],
       })
       continue
     }
@@ -186,7 +231,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
           rule: "Below break-even", rule_id: "below_be",
           reason: `ROAS ${roas.toFixed(2)}x vs ${beRoas.toFixed(2)}x break-even (${gap.toFixed(0)}% gap). Raise price to close the margin gap.`,
           priority: "normal", metrics, cooldown_until: null,
-          target_price: null, steps_info: "",
+          target_price: null, steps_info: "", all_steps: [],
         })
         continue
       }
@@ -198,6 +243,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
       const targetPrice = p.cogs_usd / 0.30
       const step = ladderStep(price, targetPrice)
       if (step) {
+        const allSteps = step.stepsInfo ? generateAllSteps(price, targetPrice, p.cogs_usd) : []
         suggestions.push({
           product_name: p.product_name, store: p.store, current_price: price,
           suggested_price: step.price,
@@ -207,6 +253,7 @@ function generateSuggestions(products: CatalogProduct[], stores: StoreSummary[])
           priority: "normal", metrics, cooldown_until: null,
           target_price: step.stepsInfo ? Math.ceil(targetPrice * 100) / 100 : null,
           steps_info: step.stepsInfo,
+          all_steps: allSteps,
         })
       }
     }
@@ -297,7 +344,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { product_name, store, old_price, new_price, change_pct, rule } = body
+  const { product_name, store, old_price, new_price, change_pct, rule, target_price, all_steps } = body
 
   if (!product_name || !store || !old_price || !new_price) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -324,7 +371,7 @@ export async function POST(req: NextRequest) {
     }, { status: 429 })
   }
 
-  // Log the change as pending
+  // Log the first step
   const { data: change, error: insertErr } = await sb
     .from("price_changes")
     .insert({
@@ -347,5 +394,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, change })
+  // Multi-step: create a price_ladder entry for auto-advance
+  let ladder_id: number | null = null
+  if (Array.isArray(all_steps) && all_steps.length > 1 && target_price) {
+    const steps = [old_price, ...all_steps.map((s: { price: number }) => s.price)]
+    try {
+      // Cancel any existing active ladder for the same product
+      await sb.from("price_ladders")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("store", store).eq("product_name", product_name).eq("status", "active")
+
+      const { data: ladderRow } = await sb.from("price_ladders").insert({
+        store, product_name, start_price: old_price, target_price,
+        steps, current_step: 1, max_drop_pct: 15, status: "active",
+      }).select("id").single()
+      ladder_id = ladderRow?.id ?? null
+
+      if (ladder_id) {
+        await sb.from("price_ladder_log").insert({
+          ladder_id, step_from: 0, step_to: 1,
+          old_price, new_price, orders_day_before: null,
+        })
+      }
+    } catch { /* price_ladders table may not exist yet */ }
+  }
+
+  return NextResponse.json({
+    success: true, change,
+    ladder_id,
+    message: ladder_id
+      ? `Step 1 applied. ${all_steps.length - 1} more steps will auto-advance every 7 days.`
+      : "Logged. Shopify push coming when tokens are set up.",
+  })
 }

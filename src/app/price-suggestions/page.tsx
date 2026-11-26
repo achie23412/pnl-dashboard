@@ -18,6 +18,14 @@ interface Metrics {
   margin_pct: number | null
 }
 
+interface LadderStepDetail {
+  step: number
+  price: number
+  change_pct: number
+  cogs_pct: number | null
+  estimated_date: string
+}
+
 interface Suggestion {
   product_name: string
   store: string
@@ -32,6 +40,7 @@ interface Suggestion {
   cooldown_until: string | null
   target_price: number | null
   steps_info: string
+  all_steps: LadderStepDetail[]
 }
 
 interface Summary {
@@ -91,6 +100,7 @@ export default function PriceSuggestionsPage() {
     const key = `${s.product_name}::${s.store}`
     setApplying(key)
     try {
+      const isMultiStep = s.all_steps && s.all_steps.length > 1
       const res = await fetch("/api/price-suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,13 +111,14 @@ export default function PriceSuggestionsPage() {
           new_price: s.suggested_price,
           change_pct: s.change_pct,
           rule: s.rule_id,
+          ...(isMultiStep ? { target_price: s.target_price, all_steps: s.all_steps } : {}),
         }),
       })
       const data = await res.json()
       if (!res.ok) {
         setApplyResult(prev => ({ ...prev, [key]: { ok: false, msg: data.error || "Failed" } }))
       } else {
-        setApplyResult(prev => ({ ...prev, [key]: { ok: true, msg: "Logged. Shopify push coming when tokens are set up." } }))
+        setApplyResult(prev => ({ ...prev, [key]: { ok: true, msg: data.message || "Logged. Shopify push coming when tokens are set up." } }))
       }
     } catch (e) {
       setApplyResult(prev => ({ ...prev, [key]: { ok: false, msg: e instanceof Error ? e.message : String(e) } }))
@@ -231,6 +242,42 @@ export default function PriceSuggestionsPage() {
                             {s.metrics.cogs_usd !== null && <span>COGS: ${s.metrics.cogs_usd.toFixed(2)} USD</span>}
                             {s.target_price !== null && <span style={{ color: "var(--orange)" }}>Target: {money(s.target_price, s.store)}</span>}
                           </div>
+                          {/* Price Ladder Steps */}
+                          {s.all_steps && s.all_steps.length > 1 && (
+                            <div className="mt-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                              <div className="text-[10px] font-medium mb-2" style={{ color: "var(--text)" }}>
+                                Price Ladder — {s.all_steps.length} steps to {money(s.target_price!, s.store)}
+                              </div>
+                              <div className="flex flex-col gap-0">
+                                {/* Start: current price */}
+                                <div className="flex items-center gap-2 text-[9px] py-0.5">
+                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: "var(--text-dim)", border: "2px solid var(--text-muted)" }} />
+                                  <span className="tabular-nums" style={{ color: "var(--text-muted)", minWidth: 48 }}>Now</span>
+                                  <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{money(s.current_price, s.store)}</span>
+                                </div>
+                                {s.all_steps.map((step, si) => (
+                                  <div key={si} className="flex items-center gap-2 text-[9px] py-0.5">
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{
+                                      background: si === s.all_steps.length - 1 ? "var(--green)" : "var(--orange)",
+                                      border: si === s.all_steps.length - 1 ? "2px solid var(--green)" : "2px solid var(--orange)",
+                                    }} />
+                                    <span className="tabular-nums" style={{ color: "var(--text-dim)", minWidth: 48 }}>
+                                      {new Date(step.estimated_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                    </span>
+                                    <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>{money(step.price, s.store)}</span>
+                                    <span style={{ color: "var(--green)" }}>+{step.change_pct}%</span>
+                                    {step.cogs_pct !== null && (
+                                      <span style={{ color: cogsColor(step.cogs_pct) }}>COGS {step.cogs_pct}%</span>
+                                    )}
+                                    {si === s.all_steps.length - 1 && <Badge tone="green">Target</Badge>}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="mt-1.5 text-[8px]" style={{ color: "var(--text-dim)" }}>
+                                Each step auto-advances after 7-day cooldown. Max +10% per step.
+                              </div>
+                            </div>
+                          )}
                           {result && (
                             <div className="mt-2 text-[10px]" style={{ color: result.ok ? "var(--green)" : "var(--red)" }}>
                               {result.msg}
@@ -275,7 +322,7 @@ export default function PriceSuggestionsPage() {
                         <Badge tone="green">Done</Badge>
                       ) : (
                         <Button size="sm" onClick={() => handleApply(s)} disabled={applying === key}>
-                          {applying === key ? "Applying…" : "Apply"}
+                          {applying === key ? "Applying…" : (s.all_steps && s.all_steps.length > 1 ? "Start Ladder" : "Apply")}
                         </Button>
                       )}
                     </td>
