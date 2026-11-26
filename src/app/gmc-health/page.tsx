@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
+import { productHref } from "@/components/ProductLink"
 
 interface Stats { spend: number; units: number; revenue_eur: number }
 interface StoreRow {
@@ -45,6 +46,27 @@ const pct = (f: number | null) => (f == null ? "—" : `${f > 0 ? "+" : ""}${Mat
 const short = (s: string) => ({ "Susan & Allen": "S&A", "Carter & Collins": "C&C", "Walsh & Farley": "W&F" } as Record<string, string>)[s] || s
 
 type Tab = "disapproved" | "draft" | "price" | "log"
+
+// What to do for one disapproved product, and where the button takes you.
+type FixAction = { step: string; label: string; to: "admin" | "page" | "gmc" | "draft" }
+const variantOf = (title: string | null) => (title && title.includes(" / ") ? title.split(" / ").slice(-1)[0] : null)
+function fixFor(r: Issue): FixAction {
+  const t = `${r.issue_code} ${r.description || ""} ${r.attribute || ""}`.toLowerCase()
+  const v = variantOf(r.title)
+  const forV = v ? ` (variant ${v})` : ""
+  if (r.counterfeit) return { step: "Counterfeit strike: draft this product. Don't appeal unless you can prove it's genuine.", label: "Draft it →", to: "draft" }
+  if (/image/.test(t)) return { step: `Shopify → this product → Media: replace the main photo${forV} with a clean one (no text, logo, watermark or border, 250×250 px+). Google re-checks within a few days.`, label: "Replace image →", to: "admin" }
+  if (/price/.test(t) && /mismatch|differ|incorrect/.test(t)) return { step: `Check the price and compare-at price${forV} in Shopify match the product page, then let Simprosys re-sync.`, label: "Check price →", to: "admin" }
+  if (/availability|out of stock|stock/.test(t)) return { step: `Check the stock${forV} in Shopify; the page and the feed must say the same.`, label: "Check stock →", to: "admin" }
+  if (/gtin|identifier|mpn|brand/.test(t)) return { step: "Add brand + MPN, or set identifier_exists = no in Simprosys for this product.", label: "Open product →", to: "admin" }
+  if (/landing|crawl|url|redirect|page/.test(t)) return { step: "Open the product page: it must load, not be password-protected and not redirect.", label: "Open page →", to: "page" }
+  if (/shipping|delivery/.test(t)) return { step: `Shipping is missing for ${(r.countries || []).join(", ") || "this country"}: fix the shipping settings in Merchant Center.`, label: "Merchant Center →", to: "gmc" }
+  if (/size|color|colour|gender|age_group|age group|apparel/.test(t)) return { step: `Fill the missing ${r.attribute || "apparel attribute"}${forV} (size, colour, gender, age group) in Shopify / Simprosys.`, label: "Add attributes →", to: "admin" }
+  if (/title|description|capital|promotional/.test(t)) return { step: "Rewrite the title/description: no promo words, ALL CAPS or claims.", label: "Edit title →", to: "admin" }
+  if (/policy|misrepresentation|claim|restricted|adult|dangerous/.test(t)) return { step: "Fix the product page or listing as Google describes, then request a review in Merchant Center.", label: "Request review →", to: "gmc" }
+  return { step: r.resolution || "See Google's note above, fix it, then request a review in Merchant Center.", label: "Merchant Center →", to: "gmc" }
+}
+const gmcLink = (merchantId: string | null | undefined) => (merchantId ? `https://merchants.google.com/mc/products/diagnostics?a=${merchantId}` : "https://merchants.google.com/")
 
 export default function GmcHealthPage() {
   const [data, setData] = useState<Data | null>(null)
@@ -210,6 +232,7 @@ export default function GmcHealthPage() {
                         <thead><tr style={{ color: "var(--text-dim)" }}>
                           <th className={`${TH} text-left`}>Store</th><th className={`${TH} text-left`}>Product</th><th className={`${TH} text-left`}>Since</th>
                           <th className={`${TH} text-left`}>Countries</th><th className={`${TH} text-right`}>Spend 30d</th><th className={`${TH} text-right`}>Sales 30d</th>
+                          <th className={`${TH} text-left`}>How to fix this one</th>
                         </tr></thead>
                         <tbody>
                           {g.rows.map((r) => {
@@ -223,6 +246,31 @@ export default function GmcHealthPage() {
                                 <td className={TD}>{(r.countries || []).join(", ") || "—"}</td>
                                 <td className={`${TD} text-right tabular-nums`}>{r.stats ? eur(r.stats.spend) : "—"}</td>
                                 <td className={`${TD} text-right tabular-nums`}>{r.stats ? `${r.stats.units} · ${eur(r.stats.revenue_eur)}` : "—"}</td>
+                                <td className={`${TD} min-w-[260px] max-w-[380px]`}>
+                                  {(() => {
+                                    const f = fixFor(r)
+                                    const name = (r.title || "").split(" / ")[0]
+                                    const btn = "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+                                    const btnStyle = { background: "rgba(99,102,241,0.18)", color: "#c7d2fe" }
+                                    return (
+                                      <div className="text-[10px] leading-snug" style={{ color: "var(--text-muted)" }}>
+                                        <div className="mb-1">{f.step}{r.detail && f.to !== "draft" ? <span style={{ color: "var(--text-dim)" }}> Google: {r.detail}</span> : null}</div>
+                                        <span className="inline-flex flex-wrap gap-1.5">
+                                          {f.to === "draft" ? (
+                                            <button className={btn} style={btnStyle} onClick={() => setTab("draft")}>{f.label}</button>
+                                          ) : f.to === "gmc" ? (
+                                            <a className={btn} style={btnStyle} href={gmcLink(st?.merchant_id)} target="_blank" rel="noreferrer" onClick={() => navigator.clipboard?.writeText(r.offer_id)} title="Opens Merchant Center; the item ID is copied so you can paste it in the search">{f.label}</a>
+                                          ) : (
+                                            <a className={btn} style={btnStyle} href={productHref(r.store, name, r.product_id, f.to === "admin")} target="_blank" rel="noreferrer">{f.label}</a>
+                                          )}
+                                          {f.to !== "gmc" && (
+                                            <a className={btn} style={{ color: "var(--text-dim)", border: "1px solid rgba(255,255,255,0.1)" }} href={gmcLink(st?.merchant_id)} target="_blank" rel="noreferrer" onClick={() => navigator.clipboard?.writeText(r.offer_id)} title="Opens Merchant Center; the item ID is copied so you can paste it in the search">GMC</a>
+                                          )}
+                                        </span>
+                                      </div>
+                                    )
+                                  })()}
+                                </td>
                               </tr>
                             )
                           })}
