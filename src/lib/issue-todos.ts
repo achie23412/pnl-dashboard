@@ -36,6 +36,10 @@ function byStore<T extends { store: string }>(xs: T[]): Map<string, T[]> {
   return m
 }
 
+const OUR_STORES = new Set(["LUMEGLASSES", "Blinky", "Walsh & Farley", "Carter & Collins", "Susan & Allen"])
+const ours = <T extends { store: string }>(xs: T[]) => xs.filter((x) => OUR_STORES.has(x.store))
+const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ")
+
 export function buildIssueTodos(input: IssueInput): AutoTodo[] {
   const out: AutoTodo[] = []
 
@@ -54,7 +58,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
       hrefLabel: "Refunds",
     })
   }
-  const notRefunded = refunds.filter((r) => r.shopify_status === "not_refunded" && r.approval_status !== "waiting" && r.approval_status !== "rejected")
+  const notRefunded = ours(refunds).filter((r) => r.shopify_status === "not_refunded" && r.approval_status !== "waiting" && r.approval_status !== "rejected")
   for (const [store, xs] of Array.from(byStore(notRefunded))) {
     out.push({
       key: keyOf("refund-not-done", store, xs.map((r) => r.id)),
@@ -68,7 +72,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
       hrefLabel: "Refunds",
     })
   }
-  for (const [store, xs] of Array.from(byStore(input.unloggedShopifyRefunds || []))) {
+  for (const [store, xs] of Array.from(byStore(ours(input.unloggedShopifyRefunds || [])))) {
     out.push({
       key: keyOf("refund-unlogged", store, xs.map((r) => r.order_id)),
       title: `Log the reason for ${plural(xs.length, "Shopify refund")}`,
@@ -103,7 +107,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
 
   // ---- Supplier costs and invoices ----
   if (input.supplier) {
-    const overQuote = input.supplier.invoices.filter((i) => i.has_price_discrepancy)
+    const overQuote = ours(input.supplier.invoices).filter((i) => i.has_price_discrepancy)
     for (const [store, xs] of Array.from(byStore(overQuote))) {
       out.push({
         key: keyOf("over-quote", store, xs.map((i) => i.id)),
@@ -117,7 +121,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
         hrefLabel: "COGS Invoices",
       })
     }
-    const high = input.supplier.products.filter((p) => p.cogs_pct != null && p.cogs_pct > 32)
+    const high = ours(input.supplier.products).filter((p) => p.cogs_pct != null && p.cogs_pct > 32)
     for (const [store, xs] of Array.from(byStore(high))) {
       out.push({
         key: keyOf("cogs-high", store, xs.map((p) => `${p.title}|${p.variant_title}`)),
@@ -134,7 +138,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
     // Price deductions: 20+ units in 30 days and nothing asked yet
     const asked = new Set((input.priceFlags || []).map((f) => `${f.store}|${f.product_title.trim().toLowerCase()}`))
     const qty = new Map<string, { store: string; title: string; qty: number }>()
-    for (const p of input.supplier.products) {
+    for (const p of ours(input.supplier.products)) {
       const k = `${p.store}|${p.title.trim().toLowerCase()}`
       const cur = qty.get(k) || { store: p.store, title: p.title, qty: 0 }
       cur.qty += p.total_qty
@@ -158,7 +162,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
 
   // ---- Supply chain (ShipGoods) ----
   if (input.supplyChain) {
-    const addr = input.supplyChain.orders.filter((o) => o.status === "address_error")
+    const addr = ours(input.supplyChain.orders).filter((o) => o.status === "address_error")
     for (const [store, xs] of Array.from(byStore(addr))) {
       out.push({
         key: keyOf("address-error", store, xs.map((o) => o.order_number)),
@@ -172,7 +176,7 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
         hrefLabel: "Order Issues",
       })
     }
-    const stuck = input.supplyChain.orders.filter((o) => o.status === "waiting_process" && o.age_hours > 48)
+    const stuck = ours(input.supplyChain.orders).filter((o) => o.status === "waiting_process" && o.age_hours > 48)
     for (const [store, xs] of Array.from(byStore(stuck))) {
       out.push({
         key: keyOf("stuck", store, xs.map((o) => o.order_number)),
@@ -186,12 +190,16 @@ export function buildIssueTodos(input: IssueInput): AutoTodo[] {
         hrefLabel: "Order Issues",
       })
     }
-    const oos = input.supplyChain.products_at_risk.filter((p) => p.risk === "high")
+    // Only products that actually sold in the last 30 days (ShipGoods bills), not the whole catalog
+    const selling = new Set(ours(input.supplier?.products || []).map((p) => norm(p.title)))
+    const oos = input.supplyChain.products_at_risk.filter((p) => p.risk === "high" && selling.has(norm(p.name)))
     if (oos.length) {
+      const byProduct = new Map<string, string[]>()
+      for (const p of oos) byProduct.set(p.name.trim(), [...(byProduct.get(p.name.trim()) || []), `${p.variant || "default"} ${p.stock}`])
       out.push({
         key: keyOf("stock", "all", oos.map((p) => `${p.name}|${p.variant}`)),
-        title: `${plural(oos.length, "product")} out of stock or almost (≤5)`,
-        why: list(oos.map((p) => `${p.name}${p.variant ? ` ${p.variant}` : ""}: ${p.stock}`)),
+        title: `${plural(byProduct.size, "selling product")} out of stock or almost (≤5)`,
+        why: list(Array.from(byProduct.entries()).map(([n, v]) => `${n} (${v.length} variant${v.length === 1 ? "" : "s"})`), 5),
         source: "Fulfillment Risks: stock",
         priority: "high",
         fix: "On Fulfillment Risks, restock with the supplier or draft the product so no new orders come in.",
