@@ -203,13 +203,15 @@ export async function buildCashflow(): Promise<CashflowData> {
     .sort((a, b) => b.pending + b.in_transit - (a.pending + a.in_transit))
 
   let whopBalance: WhopBalance | null = null
+  let whopError: string | null = null
   if (whopConfigured()) {
     try {
       whopBalance = await fetchWhopBalance()
       const wp = proc.get("Whop")
       if (wp) wp.balance_known = true
-    } catch {
-      // Whop API failed — degrade gracefully, incoming totals still work from Windsor
+    } catch (e) {
+      whopError = e instanceof Error ? e.message : String(e)
+      console.error("Whop API failed:", whopError)
     }
   }
 
@@ -233,7 +235,11 @@ export async function buildCashflow(): Promise<CashflowData> {
     whop_balance: whopBalance,
     notes: [
       "Shopify Payments balance = sales not yet paid out (pending) + payouts on their way to the bank (in transit). Older pending sales than 30 days are not included (Windsor trial limit).",
-      "Whop balance and payouts connect automatically when WHOP_API_KEY is set in Vercel. PayPal needs a Windsor connector. Whale Checkout has no API — balance is manual.",
+      whopError
+        ? `Whop API error: ${whopError}. Key is set but the API call failed.`
+        : whopBalance?.available
+          ? "Whop balance connected via API."
+          : "Whop: WHOP_API_KEY not set in Vercel. PayPal needs a Windsor connector. Whale Checkout has no API — balance is manual.",
       "Outgoing = ad spend + COGS (ShipGoods) + refunds + Shopify Payments fees. Agency fees, apps and team costs are not included.",
     ],
   }
