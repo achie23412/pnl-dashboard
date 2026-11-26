@@ -57,6 +57,11 @@ export const SHIPGOODS_SHOP_MAP: Record<number, string> = {
   18255: "Susan & Allen",
 }
 
+// ShipGoods shops that aren't P&L stores: named on Supply Chain only, never counted in COGS
+export const SHIPGOODS_OTHER_SHOPS: Record<number, string> = {
+  17480: "Eleanor Brighton (not on P&L)", // mhqm15-gi, "SG_Keano4" in ShipGoods
+}
+
 export const AVG_COGS_PER_ORDER: Record<string, number> = {
   LUMEGLASSES: 14.59,
   Blinky: 18.87,

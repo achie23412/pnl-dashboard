@@ -1,4 +1,4 @@
-import { SHIPGOODS_SHOP_MAP, SHOPIFY_ACCOUNT_MAP } from "./constants"
+import { SHIPGOODS_SHOP_MAP, SHIPGOODS_OTHER_SHOPS, SHOPIFY_ACCOUNT_MAP } from "./constants"
 
 const BASE = "https://dashboard.shipgoods.eu/api/v1/shop"
 
@@ -220,5 +220,5 @@ export async function fetchOrders(updatedSince: string): Promise<SGOrder[]> {
 }
 
 export function resolveStore(shopAdminId: number): string {
-  return SHIPGOODS_SHOP_MAP[shopAdminId] || `Shop #${shopAdminId}`
+  return SHIPGOODS_SHOP_MAP[shopAdminId] || SHIPGOODS_OTHER_SHOPS[shopAdminId] || `Shop #${shopAdminId}`
 }
