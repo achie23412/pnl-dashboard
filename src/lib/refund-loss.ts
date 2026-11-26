@@ -166,6 +166,8 @@ export interface ProductRisk {
   risky_window: "30d" | "all" | null
 }
 
+// Add-ons that aren't products (shipping insurance, breakage cover): left out of the refund rate
+const ADDON = /insurance|protection|warranty|breakage|lum[eé] care/i
 const isRisky = (orders: number, refunded: number) => orders >= RISK_MIN_ORDERS && refunded >= RISK_MIN_REFUNDS && (refunded / orders) * 100 > RISK_RATE
 
 // Refund rate, reasons and net refund loss per product, all stores.
@@ -193,7 +195,7 @@ export async function productRefundRisk(): Promise<{ products: ProductRisk[]; si
     sgByOrder.set(String(r.order_id), [...(sgByOrder.get(String(r.order_id)) || []), r])
     const store = STORE_BY_PREFIX[r.store_name || ""]
     if (!store) continue
-    for (const i of r.items || []) get(store, i.product_id ? String(i.product_id) : null, i.title).orders.set(String(r.order_id), r.bill_date)
+    for (const i of (r.items || []).filter((x) => !ADDON.test(x.title || ""))) get(store, i.product_id ? String(i.product_id) : null, i.title).orders.set(String(r.order_id), r.bill_date)
   }
 
   for (const r of refunds) {
@@ -208,7 +210,8 @@ export async function productRefundRisk(): Promise<{ products: ProductRisk[]; si
     }))
     const sgRows = sgByOrder.get(oid) || []
     const sgItems = sgRows.flatMap((x) => x.items || [])
-    if (!prods.length) prods = sgItems.map((i) => ({ pid: i.product_id ? String(i.product_id) : null, title: i.title, weight: 0, costUsd: 0 }))
+    prods = prods.filter((p) => !ADDON.test(p.title || ""))
+    if (!prods.length) prods = sgItems.filter((i) => !ADDON.test(i.title || "")).map((i) => ({ pid: i.product_id ? String(i.product_id) : null, title: i.title, weight: 0, costUsd: 0 }))
     if (!prods.length) continue
     // each product's own cost in this order, to split the COGS part of the loss
     for (const p of prods) {
