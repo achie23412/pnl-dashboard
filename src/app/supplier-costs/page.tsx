@@ -5,13 +5,15 @@ import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue, passesAny } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
-import { TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+import { TRANSACTION_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+import { mediaBuyerRateNow, type FeeSettings } from "@/lib/fee-settings"
+import { useFeeSettings } from "@/lib/use-fee-settings"
 
 // Breakeven ROAS for one product: (1 + media buyer fee) / (1 − COGS% − transaction fee).
 // Same formula as Product Performance and the Ascend profit sheet.
-function beRoasOf(store: string, cogsPct: number | null): number | null {
+function beRoasOf(store: string, cogsPct: number | null, fees: FeeSettings): number | null {
   if (cogsPct == null) return null
-  const be = breakEvenRoas(cogsPct / 100, TRANSACTION_FEE_RATE[store] ?? 0.035, MEDIA_BUYER_FEE_RATE[store] ?? 0)
+  const be = breakEvenRoas(cogsPct / 100, TRANSACTION_FEE_RATE[store] ?? 0.035, mediaBuyerRateNow(fees, store))
   return Number.isFinite(be) ? be : null
 }
 const fmtBe = (n: number | null) => (n == null ? "—" : `${n.toFixed(2)}x`)
@@ -64,6 +66,7 @@ function cogsBadge(pct: number | null): { label: string; tone: "green" | "red" |
 }
 
 export default function SupplierCostsPage() {
+  const feeSettings = useFeeSettings()
   const [products, setProducts] = useState<SupplierProduct[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -115,7 +118,7 @@ export default function SupplierCostsPage() {
   const cogsAlerts = products.filter((p) => p.cogs_alert).length
   const inRange = products.filter((p) => p.cogs_pct !== null && p.cogs_pct >= 28 && p.cogs_pct <= 32).length
   // Average breakeven ROAS, weighted by units sold (what our ad spend actually has to beat).
-  const beRows = products.map((p) => ({ q: p.total_qty, be: beRoasOf(p.store, p.cogs_pct) })).filter((x) => x.be != null && x.q > 0)
+  const beRows = products.map((p) => ({ q: p.total_qty, be: beRoasOf(p.store, p.cogs_pct, feeSettings) })).filter((x) => x.be != null && x.q > 0)
   const beQty = beRows.reduce((a, x) => a + x.q, 0)
   const avgBe = beQty > 0 ? beRows.reduce((a, x) => a + (x.be as number) * x.q, 0) / beQty : null
 
@@ -284,7 +287,7 @@ export default function SupplierCostsPage() {
                     <td className={`${TD} text-right tabular-nums`} style={{ color: cogsColor(p.cogs_pct) }}>
                       {p.cogs_pct !== null ? `${p.cogs_pct.toFixed(1)}%` : "—"}
                     </td>
-                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>{fmtBe(beRoasOf(p.store, p.cogs_pct))}</td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: "var(--text)" }}>{fmtBe(beRoasOf(p.store, p.cogs_pct, feeSettings))}</td>
                     <td className={`${TD} text-center`}>
                       {badge && (
                         <Badge tone={badge.tone}>{badge.label}</Badge>

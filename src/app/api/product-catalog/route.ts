@@ -2,7 +2,9 @@ import { fetchProducts, type SGProduct } from "@/lib/shipgoods"
 import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
-import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, breakEvenRoas } from "@/lib/constants"
+import { mediaBuyerRateNow } from "@/lib/fee-settings"
+import { loadFeeSettings } from "@/lib/fee-settings-server"
 import { getShopifyToken } from "@/lib/shopify-sessions"
 import { fetchShopifyOrderTotals, fetchGoogleProductSpend } from "@/lib/windsor"
 import type { GoogleProductSpend } from "@/lib/windsor"
@@ -734,6 +736,7 @@ async function buildResponse(req: Request) {
   }
 
   const perEur = (cur: Currency) => (cur === "EUR" ? 1 : fx[cur])
+  const feeSettings = await loadFeeSettings()
   const ctxFor = (s: string): StoreContext => {
     const cur = STORE_CURRENCY[s] || "EUR"
     const isGoogle = Object.values(WINDSOR_ACCOUNT_MAP).some((m) => m.store === s && m.channel === "Google")
@@ -746,7 +749,7 @@ async function buildResponse(req: Request) {
       productSpend,
       usdToStore: perEur(cur) / perEur("USD"),
       txnRate: TRANSACTION_FEE_RATE[s] ?? 0.035,
-      mbRate: MEDIA_BUYER_FEE_RATE[s] ?? 0,
+      mbRate: mediaBuyerRateNow(feeSettings, s),
       quotes: quotesByStore.get(s) || [],
       handleById: handlesByStore.get(s) || new Map(),
       catalogById,

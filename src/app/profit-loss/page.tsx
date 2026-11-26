@@ -9,12 +9,14 @@ import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE } from "@/lib/constants"
+import { mediaBuyerRate } from "@/lib/fee-settings"
+import { useFeeSettings } from "@/lib/use-fee-settings"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, FALLBACK_RATES, fetchEurRates, toEur, type EurRates } from "@/lib/currency"
 
 // Database reads go through our logged-in server (/api/db), not the public Supabase key
 const supabase = db
 
-// Same fee settings as the sheet's Setup tab (Google stores). Meta stores have no media buyer.
+// Transaction fee as the sheet's Setup tab. The media buyer fee comes from Store Settings (from its start date).
 const SHEET_STORES = ["Susan & Allen", "Carter & Collins", "Walsh & Farley"]
 const ALL_STORES = [...SHEET_STORES, "LUMEGLASSES", "Blinky"]
 const FEES: Record<string, { mediaBuyer: number; txn: number }> = {
@@ -59,6 +61,7 @@ const pct = (n: number | null) => (n === null ? "" : `${n.toFixed(1)}%`)
 const xr = (n: number | null) => (n === null ? "" : `${n.toFixed(2)}x`)
 
 export default function ProfitLossPage() {
+  const feeSettings = useFeeSettings()
   const thisMonth = new Date().toISOString().slice(0, 7)
   // Default = the 3 Google stores (the profit sheet). "all" = every store with data.
   const [storeF, setStoreF] = useState<FilterValue>({ mode: "include", values: SHEET_STORES })
@@ -136,7 +139,7 @@ export default function ProfitLossPage() {
       const [s, d] = k.split("|")
       if (!stores.includes(s) || !inDate(d)) return
       total = add(total, row)
-      mb += row.ad * (FEES[s]?.mediaBuyer ?? 0)
+      mb += row.ad * mediaBuyerRate(feeSettings, s, d)
       txn += row.gross * (FEES[s]?.txn ?? 0)
     })
     return finish(total, { mb, txn })
@@ -210,7 +213,7 @@ export default function ProfitLossPage() {
     <PageShell
       title="Profit & Loss"
       breadcrumb="Finance → Profit & Loss"
-      description="Built on the Ascend profit sheet: same columns, same fees (Google stores: media buyer 10% of ad spend, transaction fee 6% of gross revenue). Filled automatically from Shopify revenue, Windsor ad spend, refunds and COGS. All amounts in EUR."
+      description="Built on the Ascend profit sheet: same columns, same fees (Google stores: transaction fee 6% of gross revenue; media buyer fee from its start date in Store Settings). Filled automatically from Shopify revenue, Windsor ad spend, refunds and COGS. All amounts in EUR."
       stats={raw ? [
         { label: `Gross revenue · ${monthLabel(month)}`, value: eur0(t.gross), sub: `${t.orders} orders · ${scopeLabel}` },
         { label: "Ad spend", value: eur0(t.ad), sub: `+ ${eur0(t.mb)} media buyer fee` },
@@ -288,7 +291,7 @@ export default function ProfitLossPage() {
 
           <div className="text-[10px] space-y-1" style={{ color: "var(--text-dim)" }}>
             <div>Same formulas as the Ascend profit sheet: net revenue = gross − refunds · profit before refunds = gross − cost of goods − ad spend − media buyer fee − transaction fee · profit = profit before refunds − refunds · ROAS = net ÷ ad spend · gross ROAS = gross ÷ ad spend.</div>
-            <div>Fees: Google stores media buyer 10% of ad spend + transaction 6% of gross revenue (Setup tab). LUMEGLASSES and Blinky: no media buyer, transaction fee {(FEES.LUMEGLASSES.txn * 100).toFixed(1)}%.</div>
+            <div>Fees: transaction 6% of gross revenue on the Google stores (Setup tab); media buyer fee (% of ad spend) only from the start date set in Store Settings. LUMEGLASSES and Blinky: transaction fee {(FEES.LUMEGLASSES.txn * 100).toFixed(1)}%.</div>
             <div>* Cost of goods with a star includes an estimate (average COGS per order) for days without ShipGoods COGS. The sheet currently types a flat 30%.</div>
             <div>Differences vs the sheet: amounts use the daily ECB rate (the sheet one rate per month); ad spend is the full Google Ads day from Windsor (the sheet&apos;s daily split is typed by hand). Dashboard data starts {firstData ? new Date(firstData + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "late Oct 2026"}, so September only exists in the sheet.</div>
           </div>

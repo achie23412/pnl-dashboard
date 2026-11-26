@@ -472,7 +472,7 @@ export default function ProductRulesPage() {
         </div>
         <div className="text-[9px] mt-2" style={{ color: "var(--text-dim)" }}>
           Google stores (Walsh &amp; Farley, Carter &amp; Collins, Susan &amp; Allen) have per-product ad spend from Google Shopping. Meta stores (LUMEGLASSES, Blinky) only get store-level and margin-based verdicts. Click a row to see the rule.
-          {" "}Margin = (revenue − COGS − ad spend − media buyer fee − transaction fee) ÷ revenue, as on the profit sheet (Google stores: 10% media buyer fee, 6% fees). Meta stores show it before ads (pre-ads). Revenue and spend are in the store&apos;s own currency. Green = above the 20% net profit gate (Simo), orange = 0–20%, red = losing money.
+          {" "}Margin = (revenue − COGS − ad spend − media buyer fee − transaction fee) ÷ revenue, as on the profit sheet (Google stores: 6% transaction fee; media buyer fee from its start date in Store Settings). Meta stores show it before ads (pre-ads). Revenue and spend are in the store&apos;s own currency. Green = above the 20% net profit gate (Simo), orange = 0–20%, red = losing money.
         </div>
       </Panel>
     </PageShell>

@@ -14,7 +14,9 @@ import {
   RevenueByStoreChart,
   SpendByAccountChart,
 } from "@/components/Charts"
-import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, STORES, breakEvenRoas } from "@/lib/constants"
+import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES, breakEvenRoas } from "@/lib/constants"
+import { mediaBuyerRate, mediaBuyerRateNow } from "@/lib/fee-settings"
+import { useFeeSettings } from "@/lib/use-fee-settings"
 import type { StoreName } from "@/lib/constants"
 import type {
   RevenueRow, SpendRow, CogsRow, SessionsRow, DailyPnL, KPIData,
@@ -58,6 +60,9 @@ const ALERT_TONE: Record<RoasAlert["severity"], { color: string; bg: string; bor
 }
 
 export default function Dashboard() {
+  const feeSettings = useFeeSettings()
+  // Media buyer fee share of ad spend on a day: 0 until its start date (Store Settings)
+  const mbOn = (s: string, date: string) => mediaBuyerRate(feeSettings, s, date)
   const [store, setStore] = useState<StoreName>("Overall")
   const [preset, setPreset] = useState("last_30d")
   const [customFrom, setCustomFrom] = useState("")
@@ -198,7 +203,7 @@ export default function Dashboard() {
 
     let mediaBuyerFees = 0
     if (includeTxnFees) {
-      for (const r of sp) mediaBuyerFees += r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0)
+      for (const r of sp) mediaBuyerFees += r.spend * mbOn(r.store, r.date)
     }
 
     // Revenue is gross (order rows only); refunds are subtracted here.
@@ -217,7 +222,7 @@ export default function Dashboard() {
         weightedTxnRate += (r.revenue / totalRevenue) * (TRANSACTION_FEE_RATE[r.store] || 0.035)
       }
     }
-    const mbRate = totalSpend > 0 ? sp.reduce((s, r) => s + r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0), 0) / totalSpend : 0
+    const mbRate = totalSpend > 0 ? sp.reduce((s, r) => s + r.spend * mbOn(r.store, r.date), 0) / totalSpend : 0
     const be = breakEvenRoas(cogsPercent / 100, weightedTxnRate, mbRate)
     const breakevenRoas = Number.isFinite(be) ? be : 0
 
@@ -248,13 +253,13 @@ export default function Dashboard() {
 
   const kpi = useMemo(
     () => computeKPI(filtered.revenue, filtered.spend, filtered.cogs, filtered.sessions, filtered.refunds),
-    [filtered, includeTxnFees, rates],
+    [filtered, includeTxnFees, rates, feeSettings],
   )
 
   const prevKpi = useMemo((): KPIData | null => {
     if (!showComparison) return null
     return computeKPI(filtered.prevRevenue, filtered.prevSpend, filtered.prevCogs, [], filtered.prevRefunds)
-  }, [filtered, showComparison, includeTxnFees, rates])
+  }, [filtered, showComparison, includeTxnFees, rates, feeSettings])
 
   const storeKPIs = useMemo((): StoreKPI[] => {
     if (store !== "Overall") return []
@@ -282,7 +287,7 @@ export default function Dashboard() {
       let txn = 0
       if (includeTxnFees) {
         for (const r of rev) txn += r.revenue * (TRANSACTION_FEE_RATE[s] || 0.035)
-        txn += totalSpend * (MEDIA_BUYER_FEE_RATE[s] ?? 0)
+        for (const r of sp) txn += r.spend * mbOn(s, r.date)
       }
 
       return {
@@ -296,7 +301,7 @@ export default function Dashboard() {
         profit: totalRevenue - totalRefund - totalSpend - totalCog - txn,
       }
     }).filter((s) => s.revenue > 0 || s.spend > 0)
-  }, [filtered, store, includeTxnFees, rates])
+  }, [filtered, store, includeTxnFees, rates, feeSettings])
 
   const dailyBriefing = useMemo((): DailyBriefingRow[] => {
     const dates = new Set([
@@ -348,7 +353,7 @@ export default function Dashboard() {
             dayTxn += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
           }
           for (const r of filtered.spend.filter((x) => x.date === date)) {
-            dayTxn += r.spend * (MEDIA_BUYER_FEE_RATE[r.store] ?? 0)
+            dayTxn += r.spend * mbOn(r.store, r.date)
           }
         }
 
@@ -365,7 +370,7 @@ export default function Dashboard() {
           isToday: date === todayStr,
         }
       })
-  }, [filtered, includeTxnFees, rates, todayStr])
+  }, [filtered, includeTxnFees, rates, todayStr, feeSettings])
 
   // ROAS trend alerts: judge trends, not single days. Today (live, partial) is
   // excluded. Compares the last ALERT_RECENT_DAYS complete days with the
@@ -403,7 +408,7 @@ export default function Dashboard() {
       const cogsTotal =
         sum(wCogs, (r) => r.cogs) +
         sum(wRev.filter((r) => !cogsDays.has(r.date) && AVG_COGS_PER_ORDER[s]), (r) => r.orders * estCogsPerOrderEur(s, r.date))
-      const breakevenRoas = breakEvenRoas(revTotal > 0 ? cogsTotal / revTotal : 0, TRANSACTION_FEE_RATE[s] || 0.035, MEDIA_BUYER_FEE_RATE[s] ?? 0)
+      const breakevenRoas = breakEvenRoas(revTotal > 0 ? cogsTotal / revTotal : 0, TRANSACTION_FEE_RATE[s] || 0.035, mediaBuyerRateNow(feeSettings, s))
 
       const severity: RoasAlert["severity"] =
         recentRoas < breakevenRoas ? "loss" : recentRoas < breakevenRoas * 1.2 ? "thin" : "ok"
@@ -414,7 +419,7 @@ export default function Dashboard() {
     }
     const rank = { loss: 0, thin: 1, ok: 2 }
     return alerts.sort((a, b) => rank[a.severity] - rank[b.severity])
-  }, [revenueEur, spendEur, cogsEur, store, todayStr, rates])
+  }, [revenueEur, spendEur, cogsEur, store, todayStr, rates, feeSettings])
 
   // Dismissed alerts stay hidden for the rest of the day; they come back tomorrow if the drop is still there.
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])

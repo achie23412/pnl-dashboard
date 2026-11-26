@@ -105,6 +105,7 @@ export const TRANSACTION_FEE_RATE: Record<string, number> = {
   "Susan & Allen": 0.06,
 }
 
+// Not used for profit any more: the media buyer fee now comes from Store Settings (with a start date).
 export const MEDIA_BUYER_FEE_RATE: Record<string, number> = {
   LUMEGLASSES: 0,
   Blinky: 0,

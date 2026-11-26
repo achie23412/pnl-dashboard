@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchEurRates } from "@/lib/currency"
+import { loadFeeSettings } from "@/lib/fee-settings-server"
 import { buildAutoTodos, amsterdamToday } from "@/lib/todo-rules"
 import { complaintEvents, riskyProducts, daysAgo } from "@/lib/product-complaints"
 
@@ -52,6 +53,7 @@ export async function GET() {
     lastRefresh: log.data?.[0] || null,
     seasonUpdated,
     riskyProducts: risky,
+    feeSettings: await loadFeeSettings(),
   })
 
   const rows = todos.data || []

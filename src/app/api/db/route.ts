@@ -11,6 +11,7 @@ const ALLOWED: Record<string, Op[]> = {
   daily_spend: ["select"],
   daily_cogs: ["select"],
   daily_sessions: ["select"],
+  store_settings: ["select"],
   refunds: ["select"],
   refresh_log: ["select"],
   research: ["select", "insert"],
