@@ -61,7 +61,10 @@ export async function fetchWhopBalance(): Promise<WhopBalance> {
   const acct: Record<string, string> = ACCOUNT_ID ? { account_id: ACCOUNT_ID } : {}
   const [report, payoutsRes] = await Promise.all([
     whopFetch<AnyJson>("/financial_reports", { report_type: "balance_summary", ...acct }),
-    whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10", ...acct }),
+    whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10", ...acct }).catch((e) => {
+      console.warn("[whop] payouts fetch failed (non-blocking):", e instanceof Error ? e.message : e)
+      return { data: [] } as PagedResponse<Payout>
+    }),
   ])
 
   // The balance_summary response may use the new format (ending_balance,
