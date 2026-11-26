@@ -213,7 +213,9 @@ export default function CashflowPage() {
           {/* Whop balance */}
           {data.whop_balance?.available && (
             <div className="glass rounded-xl p-4">
-              <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text)" }}>Whop balance (USD)</div>
+              <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--text)" }}>
+                Whop balance (USD){(data.whop_accounts?.length || 0) > 1 ? ` · ${data.whop_accounts!.length} accounts added up` : data.whop_accounts?.[0] ? ` · ${data.whop_accounts[0].label}` : ""}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: "Available", value: `$${data.whop_balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, color: "var(--green)" },
@@ -227,6 +229,24 @@ export default function CashflowPage() {
                   </div>
                 ))}
               </div>
+              {(data.whop_accounts?.length || 0) > 1 && (
+                <div className="mt-3 pt-2 space-y-0.5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="text-[10px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Per account</div>
+                  {data.whop_accounts!.map((a) => (
+                    <div key={a.label} className="flex items-center justify-between text-[10px]">
+                      <span style={{ color: "var(--text-muted)" }}>{a.label}</span>
+                      {a.balance?.available ? (
+                        <span className="tabular-nums" style={{ color: "var(--text)" }}>
+                          ${a.balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                          <span style={{ color: "var(--text-dim)" }}> · pending ${a.balance.pending_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>
+                        </span>
+                      ) : (
+                        <span style={{ color: "var(--red)" }} title={a.error || undefined}>not connected: {(a.error || "no balance").slice(0, 80)}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               {data.whop_balance.recent_payouts.length > 0 && (
                 <div className="mt-3 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="text-[10px] font-medium mb-1" style={{ color: "var(--text-muted)" }}>Recent payouts</div>

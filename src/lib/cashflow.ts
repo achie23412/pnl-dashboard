@@ -8,7 +8,7 @@ import { SHOPIFY_ACCOUNT_MAP } from "@/lib/constants"
 import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, fetchEurRates, toEur, type Currency } from "@/lib/currency"
 import { getServiceClient } from "@/lib/supabase"
 import { selectAll } from "@/lib/opportunity-db"
-import { whopConfigured, fetchWhopBalance, type WhopBalance } from "@/lib/whop"
+import { whopAccounts, fetchWhopBalance, type WhopBalance } from "@/lib/whop"
 
 export const PROCESSORS = ["Shopify Payments", "PayPal", "Whop", "Whale Checkout", "Other"] as const
 export type Processor = (typeof PROCESSORS)[number]
@@ -78,8 +78,9 @@ export interface CashflowData {
   processors: ProcessorFlow[]
   days: DayFlow[]
   payouts: { date: string; store: string; amount: number; currency: string; status: string }[]
-  whop_balance: WhopBalance | null
+  whop_balance: WhopBalance | null // all Whop accounts added up
   whop_error: string | null
+  whop_accounts: { label: string; balance: WhopBalance | null; error: string | null }[]
   notes: string[]
 }
 
@@ -203,17 +204,33 @@ export async function buildCashflow(): Promise<CashflowData> {
     .map((s) => ({ ...s, pending: round(s.pending), in_transit: round(s.in_transit), paid_out_30d: round(s.paid_out_30d), fees_30d: round(s.fees_30d) }))
     .sort((a, b) => b.pending + b.in_transit - (a.pending + a.in_transit))
 
-  let whopBalance: WhopBalance | null = null
-  let whopError: string | null = null
-  if (whopConfigured()) {
-    try {
-      whopBalance = await fetchWhopBalance()
-      const wp = proc.get("Whop")
-      if (wp) wp.balance_known = true
-    } catch (e) {
-      whopError = e instanceof Error ? e.message : String(e)
-      console.error("Whop API failed:", whopError)
-    }
+  // Every Whop account (main + per store, see src/lib/whop.ts), and their sum
+  const whopAccts = await Promise.all(
+    whopAccounts().map(async (a) => {
+      try {
+        return { label: a.label, balance: await fetchWhopBalance(a), error: null as string | null }
+      } catch (e) {
+        const error = e instanceof Error ? e.message : String(e)
+        console.error(`Whop API failed (${a.label}):`, error)
+        return { label: a.label, balance: null as WhopBalance | null, error }
+      }
+    }),
+  )
+  const okAccts = whopAccts.filter((a) => a.balance?.available)
+  const whopBalance: WhopBalance | null = okAccts.length
+    ? {
+        available: true,
+        balance_usd: okAccts.reduce((x, a) => x + a.balance!.balance_usd, 0),
+        pending_usd: okAccts.reduce((x, a) => x + a.balance!.pending_usd, 0),
+        withdrawn_usd: okAccts.reduce((x, a) => x + a.balance!.withdrawn_usd, 0),
+        income_usd: okAccts.reduce((x, a) => x + a.balance!.income_usd, 0),
+        recent_payouts: okAccts.flatMap((a) => a.balance!.recent_payouts).sort((x, y) => y.date.localeCompare(x.date)),
+      }
+    : null
+  const whopError = whopAccts.filter((a) => a.error).map((a) => `${a.label}: ${a.error}`).join(" · ") || null
+  if (whopBalance) {
+    const wp = proc.get("Whop")
+    if (wp) wp.balance_known = true
   }
 
   return {
@@ -235,12 +252,13 @@ export async function buildCashflow(): Promise<CashflowData> {
     payouts: payoutList.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 25),
     whop_balance: whopBalance,
     whop_error: whopError,
+    whop_accounts: whopAccts,
     notes: [
       "Shopify Payments balance = sales not yet paid out (pending) + payouts on their way to the bank (in transit). Older pending sales than 30 days are not included (Windsor trial limit).",
       whopError
         ? `Whop API error: ${whopError}`
         : whopBalance?.available
-          ? "Whop balance connected via API."
+          ? `Whop balance connected via API (${whopAccts.map((a) => a.label).join(", ")}).`
           : "Whop: WHOP_API_KEY not set.",
       "PayPal, Whale Checkout and Other have no API here: type their balance in on this page (saved for everyone).",
       "Outgoing = ad spend + COGS (ShipGoods) + refunds + Shopify Payments fees. Agency fees, apps and team costs are not included.",
