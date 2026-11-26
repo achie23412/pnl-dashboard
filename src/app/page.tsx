@@ -4,6 +4,7 @@ import { db } from "@/lib/db-client"
 import { StoreTabs } from "@/components/StoreTabs"
 import { DatePicker } from "@/components/DatePicker"
 import { FixBanner } from "@/components/FixBanner"
+import { HomePeakAlerts } from "@/components/SeasonVisits"
 import { KPICards } from "@/components/KPICards"
 import { StoreComparison } from "@/components/StoreComparison"
 import { DailyTable } from "@/components/DailyTable"
@@ -484,6 +485,8 @@ export default function Dashboard() {
           if (match) setStore(match)
         }
       }} />
+
+      <HomePeakAlerts />
 
       <div className="mb-4">
         <StoreTabs active={store} onChange={setStore} />

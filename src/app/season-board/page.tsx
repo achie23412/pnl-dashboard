@@ -11,6 +11,7 @@ import { ProductLink } from "@/components/ProductLink"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, SectionLabel, TH, TD, ROW_BORDER } from "@/components/ui"
 import { HARDCODED_EVENTS } from "@/lib/calendar-hardcoded"
+import { PeakAlerts, VisitorLinesPanel, useSeasonVisits } from "@/components/SeasonVisits"
 import {
   MONTHS, COUNTRIES, STATUS_LABEL, SEASON_COLOR, seasonOfMonth, timing, statusFor, indexTitles, coveredBy,
   decodeExport, parseKeywordPlanner, categoryOf, type Status, type Timing, type TitleIndex,
@@ -58,6 +59,7 @@ export default function SeasonBoardPage() {
   const [data, setData] = useState<SeasonData | null>(null)
   const [catalog, setCatalog] = useState<{ products: CatalogProduct[]; stores: StoreSummary[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const visits = useSeasonVisits()
   const [msg, setMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState("")
@@ -243,6 +245,7 @@ export default function SeasonBoardPage() {
           </label>
         </Panel>
       )}
+      <PeakAlerts data={visits.data} market={country} />
       {msg && <Notice tone="success">{msg}</Notice>}
       {error && <Notice tone="error">Couldn&apos;t load the Season Board: {error}.</Notice>}
 
@@ -251,6 +254,8 @@ export default function SeasonBoardPage() {
           Estimated months: the Google Ads accounts only get rounded averages from Keyword Planner, so each keyword&apos;s average volume (Keyword Planner) is spread over the year with the Google Trends pattern of its main clothing term (e.g. &quot;wool coat&quot;, &quot;maxi dress&quot;), last 12 months, per country. US: a shared April–May jump across almost all US clothing searches was removed and replaced by the UK&apos;s shared pattern. Timing is reliable per clothing type; exact numbers are estimates (Keyword Planner rounds volumes to 50 / 500 / 5K / 50K / 500K for these accounts).{data?.hidden ? ` ${data.hidden} brand or non-clothing searches are hidden.` : ""}
         </Notice>
       )}
+
+      <VisitorLinesPanel data={visits.data} error={visits.error} market={country} onReload={visits.reload} />
 
       {/* Year strip */}
       <Panel className="mb-4" title="The year" sub={`Click a month to plan ahead. Store for ${country}: ${stores.join(", ") || "none"}; coverage is checked against its live products.`}>
