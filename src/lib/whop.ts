@@ -55,7 +55,7 @@ export function whopConfigured(): boolean {
 export async function fetchWhopBalance(): Promise<WhopBalance> {
   if (!API_KEY) return { available: false, balance_usd: 0, pending_usd: 0, withdrawn_usd: 0, income_usd: 0, recent_payouts: [] }
 
-  const acct = ACCOUNT_ID ? { account_id: ACCOUNT_ID } : {}
+  const acct: Record<string, string> = ACCOUNT_ID ? { account_id: ACCOUNT_ID } : {}
   const [report, payoutsRes] = await Promise.all([
     whopFetch<FinancialReport>("/financial_reports", acct),
     whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10", ...acct }),
