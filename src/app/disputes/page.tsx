@@ -4,6 +4,7 @@
 // chargeback → submit evidence before the respond-by date (thread, tracking, POD, offers made).
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -66,6 +67,7 @@ export default function DisputesPage() {
         { label: "Lost (90d)", value: disputes ? String(list.filter((d) => stateOf(d) === "lost" && (d.finalized_on || d.initiated_at || "") >= since90.slice(0, 10)).length) : "—" },
       ]}
     >
+      <FixBanner />
       {error && <Notice tone="error">Couldn&apos;t load disputes: {error}.</Notice>}
       {needsScope && <Notice tone="warning">Reason, amount and respond-by date are missing until the read_shopify_payments_disputes permission is released in the store&apos;s Shopify app and approved in the store. Until then the list comes from the dispute status on each order (last 90 days).</Notice>}
 

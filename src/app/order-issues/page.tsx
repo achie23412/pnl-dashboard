@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -108,6 +109,7 @@ export default function OrderIssuesPage() {
         </Button>
       }
     >
+      <FixBanner />
       <FilterBar
         right={
           <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>

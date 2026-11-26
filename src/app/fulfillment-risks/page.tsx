@@ -1,6 +1,7 @@
 "use client"
 import { Fragment, useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
@@ -108,6 +109,7 @@ export default function FulfillmentRisksPage() {
         </Button>
       }
     >
+      <FixBanner />
       {error && <Notice tone="error">Couldn&apos;t load risk data: {error}.</Notice>}
       {loading && <Loading>Loading fulfillment risk data…</Loading>}
 

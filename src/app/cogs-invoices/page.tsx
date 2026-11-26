@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
 import { FilterBar } from "@/components/PillSelect"
@@ -121,6 +122,7 @@ export default function CogsInvoicesPage() {
         </Button>
       }
     >
+      <FixBanner />
       {/* Filters */}
       <FilterBar
         right={

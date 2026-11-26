@@ -46,6 +46,10 @@ export function TodoPanel({ events, onCustomChange }: Props) {
   const [form, setForm] = useState({ label: "", date: "", store: "" })
   const [saving, setSaving] = useState(false)
   const [showDone, setShowDone] = useState(false)
+  // Issues flagged on the other pages (refunds, disputes, supplier, orders, stock, inbox) — loaded separately (slower)
+  const [issues, setIssues] = useState<MustDo[]>([])
+  const [issuesState, setIssuesState] = useState<"loading" | "done" | "error">("loading")
+  const [issuesMissing, setIssuesMissing] = useState<string[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +69,17 @@ export function TodoPanel({ events, onCustomChange }: Props) {
   }, [onCustomChange])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    fetch("/api/todos/issues", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => {
+        setIssues(d.auto || [])
+        setIssuesMissing(d.missing || [])
+        setIssuesState("done")
+      })
+      .catch(() => setIssuesState("error"))
+  }, [])
 
   // Calendar must-dos: today's events (not plain season markers) + must-do deadlines in the next 2 days
   const calendarTodos: MustDo[] = today
@@ -90,13 +105,14 @@ export function TodoPanel({ events, onCustomChange }: Props) {
         })
     : []
 
-  const mustDos = [...auto, ...calendarTodos].sort(
+  const mustDos = [...auto, ...issues.map((t) => ({ ...t, done: t.done || doneKeys.has(t.key) })), ...calendarTodos].sort(
     (a, b) => Number(a.done) - Number(b.done) || (a.priority === "high" ? 0 : 1) - (b.priority === "high" ? 0 : 1),
   )
 
   const toggleAuto = async (t: MustDo) => {
     const next = !t.done
     setAuto((xs) => xs.map((x) => (x.key === t.key ? { ...x, done: next } : x)))
+    setIssues((xs) => xs.map((x) => (x.key === t.key ? { ...x, done: next } : x)))
     setDoneKeys((s) => {
       const n = new Set(s)
       if (next) n.add(t.key)
@@ -200,11 +216,20 @@ export function TodoPanel({ events, onCustomChange }: Props) {
           {/* Must do */}
           <div>
             <div className="text-[9px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#ef4444" }}>
-              Must do · from your data and SOPs
+              Must do · from your data, SOPs and every page
             </div>
+            {issuesState === "loading" && (
+              <div className="text-[10px] mb-1.5" style={{ color: "var(--text-dim)" }}>Checking refunds, disputes, supplier costs, orders, stock and inbox…</div>
+            )}
+            {issuesState === "error" && (
+              <div className="text-[10px] mb-1.5" style={{ color: "var(--amber)" }}>Couldn&apos;t check the other pages for issues right now.</div>
+            )}
+            {issuesState === "done" && issuesMissing.length > 0 && (
+              <div className="text-[10px] mb-1.5" style={{ color: "var(--text-dim)" }}>Not checked (didn&apos;t load): {issuesMissing.join(", ")}.</div>
+            )}
             <div className="space-y-1.5">
               {mustDos.length === 0 && (
-                <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Nothing triggered today.</div>
+                <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>{issuesState === "loading" ? "Nothing yet…" : "Nothing triggered today."}</div>
               )}
               {mustDos.map((m) => (
                 <div

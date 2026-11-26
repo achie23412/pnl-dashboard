@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { db } from "@/lib/db-client"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY, fetchEurRates, toEur, type Currency, type EurRates } from "@/lib/currency"
@@ -140,6 +141,7 @@ export default function RefundReportPage() {
       ]}
       actions={<PillSelect label="Period" value={days} onChange={setDays} options={[{ value: "7", label: "7 days" }, { value: "30", label: "30 days" }, { value: "90", label: "90 days" }]} align="right" />}
     >
+      <FixBanner />
       {errors.length > 0 && <Notice tone="error">Couldn&apos;t load everything: {errors.join(" · ")}</Notice>}
       {loading && rev.length === 0 ? (
         <Loading>Loading refunds…</Loading>

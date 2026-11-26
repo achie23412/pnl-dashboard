@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue, passesAny } from "@/components/FilterSelect"
 import { ProductLink } from "@/components/ProductLink"
@@ -140,6 +141,7 @@ export default function SupplierCostsPage() {
         </Button>
       }
     >
+      <FixBanner />
       {/* Alerts banner */}
       {!loading && alertCount > 0 && (
         <Panel title={`${alertCount} ${alertCount !== 1 ? "products need" : "product needs"} action`} sub="Click a label to show only those products." className="mb-4">

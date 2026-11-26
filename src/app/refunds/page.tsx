@@ -4,6 +4,7 @@
 // reason and percentage, paste the CommsLayer conversation link, save.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
@@ -277,6 +278,7 @@ export default function RefundsPage() {
       ]}
       actions={<Button onClick={runCheck} disabled={checking}>{checking ? "Checking Shopify…" : "Check Shopify now"}</Button>}
     >
+      <FixBanner />
       {loadError && <Notice tone="error">Couldn&apos;t load the refund log: {loadError}</Notice>}
 
       {(() => {

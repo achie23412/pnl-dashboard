@@ -4,6 +4,7 @@
 // and agreed, and the saving per month.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -83,6 +84,7 @@ export default function PriceDeductionsPage() {
         { label: "Saving agreed", value: `$${Math.round(savings)}`, sub: "per 30 days at current volume, USD" },
       ]}
     >
+      <FixBanner />
       {error && <Notice tone="error">Couldn&apos;t load ShipGoods data: {error}.</Notice>}
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{shown.length} products</span>}>
         <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: rows.filter((r) => r.store === s).length }))} value={fStore} onChange={setFStore} />

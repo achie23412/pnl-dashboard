@@ -3,6 +3,7 @@
 // Flag at 10%+ with 20+ units sold; CS follows up (test unit → supplier → resolved / drafted).
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -103,6 +104,7 @@ export default function QualityChecksPage() {
         { label: "Min units to flag", value: String(QUALITY_MIN_UNITS), sub: `at ${QUALITY_RATE * 100}%+ quality refunds` },
       ]}
     >
+      <FixBanner />
       {error && <Notice tone="error">Couldn&apos;t load quality data: {error}.</Notice>}
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{shown.length} products</span>}>
         <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: rows.filter((r) => r.store === s).length }))} value={fStore} onChange={setFStore} />

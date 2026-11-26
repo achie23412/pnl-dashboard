@@ -3,6 +3,7 @@
 // Inbox Queue tickets marked as a product complaint), so the supplier is told the same day.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { PageShell } from "@/components/PageShell"
+import { FixBanner } from "@/components/FixBanner"
 import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
@@ -80,6 +81,7 @@ export default function RiskyProductsPage() {
         { label: "Threshold", value: `${RISKY_COMPLAINTS}+ in ${RISKY_DAYS} days`, sub: "complaints per product" },
       ]}
     >
+      <FixBanner />
       {error && <Notice tone="error">Couldn&apos;t load complaints: {error}.</Notice>}
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{shown.length} products</span>}>
         <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: risky.filter((r) => r.store === s).length }))} value={fStore} onChange={setFStore} />
