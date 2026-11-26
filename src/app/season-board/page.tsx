@@ -41,14 +41,44 @@ const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n 
 const field = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text)" }
 const PAGE = 25
 
+// 12-month search trend. Hover a month for its exact search volume (Keyword Planner).
 function Spark({ months, now }: { months: number[]; now: number }) {
+  const [hi, setHi] = useState<number | null>(null)
+  const W = 132
+  const H = 34
   const max = Math.max(...months, 1)
-  const pts = months.map((v, i) => `${(i / 11) * 100},${28 - (v / max) * 24}`).join(" ")
+  const x = (i: number) => 3 + (i / 11) * (W - 6)
+  const y = (v: number) => H - 4 - (v / max) * (H - 10)
+  const pts = months.map((v, i) => `${x(i)},${y(v)}`).join(" ")
+  const peak = months.indexOf(Math.max(...months))
   return (
-    <svg width="100" height="30" viewBox="0 0 100 30" aria-hidden>
-      <line x1={(now / 11) * 100} y1="0" x2={(now / 11) * 100} y2="30" stroke="rgba(255,255,255,0.15)" strokeDasharray="2 2" />
-      <polyline points={pts} fill="none" stroke="#a5b4fc" strokeWidth="1.5" />
-    </svg>
+    <div className="relative inline-flex items-center gap-2" onMouseLeave={() => setHi(null)}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={months.map((v, i) => `${MONTHS[i]} ${v.toLocaleString("en-GB")}`).join(", ")}>
+        <line x1={x(now)} y1="0" x2={x(now)} y2={H} stroke="rgba(255,255,255,0.15)" strokeDasharray="2 2" />
+        <polyline points={pts} fill="none" stroke="#a5b4fc" strokeWidth="1.5" />
+        {months.map((v, i) => (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(v)} r={hi === i ? 3 : i === peak ? 2 : 0} fill={hi === i ? "#fff" : "#a5b4fc"} />
+            {/* hover zone per month */}
+            <rect x={x(i) - (W - 6) / 22} y={0} width={(W - 6) / 11} height={H} fill="transparent" onMouseEnter={() => setHi(i)}>
+              <title>{`${MONTHS[i]}: ${v.toLocaleString("en-GB")} searches`}</title>
+            </rect>
+          </g>
+        ))}
+      </svg>
+      <span className="w-[74px] text-[10px] tabular-nums leading-tight" style={{ color: hi != null ? "var(--text)" : "var(--text-dim)" }}>
+        {hi != null ? (
+          <>
+            <span style={{ color: "var(--text-dim)" }}>{MONTHS[hi]}</span> {months[hi].toLocaleString("en-GB")}
+          </>
+        ) : (
+          <>
+            {MONTHS[now]} {months[now].toLocaleString("en-GB")}
+            <span className="block text-[9px]">hover for other months</span>
+          </>
+        )}
+      </span>
+    </div>
   )
 }
 
