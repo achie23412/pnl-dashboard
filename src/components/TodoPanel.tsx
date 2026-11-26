@@ -35,6 +35,44 @@ const addDays = (d: string, n: number) => {
 }
 const shortDate = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
 
+// Same issue in several stores (e.g. "4 products with COGS above 32%" per store) = one row.
+const STORE_SHORT: Record<string, string> = {
+  LUMEGLASSES: "Lumé",
+  Blinky: "Blinky",
+  "Walsh & Farley": "W&F",
+  "Carter & Collins": "C&C",
+  "Susan & Allen": "S&A",
+}
+type Group = { id: string; title: string; items: MustDo[]; done: boolean; high: boolean; first: MustDo }
+const leadNum = (t: string) => {
+  const m = t.match(/^(\d+)\s+(.*)$/)
+  return m ? { n: Number(m[1]), rest: m[2] } : null
+}
+function groupMustDos(list: MustDo[]): Group[] {
+  const map = new Map<string, MustDo[]>()
+  for (const m of list) {
+    const type = m.key.startsWith("issue:") ? m.key.split(":")[1] : null
+    const id = type ? `issue:${type}:${m.done ? "done" : "open"}` : m.key
+    map.set(id, [...(map.get(id) || []), m])
+  }
+  return Array.from(map.entries()).map(([id, items]) => {
+    const first = items[0]
+    let title = first.title
+    if (items.length > 1) {
+      const parts = items.map((i) => leadNum(i.title))
+      title = parts.every((x) => x && x.rest === parts[0]!.rest)
+        ? `${parts.reduce((a, x) => a + x!.n, 0)} ${parts[0]!.rest}`
+        : `${first.title} (+${items.length - 1} more)`
+    }
+    return { id, title, items, done: items.every((i) => i.done), high: items.some((i) => i.priority === "high"), first }
+  })
+}
+const fixHref = (m: MustDo) =>
+  m.href
+    ? `${m.href}${m.href.includes("?") ? "&" : "?"}fix_title=${encodeURIComponent(m.title)}&fix_why=${encodeURIComponent(m.why)}&fix_action=${encodeURIComponent(m.fix)}&fix_source=${encodeURIComponent(m.source)}${m.store ? `&fix_store=${encodeURIComponent(m.store)}` : ""}`
+    : null
+const SHOW = 8
+
 export function TodoPanel({ events, onCustomChange }: Props) {
   const [today, setToday] = useState<string | null>(null)
   const [auto, setAuto] = useState<MustDo[]>([])
@@ -46,6 +84,8 @@ export function TodoPanel({ events, onCustomChange }: Props) {
   const [form, setForm] = useState({ label: "", date: "", store: "" })
   const [saving, setSaving] = useState(false)
   const [showDone, setShowDone] = useState(false)
+  const [showAllMust, setShowAllMust] = useState(false)
+  const [showMustDone, setShowMustDone] = useState(false)
   // Issues flagged on the other pages (refunds, disputes, supplier, orders, stock, inbox) — loaded separately (slower)
   const [issues, setIssues] = useState<MustDo[]>([])
   const [issuesState, setIssuesState] = useState<"loading" | "done" | "error">("loading")
@@ -171,7 +211,7 @@ export function TodoPanel({ events, onCustomChange }: Props) {
   const openCustom = custom.filter((c) => !c.done && (!c.date || c.date <= t))
   const laterCustom = custom.filter((c) => !c.done && c.date && c.date > t).sort((a, b) => a.date!.localeCompare(b.date!))
   const doneCustom = custom.filter((c) => c.done)
-  const openMust = mustDos.filter((m) => !m.done).length
+  const openMust = groupMustDos(mustDos).filter((g) => !g.done).length
 
   const Check = ({ done, onClick, label }: { done: boolean; onClick: () => void; label: string }) => (
     <button
@@ -227,54 +267,85 @@ export function TodoPanel({ events, onCustomChange }: Props) {
             {issuesState === "done" && issuesMissing.length > 0 && (
               <div className="text-[10px] mb-1.5" style={{ color: "var(--text-dim)" }}>Not checked (didn&apos;t load): {issuesMissing.join(", ")}.</div>
             )}
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               {mustDos.length === 0 && (
                 <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>{issuesState === "loading" ? "Nothing yet…" : "Nothing triggered today."}</div>
               )}
-              {mustDos.map((m) => (
-                <div
-                  key={m.key}
-                  className="rounded-lg px-3 py-2"
-                  style={{
-                    background: m.priority === "high" && !m.done ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${m.priority === "high" && !m.done ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.05)"}`,
-                    opacity: m.done ? 0.5 : 1,
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <Check done={m.done} onClick={() => toggleAuto(m)} label={m.title} />
-                    <button
-                      className="flex-1 text-left"
-                      onClick={() => setOpenWhy(openWhy === m.key ? null : m.key)}
-                      aria-expanded={openWhy === m.key}
+              {(() => {
+                const groups = groupMustDos(mustDos)
+                const open = groups.filter((g) => !g.done)
+                const done = groups.filter((g) => g.done)
+                const shown = showAllMust ? open : open.slice(0, SHOW)
+                const row = (g: Group) => {
+                  const href = fixHref(g.first)
+                  const isOpen = openWhy === g.id
+                  return (
+                    <div
+                      key={g.id}
+                      className="rounded-lg px-2.5 py-1.5"
+                      style={{
+                        background: g.high && !g.done ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.02)",
+                        borderLeft: `2px solid ${g.high && !g.done ? "#ef4444" : "rgba(255,255,255,0.08)"}`,
+                        opacity: g.done ? 0.5 : 1,
+                      }}
                     >
-                      <div className="text-[11px] font-medium" style={{ color: "var(--text)", textDecoration: m.done ? "line-through" : undefined }}>
-                        {m.priority === "high" && !m.done && <span style={{ color: "#ef4444" }}>● </span>}
-                        {m.title}
+                      <div className="flex items-center gap-2">
+                        <Check done={g.done} onClick={() => g.items.filter((i) => i.done === g.done).forEach((i) => toggleAuto(i))} label={g.title} />
+                        <button className="flex-1 min-w-0 text-left flex items-center gap-2" onClick={() => setOpenWhy(isOpen ? null : g.id)} aria-expanded={isOpen} title="Why and how to fix">
+                          <span className="truncate text-[11px] font-medium" style={{ color: "var(--text)", textDecoration: g.done ? "line-through" : undefined }}>{g.title}</span>
+                          <span className="shrink-0 text-[9px]" style={{ color: "var(--text-dim)" }}>
+                            {g.items.length > 1 ? g.items.map((i) => (i.store ? STORE_SHORT[i.store] || i.store : null)).filter(Boolean).join(" · ") : g.first.store ? STORE_SHORT[g.first.store] || g.first.store : g.first.source.split(":")[0]}
+                          </span>
+                        </button>
+                        {href && !g.done && (
+                          <Link href={href} className="shrink-0 text-[10px] font-semibold whitespace-nowrap px-2 py-0.5 rounded-md" style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }} title={g.first.hrefLabel ? `Open ${g.first.hrefLabel}` : "Open"}>
+                            Fix →
+                          </Link>
+                        )}
                       </div>
-                      {openWhy === m.key ? (
-                        <div className="mt-1 text-[10px] leading-relaxed space-y-0.5">
-                          {m.why && <div style={{ color: "var(--text-muted)" }}><b>Why:</b> {m.why}</div>}
-                          {m.fix && <div style={{ color: "var(--text)" }}><b>Fix:</b> {m.fix}</div>}
-                          <div style={{ color: "var(--text-dim)" }}><b>Rule:</b> {m.source}</div>
+                      {isOpen && (
+                        <div className="mt-1.5 pl-6 text-[10px] leading-relaxed space-y-0.5">
+                          {g.first.why && <div style={{ color: "var(--text-muted)" }}><b>Why:</b> {g.first.why}</div>}
+                          {g.first.fix && <div style={{ color: "var(--text)" }}><b>Fix:</b> {g.first.fix}</div>}
+                          <div style={{ color: "var(--text-dim)" }}><b>Rule:</b> {g.first.source}</div>
+                          {g.items.length > 1 && (
+                            <div className="pt-1 space-y-1">
+                              {g.items.map((i) => {
+                                const h = fixHref(i)
+                                return (
+                                  <div key={i.key} className="flex items-center gap-2">
+                                    <Check done={i.done} onClick={() => toggleAuto(i)} label={i.title} />
+                                    <span className="flex-1 truncate" style={{ color: "var(--text-muted)", textDecoration: i.done ? "line-through" : undefined }}>
+                                      {i.store ? `${i.store}: ` : ""}{i.title}
+                                    </span>
+                                    {h && !i.done && <Link href={h} className="text-[10px] font-semibold" style={{ color: "#a5b4fc" }}>Fix →</Link>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="text-[9px] mt-0.5" style={{ color: "var(--text-dim)" }}>{m.source.split(":")[0]} · tap for why and fix</div>
                       )}
-                    </button>
-                    {m.href && !m.done && (
-                      <Link
-                        href={`${m.href}${m.href.includes("?") ? "&" : "?"}fix_title=${encodeURIComponent(m.title)}&fix_why=${encodeURIComponent(m.why)}&fix_action=${encodeURIComponent(m.fix)}&fix_source=${encodeURIComponent(m.source)}${m.store ? `&fix_store=${encodeURIComponent(m.store)}` : ""}`}
-                        className="text-[10px] font-semibold whitespace-nowrap px-2 py-1 rounded-md"
-                        style={{ background: "rgba(99,102,241,0.15)", color: "#a5b4fc" }}
-                        title={m.hrefLabel ? `Open ${m.hrefLabel}` : "Open"}
-                      >
-                        Go fix →
-                      </Link>
+                    </div>
+                  )
+                }
+                return (
+                  <>
+                    {shown.map(row)}
+                    {open.length > SHOW && (
+                      <button className="text-[10px] font-medium px-1" style={{ color: "#a5b4fc" }} onClick={() => setShowAllMust(!showAllMust)}>
+                        {showAllMust ? "Show fewer" : `Show ${open.length - SHOW} more`}
+                      </button>
                     )}
-                  </div>
-                </div>
-              ))}
+                    {done.length > 0 && (
+                      <button className="block text-[10px] px-1" style={{ color: "var(--text-dim)" }} onClick={() => setShowMustDone(!showMustDone)}>
+                        {showMustDone ? "Hide done" : `${done.length} done`}
+                      </button>
+                    )}
+                    {showMustDone && done.map(row)}
+                  </>
+                )
+              })()}
             </div>
           </div>
 
