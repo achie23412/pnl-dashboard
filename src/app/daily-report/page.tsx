@@ -400,7 +400,7 @@ export default function DailyReportPage() {
                 </table>
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                Clicks, impressions, CTR and CPC from Windsor.ai · All ad spend in EUR · Data cached for 5 min
+                Clicks, impressions, CTR and CPC from Windsor.ai, per ad account day (NL; Meta LUMEGLASSES: Los Angeles), so spend here can differ a little from the store-day spend above · All ad spend in EUR · Data cached for 5 min
               </div>
             </Panel>
           )}

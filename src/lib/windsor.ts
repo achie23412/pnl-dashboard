@@ -1,4 +1,4 @@
-import { SHOPIFY_ACCOUNT_MAP, WINDSOR_ACCOUNT_MAP } from "./constants"
+import { SHOPIFY_ACCOUNT_MAP, WINDSOR_ACCOUNT_MAP, STORE_TIMEZONE } from "./constants"
 
 const BASE = "https://connectors.windsor.ai/all"
 
@@ -149,50 +149,81 @@ function aggregateRevenue(rows: WindsorRow[]): ShopifyRevenueRow[] {
   })
 }
 
+// ---- Ad spend per STORE day ----
+// Ad accounts report days in their own timezone (Google + TikTok: Amsterdam, Meta LUMEGLASSES:
+// Los Angeles) while Shopify revenue counts the store's own day (UK = London, US = New York).
+// So spend is pulled per hour and regrouped into the store's day, so ROAS and profit compare
+// the same 24 hours.
+
+const DEFAULT_AD_TZ = "Europe/Amsterdam" // TikTok has no timezone field; its accounts run on NL time
+
+function tzOffsetMs(tz: string, utcMs: number): number {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(new Date(utcMs))
+    .reduce((a, x) => ((a[x.type] = x.value), a), {} as Record<string, string>)
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - utcMs
+}
+// Local date + hour in a timezone -> UTC milliseconds
+function zonedToUtc(date: string, hour: number, tz: string): number {
+  const guess = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), hour)
+  let utc = guess - tzOffsetMs(tz, guess)
+  utc = guess - tzOffsetMs(tz, utc)
+  return utc
+}
+function dayIn(tz: string, utcMs: number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(utcMs))
+}
+const shiftDay = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10)
+
+type SpendOut = { date: string; channel: string; account: string; store: string; spend: number }
+
+async function fetchHourlySpend(
+  connector: string,
+  channel: string,
+  hourField: string,
+  tzField: string | null,
+  parseHour: (v: string) => number,
+  dateFrom: string,
+  dateTo: string,
+): Promise<SpendOut[]> {
+  // one day either side, so the first and last store day get all their hours
+  const fields = ["date", "account_name", hourField, "spend", ...(tzField ? [tzField] : [])]
+  let rows = await fetchWindsor(connector, fields, shiftDay(dateFrom, -1), shiftDay(dateTo, 1)).catch(() => [] as WindsorRow[])
+  if (!rows.some((r) => WINDSOR_ACCOUNT_MAP[r.account_name]?.channel === channel && Number(r.spend) > 0)) {
+    // No hourly data: fall back to the ad account's own days (as before)
+    rows = (await fetchWindsor(connector, ["date", "account_name", "spend"], dateFrom, dateTo)).map((r) => ({ ...r, [hourField]: null, __daily: 1 }))
+  }
+  const sums = new Map<string, SpendOut>()
+  for (const r of rows) {
+    const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+    if (mapping?.channel !== channel) continue // /all can return other connectors' accounts too
+    const spend = Number(r.spend) || 0
+    if (!spend) continue
+    const hv = r[hourField]
+    const adTz = (tzField && r[tzField] ? String(r[tzField]) : "") || DEFAULT_AD_TZ
+    const storeTz = STORE_TIMEZONE[mapping.store] || adTz
+    const day = r.__daily || hv == null || hv === "" ? String(r.date).slice(0, 10) : dayIn(storeTz, zonedToUtc(String(r.date).slice(0, 10), parseHour(String(hv)), adTz))
+    if (day < dateFrom || day > dateTo) continue
+    const k = `${day}|${r.account_name}`
+    const cur = sums.get(k) || { date: day, channel, account: r.account_name, store: mapping.store, spend: 0 }
+    cur.spend += spend
+    sums.set(k, cur)
+  }
+  return Array.from(sums.values()).map((x) => ({ ...x, spend: Math.round(x.spend * 100) / 100 }))
+}
+
+const hourFromRange = (v: string) => parseInt(v.slice(0, 2), 10) || 0 // Meta "13:00:00 - 13:59:59"
+const hourFromNumber = (v: string) => parseInt(v, 10) || 0 // Google "13"
+const hourFromDateTime = (v: string) => parseInt(v.slice(11, 13), 10) || 0 // TikTok "2026-11-25 13:00:00"
+
 export async function fetchMetaSpend(dateFrom: string, dateTo: string) {
-  const rows = await fetchWindsor("facebook", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows
-    .filter((r) => {
-      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-      return mapping?.channel === "Meta"
-    })
-    .map((r) => ({
-      date: r.date,
-      channel: "Meta",
-      account: r.account_name,
-      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
-      spend: Number(r.spend) || 0,
-    }))
+  return fetchHourlySpend("facebook", "Meta", "hourly_stats_aggregated_by_advertiser_time_zone", "account_timezone", hourFromRange, dateFrom, dateTo)
 }
 
 export async function fetchTikTokSpend(dateFrom: string, dateTo: string) {
-  const rows = await fetchWindsor("tiktok", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows
-    .filter((r) => {
-      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-      return mapping?.channel === "TikTok"
-    })
-    .map((r) => ({
-      date: r.date,
-      channel: "TikTok",
-      account: r.account_name,
-      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
-      spend: Number(r.spend) || 0,
-    }))
+  return fetchHourlySpend("tiktok", "TikTok", "hour", null, hourFromDateTime, dateFrom, dateTo)
 }
 
 export async function fetchGoogleAdsSpend(dateFrom: string, dateTo: string) {
-  const rows = await fetchWindsor("google_ads", ["date", "account_name", "spend"], dateFrom, dateTo)
-  return rows
-    .filter((r) => {
-      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
-      return mapping?.channel === "Google"
-    })
-    .map((r) => ({
-      date: r.date,
-      channel: "Google",
-      account: r.account_name,
-      store: WINDSOR_ACCOUNT_MAP[r.account_name]?.store || r.account_name,
-      spend: Number(r.spend) || 0,
-    }))
+  return fetchHourlySpend("google_ads", "Google", "hour", "account_time_zone", hourFromNumber, dateFrom, dateTo)
 }
