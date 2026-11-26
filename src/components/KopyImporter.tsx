@@ -46,6 +46,17 @@ export function KopyImporter() {
     loadJobs()
   }, [loadJobs])
 
+  // Google stores: today's feed change counter (max 10% of the feed per day, GMC Health).
+  // Drafts don't count, but publishing them later does — so show the room left.
+  const [feed, setFeed] = useState<Record<string, { limit: number; changed: number }>>({})
+  useEffect(() => {
+    fetch("/api/gmc-health?usage=1", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setFeed(Object.fromEntries((j.stores || []).map((s: { store: string; limit: number; changed: number }) => [s.store, s]))))
+      .catch(() => undefined)
+  }, [])
+  const room = feed[store]
+
   const priceRule = () => (rule === "keep" ? { type: "keep" } : { type: rule, value: Number(ruleValue) })
 
   const load = async () => {
@@ -143,6 +154,12 @@ export function KopyImporter() {
           <div>
             <label className="text-[10px] font-medium block mb-1" style={{ color: "var(--text-muted)" }}>Into store</label>
             <PillSelect fullWidth value={store} onChange={setStore} options={STORES} />
+            {room && room.limit > 0 && (
+              <div className="text-[10px] mt-1" style={{ color: room.changed >= room.limit ? "var(--red)" : "var(--text-dim)" }}>
+                Google feed today: {room.changed}/{room.limit} products changed (max 10%). Imports land as drafts and don&apos;t count;
+                publishing them does, so publish at most {Math.max(0, room.limit - room.changed)} more today.
+              </div>
+            )}
           </div>
           <button disabled={busy || !input.trim()} onClick={load} className={btn} style={{ background: "rgba(255,255,255,0.08)", color: "var(--text)", opacity: busy || !input.trim() ? 0.5 : 1 }}>
             {busy && rows.length === 0 ? "Loading…" : "Load products"}

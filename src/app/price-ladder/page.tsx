@@ -5,6 +5,7 @@ import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/componen
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY } from "@/lib/currency"
+import { confirmTwice, logGoogleFeedChange } from "@/lib/feed-confirm"
 
 const CURRENCY_SIGN: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" }
 
@@ -115,6 +116,9 @@ export default function PriceLadderPage() {
       setFormError("Invalid target price")
       return
     }
+    // Two confirmations; Google stores also show today's 10% feed counter
+    const sign = CURRENCY_SIGN[STORE_CURRENCY[formStore] || "EUR"] || ""
+    if (!(await confirmTwice(formStore, `Start a price ladder for "${formProduct}" (${formStore}) to ${sign}${target}.`))) return
     setCreating(true)
     setFormError("")
     try {
@@ -138,6 +142,12 @@ export default function PriceLadderPage() {
   }
 
   const handleAction = async (ladderId: number, action: string) => {
+    const l = ladders.find((x) => x.id === ladderId)
+    // Moving to the next price: two confirmations; Google stores also show today's 10% feed counter
+    if (action === "advance" && l) {
+      const sign = CURRENCY_SIGN[STORE_CURRENCY[l.store] || "EUR"] || ""
+      if (!(await confirmTwice(l.store, `Move "${l.product_name}" (${l.store}) to the next price: ${sign}${l.current_price} → ${sign}${l.next_price ?? "?"}.`))) return
+    }
     setActing(ladderId)
     try {
       const res = await fetch("/api/price-ladder", {
@@ -149,6 +159,7 @@ export default function PriceLadderPage() {
         const data = await res.json()
         throw new Error(data.error || "Failed")
       }
+      if (action === "advance" && l) await logGoogleFeedChange({ store: l.store, product: l.product_name, oldValue: l.current_price, newValue: l.next_price, reason: "Price Ladder: next step" })
       fetchLadders()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

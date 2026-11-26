@@ -7,7 +7,7 @@ import { fetchLatestEurRates, STORE_CURRENCY } from "@/lib/currency"
 import { merchantConfigured, serviceAccountEmail, registerGcp } from "@/lib/merchant-api"
 import {
   GMC_STORES, amsterdamDay, mondayOf, getSettings, dailyLimit, usageToday, syncStore, markSyncError,
-  isCounterfeit, productStatuses, accessScopes, requestChanges, howToFix, type GmcSettings,
+  isCounterfeit, productStatuses, accessScopes, requestChanges, howToFix, feedRoom, logFeedChange, type GmcSettings,
 } from "@/lib/gmc-health"
 import { productStats30d } from "@/lib/gmc-health-stats"
 
@@ -86,6 +86,11 @@ export async function GET(req: NextRequest) {
     const db = getServiceClient()
     const today = amsterdamDay()
     const settings = await getSettings()
+    // Light: only today's feed change counter per store (for the confirm dialogs on other pages)
+    if (req.nextUrl.searchParams.has("usage")) {
+      const usage = await Promise.all(settings.map(async (s) => ({ store: s.store, limit: dailyLimit(s), max_drafts: s.max_drafts_per_day, ...(await usageToday(s.store)) })))
+      return NextResponse.json({ today, stores: usage })
+    }
     const [issues, changes, queued] = await Promise.all([
       selectAll("gmc_issues", (q) => q.is("resolved_on", null).eq("severity", "DISAPPROVED").order("first_seen")),
       selectAll("feed_changes", (q) => q.gte("planned_for", daysAgo(14)).order("created_at", { ascending: false }), 2000),
@@ -219,6 +224,17 @@ export async function POST(req: NextRequest) {
         new_value: r.suggested_price.toFixed(2), reason: `GMC price suggestion (COG% ${r.cog_pct_new}%)`,
       })), "owner")
       return NextResponse.json({ ok: true, results, skipped: items.length - allowed.length })
+    }
+    if (b.action === "log") {
+      // A change made outside GMC Health (e.g. a price applied from Price Suggestions / Ladder)
+      if (GMC_STORES.indexOf(b.store) < 0) return NextResponse.json({ ok: true, skipped: "not a Google store" })
+      const kind = ["price", "title", "draft", "publish"].indexOf(b.kind) >= 0 ? b.kind : "price"
+      const pid = String(b.product_id || "").slice(0, 200)
+      if (!pid) return NextResponse.json({ error: "product_id required" }, { status: 400 })
+      const room = await feedRoom(b.store, pid, kind)
+      if (!room.ok) return NextResponse.json({ error: room.error }, { status: 429 })
+      await logFeedChange({ store: b.store, product_id: pid, title: b.title ? String(b.title).slice(0, 300) : null, kind, old_value: b.old_value ?? null, new_value: b.new_value ?? null, reason: String(b.reason || "Logged from another page").slice(0, 200) }, "owner")
+      return NextResponse.json({ ok: true })
     }
     if (b.action === "cancel") {
       const { error } = await db.from("feed_changes").update({ status: "cancelled" }).eq("id", Number(b.id)).eq("status", "queued")

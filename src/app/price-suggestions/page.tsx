@@ -6,6 +6,7 @@ import { ProductLink } from "@/components/ProductLink"
 import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_CURRENCY } from "@/lib/currency"
+import { confirmTwice, logGoogleFeedChange } from "@/lib/feed-confirm"
 
 const CURRENCY_SIGN: Record<string, string> = { EUR: "€", USD: "$", GBP: "£" }
 
@@ -98,9 +99,13 @@ export default function PriceSuggestionsPage() {
 
   const handleApply = async (s: Suggestion) => {
     const key = `${s.product_name}::${s.store}`
+    const isMultiStep = s.all_steps && s.all_steps.length > 1
+    const sign = CURRENCY_SIGN[STORE_CURRENCY[s.store] || "EUR"] || ""
+    // Two confirmations; Google stores also show today's 10% feed counter
+    const ok = await confirmTwice(s.store, `${isMultiStep ? "Start a price ladder" : "Apply a price change"} for "${s.product_name}" (${s.store}): ${sign}${s.current_price} → ${sign}${s.suggested_price}${isMultiStep ? ` (first step, target ${sign}${s.target_price})` : ""}.`)
+    if (!ok) return
     setApplying(key)
     try {
-      const isMultiStep = s.all_steps && s.all_steps.length > 1
       const res = await fetch("/api/price-suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,6 +123,7 @@ export default function PriceSuggestionsPage() {
       if (!res.ok) {
         setApplyResult(prev => ({ ...prev, [key]: { ok: false, msg: data.error || "Failed" } }))
       } else {
+        await logGoogleFeedChange({ store: s.store, product: s.product_name, oldValue: s.current_price, newValue: s.suggested_price, reason: `Price Suggestions: ${s.rule}` })
         setApplyResult(prev => ({ ...prev, [key]: { ok: true, msg: data.message || "Logged. Shopify push coming when tokens are set up." } }))
       }
     } catch (e) {

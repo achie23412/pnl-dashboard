@@ -218,18 +218,49 @@ async function applyChange(c: ChangeRequest): Promise<{ old_value: string | null
   return { old_value: j.product?.title ?? null, new_value: c.new_value }
 }
 
-interface Usage { products: Record<string, 1>; drafts: number }
+interface Usage { products: Record<string, 1>; drafts: number; outside: number }
+
+// Start of today in Amsterdam as an ISO time with offset, e.g. 2026-11-26T00:00:00+01:00
+function amsterdamDayStartIso(day: string) {
+  const off = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Amsterdam", timeZoneName: "shortOffset" })
+    .formatToParts(new Date(`${day}T12:00:00Z`)).find((p) => p.type === "timeZoneName")?.value || "GMT+1"
+  const m = off.match(/GMT([+-])(\d{1,2})/)
+  const sign = m ? m[1] : "+", hh = m ? m[2].padStart(2, "0") : "01"
+  return `${day}T00:00:00${sign}${hh}:00`
+}
+
+// Products published in Shopify today that the dashboard didn't log (e.g. Kopy drafts published
+// in Shopify admin): they change the Google feed too, so they count toward the 10%.
+async function publishedToday(store: string, day: string): Promise<string[]> {
+  if (!isGoogleStore(store)) return []
+  try {
+    const ids: string[] = []
+    let path: string | null = `products.json?status=active&published_at_min=${encodeURIComponent(amsterdamDayStartIso(day))}&fields=id&limit=250`
+    for (let i = 0; path && i < 5; i++) {
+      const j: { products?: { id: number }[] } = await shopify(store, path)
+      for (const p of j.products || []) ids.push(String(p.id))
+      path = (j.products || []).length === 250 ? `${path.split("&since_id=")[0]}&since_id=${(j.products || [])[249].id}` : null
+    }
+    return ids
+  } catch {
+    return [] // Shopify unreachable: count only the dashboard's own changes
+  }
+}
+
 async function usageFor(store: string, day: string): Promise<Usage> {
-  const { data, error } = await getServiceClient().from("feed_changes").select("product_id,kind")
-    .eq("store", store).eq("planned_for", day).eq("status", "applied")
+  const [{ data, error }, published] = await Promise.all([
+    getServiceClient().from("feed_changes").select("product_id,kind").eq("store", store).eq("planned_for", day).eq("status", "applied"),
+    publishedToday(store, day),
+  ])
   if (error) throw new Error(error.message)
-  const u: Usage = { products: {}, drafts: 0 }
+  const u: Usage = { products: {}, drafts: 0, outside: 0 }
   for (const r of data || []) { u.products[r.product_id] = 1; if (r.kind === "draft") u.drafts++ }
+  for (const id of published) if (!u.products[id]) { u.products[id] = 1; u.outside++ }
   return u
 }
 export async function usageToday(store: string) {
   const u = await usageFor(store, amsterdamDay())
-  return { changed: Object.keys(u.products).length, drafts: u.drafts }
+  return { changed: Object.keys(u.products).length, drafts: u.drafts, outside: u.outside }
 }
 
 const fits = (u: Usage, s: GmcSettings, c: { product_id: string; kind: string }) =>

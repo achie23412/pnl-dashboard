@@ -9,7 +9,7 @@ interface Stats { spend: number; units: number; revenue_eur: number }
 interface StoreRow {
   store: string; merchant_id: string | null; max_cog_pct: number; feed_change_pct: number; max_drafts_per_day: number
   feed_products: number | null; feed_items: number | null; last_sync_at: string | null; last_sync_error: string | null
-  limit: number; changed: number; drafts: number; queued: number; write_products: boolean | null; first_sync: string | null
+  limit: number; changed: number; drafts: number; outside: number; queued: number; write_products: boolean | null; first_sync: string | null
 }
 interface Issue {
   store: string; offer_id: string; issue_code: string; product_id: string | null; title: string | null; description: string | null
@@ -167,6 +167,7 @@ export default function GmcHealthPage() {
                   <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>
                     {s.limit ? `feed changes used today (${s.feed_change_pct}% of ${s.feed_products} products)` : "limit known after the first sync"}
                     {" · "}drafts {s.drafts} / {s.max_drafts_per_day}
+                    {s.outside > 0 && <>{" · "}incl. {s.outside} published in Shopify itself (e.g. Kopy drafts)</>}
                   </div>
                 </div>
               )
