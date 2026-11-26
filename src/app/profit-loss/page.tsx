@@ -246,7 +246,7 @@ export default function ProfitLossPage() {
           </Panel>
 
           <Panel title={`Day by day: ${scopeLabel}`} className="mb-4">
-            {table("Date", dayLines.slice().reverse().map((d) => ({
+            {table("Date", dayLines.slice().sort((a, b) => a.date.localeCompare(b.date)).map((d) => ({
               label: new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }),
               line: d.line,
               dim: d.line.gross === 0 && d.line.ad === 0,
