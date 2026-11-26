@@ -1,5 +1,6 @@
 const BASE = "https://api.whop.com/api/v1"
 const API_KEY = process.env.WHOP_API_KEY || ""
+const ACCOUNT_ID = process.env.WHOP_ACCOUNT_ID || ""
 
 async function whopFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE}${path}`)
@@ -54,9 +55,10 @@ export function whopConfigured(): boolean {
 export async function fetchWhopBalance(): Promise<WhopBalance> {
   if (!API_KEY) return { available: false, balance_usd: 0, pending_usd: 0, withdrawn_usd: 0, income_usd: 0, recent_payouts: [] }
 
+  const acct = ACCOUNT_ID ? { account_id: ACCOUNT_ID } : {}
   const [report, payoutsRes] = await Promise.all([
-    whopFetch<FinancialReport>("/financial_reports"),
-    whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10" }),
+    whopFetch<FinancialReport>("/financial_reports", acct),
+    whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10", ...acct }),
   ])
 
   return {
