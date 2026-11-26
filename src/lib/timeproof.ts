@@ -22,7 +22,7 @@ export const fmtMinutes = (m: number) => `${Math.floor(m / 60)}:${String(Math.ro
 const pad = (n: number) => String(n).padStart(2, "0")
 
 function titleCase(s: string) {
-  return s.toLowerCase().replace(/(^|[\s'-])\p{L}/gu, (c) => c.toUpperCase())
+  return s.toLowerCase().replace(/(^|[\s'-])[a-zà-ÿ]/g, (c) => c.toUpperCase())
 }
 
 // today = last day that can have hours (YYYY-MM-DD); later days in the calendar are skipped
@@ -46,7 +46,7 @@ export function parseTimeproof(text: string, opts: { month?: string; today: stri
       if (m[1] > opts.today) continue
       byDate.set(m[1], mins)
     }
-    const days = [...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, minutes]) => ({ date, minutes }))
+    const days = Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([date, minutes]) => ({ date, minutes }))
     return { worker, month: days[0]?.date.slice(0, 7) ?? null, days, ojMonthTotal: null, parsedTotal: days.reduce((a, d) => a + d.minutes, 0), warnings }
   }
 
@@ -125,7 +125,7 @@ export function parseTimeproof(text: string, opts: { month?: string; today: stri
     weekSum += hours; weekDays++; monthSum += hours
     if (date <= opts.today) days.push({ date, minutes: hours })
   }
-  if (monthCells.length < lastDay && monthCells[monthCells.length - 1]?.day < Number(opts.today.slice(8)) && opts.today.startsWith(month)) {
+  if (monthCells.length < lastDay && opts.today.startsWith(month) && monthCells.length < Number(opts.today.slice(8))) {
     warnings.push(`Only days 1–${monthCells.length} were found in the paste.`)
   }
 
