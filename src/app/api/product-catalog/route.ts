@@ -1,6 +1,7 @@
 import { fetchProducts, type SGProduct } from "@/lib/shipgoods"
 import { fetchQuotes, findQuote, type Quote } from "@/lib/quote-sheet"
 import { NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { COGS_SHEET_ID, STORE_SHEET_TAB, SHOPIFY_STORES, WINDSOR_ACCOUNT_MAP, TRANSACTION_FEE_RATE, MEDIA_BUYER_FEE_RATE, breakEvenRoas } from "@/lib/constants"
 import { getShopifyToken } from "@/lib/shopify-sessions"
 import { fetchShopifyOrderTotals, fetchGoogleProductSpend } from "@/lib/windsor"
@@ -664,7 +665,7 @@ interface StoreSummary {
   currency: string
 }
 
-export async function GET(req: Request) {
+async function buildResponse(req: Request) {
   const { searchParams } = new URL(req.url)
   const store = searchParams.get("store")
 
@@ -847,4 +848,33 @@ export async function GET(req: Request) {
     errors,
     generated_at: new Date().toISOString(),
   }, { headers: { "Cache-Control": cacheHeader } })
+}
+
+// Building the catalog takes ~5 s (ShipGoods, Windsor, sheets, Shopify) and six pages use it
+// (Quality Checks, Product Alerts/Rules/Performance, Season Board, Price Suggestions), so each
+// store + date range is saved for 15 minutes and shared. Errors are never saved. ?fresh=1 skips it.
+class NotCached { constructor(public status: number, public body: unknown) {} }
+const cachedCatalog = unstable_cache(
+  async (store: string, from: string, to: string) => {
+    const qs = new URLSearchParams({ store, ...(from ? { from } : {}), ...(to ? { to } : {}) })
+    const res = await buildResponse(new Request(`http://catalog.local/api/product-catalog?${qs}`))
+    const body = await res.json()
+    // A partial result (a source failed: "no-store") is returned but not saved
+    if (res.status !== 200 || res.headers.get("Cache-Control") === "no-store") throw new NotCached(res.status, body)
+    return body
+  },
+  ["product-catalog-v1"],
+  { revalidate: 900 },
+)
+
+export async function GET(req: Request) {
+  const sp = new URL(req.url).searchParams
+  const store = sp.get("store")
+  if (!store || sp.get("fresh")) return buildResponse(req)
+  try {
+    return NextResponse.json(await cachedCatalog(store, sp.get("from") || "", sp.get("to") || ""))
+  } catch (e) {
+    if (e instanceof NotCached) return NextResponse.json(e.body, { status: e.status })
+    throw e
+  }
 }
