@@ -44,10 +44,12 @@ const STORE_SHORT: Record<string, string> = {
   "Susan & Allen": "S&A",
 }
 type Group = { id: string; title: string; items: MustDo[]; done: boolean; high: boolean; first: MustDo }
-const leadNum = (t: string) => {
-  const m = t.match(/^(\d+)\s+(.*)$/)
-  return m ? { n: Number(m[1]), rest: m[2] } : null
+// The first number in a title, and the title with that number taken out ("Fix the address on # orders")
+const numIn = (t: string) => {
+  const m = t.match(/\d+/)
+  return m ? { n: Number(m[0]), tpl: t.replace(/\d+/, "#").replace(/\b(order|invoice|product|customer|refund|dispute|ticket)s?\b/, "$1s") } : null
 }
+const PLURAL_FIX = (t: string, n: number) => (n === 1 ? t.replace(/\b(order|invoice|product|customer|refund|dispute|ticket)s\b/, "$1") : t)
 function groupMustDos(list: MustDo[]): Group[] {
   const map = new Map<string, MustDo[]>()
   for (const m of list) {
@@ -59,10 +61,11 @@ function groupMustDos(list: MustDo[]): Group[] {
     const first = items[0]
     let title = first.title
     if (items.length > 1) {
-      const parts = items.map((i) => leadNum(i.title))
-      title = parts.every((x) => x && x.rest === parts[0]!.rest)
-        ? `${parts.reduce((a, x) => a + x!.n, 0)} ${parts[0]!.rest}`
-        : `${first.title} (+${items.length - 1} more)`
+      const parts = items.map((i) => numIn(i.title))
+      if (parts.every((x) => x && x.tpl === parts[0]!.tpl)) {
+        const n = parts.reduce((a, x) => a + x!.n, 0)
+        title = PLURAL_FIX(parts[0]!.tpl.replace("#", String(n)), n)
+      } else title = `${first.title} (+${items.length - 1} more)`
     }
     return { id, title, items, done: items.every((i) => i.done), high: items.some((i) => i.priority === "high"), first }
   })
