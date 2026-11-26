@@ -41,8 +41,11 @@ interface StoreRow {
   cogs: number
   refunds: number
   profit: number
+  cogsPending: number // orders without a ShipGoods price yet (average used)
   spendByChannel: Record<string, number>
 }
+
+interface OrderCogsRow { store: string; cogs_usd: number; priced: number; pending: number }
 
 interface AdPerfRow {
   store: string
@@ -62,6 +65,7 @@ export default function DailyReportPage() {
   const [refunds, setRefunds] = useState<RefundRow[]>([])
   const [sessions, setSessions] = useState<{ store: string; sessions: number }[]>([])
   const [adPerf, setAdPerf] = useState<AdPerfRow[]>([])
+  const [orderCogs, setOrderCogs] = useState<OrderCogsRow[] | null>(null)
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [loading, setLoading] = useState(true)
   const [now, setNow] = useState(new Date())
@@ -87,6 +91,12 @@ export default function DailyReportPage() {
       setRefunds((ref as RefundRow[]) || [])
       setSessions((ses as { store: string; sessions: number }[]) || [])
       setRates(await fetchEurRates(date, date))
+      // Actual supplier cost of the orders placed this day (ShipGoods, per order)
+      setOrderCogs(null)
+      fetch(`/api/order-cogs?date=${date}`)
+        .then((r) => (r.ok ? r.json() : { rows: [] }))
+        .then((d) => setOrderCogs(d.rows || []))
+        .catch(() => setOrderCogs([]))
       // Fetch ad performance (clicks, impressions, CTR, CPC) from Windsor
       fetch(`/api/ad-performance?date=${date}`)
         .then((r) => r.ok ? r.json() : { rows: [] })
@@ -110,10 +120,23 @@ export default function DailyReportPage() {
       const totalSpend = sp.reduce((sum, r) => sum + r.spend, 0)
       const totalRefund = ref.reduce((sum, r) => sum + toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates), 0)
 
-      const actualCogs = cg.reduce((sum, r) => sum + toEur(r.cogs, COGS_CURRENCY, r.date, rates), 0)
-      const hasCogs = cg.length > 0
-      const estCogs = hasCogs ? 0 : totalOrders * toEur(AVG_COGS_PER_ORDER[s] || 0, COGS_CURRENCY, date, rates)
-      const totalCogs = actualCogs + estCogs
+      // COGS = what ShipGoods prices the orders placed this day at (charged, else its quote).
+      // Orders ShipGoods hasn't priced or received yet get the store's average priced order.
+      const oc = orderCogs?.find((r) => r.store === s)
+      let cogsUsd: number
+      let cogsPending = 0
+      if (oc && oc.priced + oc.pending > 0) {
+        const perOrder = oc.priced + oc.pending > 0 ? oc.cogs_usd / (oc.priced + oc.pending) : AVG_COGS_PER_ORDER[s] || 0
+        const notInShipgoods = Math.max(0, totalOrders - oc.priced - oc.pending)
+        cogsUsd = oc.cogs_usd + notInShipgoods * perOrder
+        cogsPending = oc.pending + notInShipgoods
+      } else if (cg.length > 0) {
+        cogsUsd = cg.reduce((sum, r) => sum + r.cogs, 0)
+      } else {
+        cogsUsd = totalOrders * (AVG_COGS_PER_ORDER[s] || 0)
+        cogsPending = totalOrders
+      }
+      const totalCogs = toEur(cogsUsd, COGS_CURRENCY, date, rates)
 
       // Revenue is gross (order rows only); refunds are subtracted here.
       // Same as the profit sheet: minus transaction fee (% of gross) and media buyer fee (% of ad spend)
@@ -132,9 +155,9 @@ export default function DailyReportPage() {
         spendByChannel[ch] = (spendByChannel[ch] || 0) + r.spend
       }
 
-      return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit, spendByChannel }
+      return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit, cogsPending, spendByChannel }
     }).filter((s) => s.revenue > 0 || s.spend > 0)
-  }, [revenue, spend, cogs, refunds, sessions, rates, date])
+  }, [revenue, spend, cogs, refunds, sessions, rates, date, orderCogs])
 
   const totals = useMemo(() => {
     const r = storeRows.reduce((acc, s) => ({
@@ -144,7 +167,8 @@ export default function DailyReportPage() {
       cogs: acc.cogs + s.cogs,
       refunds: acc.refunds + s.refunds,
       profit: acc.profit + s.profit,
-    }), { revenue: 0, orders: 0, spend: 0, cogs: 0, refunds: 0, profit: 0 })
+      cogsPending: acc.cogsPending + s.cogsPending,
+    }), { revenue: 0, orders: 0, spend: 0, cogs: 0, refunds: 0, profit: 0, cogsPending: 0 })
     // Total CVR only over stores that have session data
     const withSessions = storeRows.filter((s) => s.sessions !== null)
     const totalSessions = withSessions.reduce((a, s) => a + (s.sessions || 0), 0)
@@ -158,7 +182,7 @@ export default function DailyReportPage() {
   }, [storeRows])
 
   const fmt = (n: number) => `€${Math.round(n).toLocaleString("en-IE")}`
-  // Profit margin: est. profit as a share of revenue
+  // Profit margin: profit as a share of revenue
   const profitPct = (profit: number, revenue: number) => (revenue > 0 ? `${((profit / revenue) * 100).toFixed(1)}%` : "—")
   const shiftDay = (n: number) => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() + n); setDate(toInputDate(d)) }
   const hasData = !loading && storeRows.length > 0
@@ -167,13 +191,13 @@ export default function DailyReportPage() {
     <PageShell
       title="Daily Report"
       breadcrumb="Home → Daily Report"
-      description={`Revenue, ad spend, COGS, refunds and estimated profit per store for ${formatDate(date)}. All in EUR.`}
+      description={`Revenue, ad spend, COGS, refunds and profit per store for ${formatDate(date)}. All in EUR.`}
       stats={[
         { label: "Revenue", value: hasData ? fmt(totals.revenue) : "—", color: "var(--green)" },
         { label: "Orders", value: hasData ? String(totals.orders) : "—" },
         { label: "Ad spend", value: hasData ? fmt(totals.spend) : "—" },
         { label: "ROAS", value: hasData ? `${totals.roas.toFixed(2)}x` : "—" },
-        { label: "Est. profit", value: hasData ? fmt(totals.profit) : "—", sub: hasData ? `${profitPct(totals.profit, totals.revenue)} of revenue` : undefined, color: hasData ? (totals.profit >= 0 ? "var(--green)" : "var(--red)") : undefined },
+        { label: "Profit", value: hasData ? fmt(totals.profit) : "—", sub: hasData ? `${profitPct(totals.profit, totals.revenue)} of revenue` : undefined, color: hasData ? (totals.profit >= 0 ? "var(--green)" : "var(--red)") : undefined },
       ]}
       actions={
         <>
@@ -231,8 +255,8 @@ export default function DailyReportPage() {
                       <th className={`${TH} text-right`}>Ad spend</th>
                       <th className={`${TH} text-right`}>COGS</th>
                       <th className={`${TH} text-right`}>Refunds</th>
-                      <th className={`${TH} text-right`}>Est. profit</th>
-                      <th className={`${TH} text-right`} title="Est. profit ÷ revenue">Profit %</th>
+                      <th className={`${TH} text-right`} title="Revenue − refunds − ad spend − COGS − transaction fee − media buyer fee">Profit</th>
+                      <th className={`${TH} text-right`} title="Profit ÷ revenue">Profit %</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -262,7 +286,7 @@ export default function DailyReportPage() {
                               </span>
                             )}
                           </td>
-                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmt(s.cogs)}</td>
+                          <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }} title={s.cogsPending ? `${s.cogsPending} order(s) not priced by ShipGoods yet: store average used` : "ShipGoods price of these orders"}>{fmt(s.cogs)}{s.cogsPending > 0 && <span style={{ color: "var(--amber)" }}>*</span>}</td>
                           <td className={`${TD} text-right tabular-nums`} style={{ color: s.refunds > 0 ? "var(--red)" : "var(--text-dim)" }}>{fmt(s.refunds)}</td>
                           <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{fmt(s.profit)}</td>
                           <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: s.profit >= 0 ? "var(--green)" : "var(--red)" }}>{profitPct(s.profit, s.revenue)}</td>
@@ -289,7 +313,7 @@ export default function DailyReportPage() {
                 </table>
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone
+                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone · Profit = revenue − refunds − ad spend − COGS (ShipGoods price of the day&apos;s orders) − transaction fee − media buyer fee{orderCogs == null ? " · Loading ShipGoods costs…" : totals.cogsPending > 0 ? ` · * ${totals.cogsPending} order(s) not priced by ShipGoods yet, store average used` : ""}
               </div>
             </Panel>
           )}
