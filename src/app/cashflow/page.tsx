@@ -4,6 +4,7 @@ import { PageShell } from "@/components/PageShell"
 import { Panel, Notice, Loading, Button, TH, TD, ROW_BORDER } from "@/components/ui"
 import { STORE_COLORS } from "@/lib/constants"
 import type { CashflowData } from "@/lib/cashflow"
+import { fetchEurRates, toEur, FALLBACK_RATES, type EurRates } from "@/lib/currency"
 
 const eur = (n: number | null | undefined) =>
   n == null ? "—" : `${n < 0 ? "−" : ""}€${Math.abs(n).toLocaleString("en-IE", { maximumFractionDigits: Math.abs(n) < 100 ? 2 : 0 })}`
@@ -13,6 +14,10 @@ function processorStatus(name: string, data: CashflowData): { connected: boolean
   if (name === "Shopify Payments") return { connected: true, how: "Connected via Windsor (payouts, pending balance, fees)." }
   if (name === "Whop") {
     if (data.whop_balance?.available) return { connected: true, how: `Balance $${data.whop_balance.balance_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · pending $${data.whop_balance.pending_usd.toLocaleString("en-US", { maximumFractionDigits: 2 })}` }
+    if (data.whop_error) {
+      const m = data.whop_error.match(/not authorized for the ([\w:]+) scope/i)
+      return { connected: false, how: m ? `Whop key is missing the "${m[1]}" permission: in Whop → Developer → API keys, give the key that permission.` : `Whop API error: ${data.whop_error.slice(0, 160)}` }
+    }
     return { connected: false, how: "Add WHOP_API_KEY in Vercel (Whop → Developer → API keys)." }
   }
   // Manual-entry processors show saved balance instead of setup instructions
@@ -20,30 +25,18 @@ function processorStatus(name: string, data: CashflowData): { connected: boolean
   return { connected: false, how: "Unknown gateway." }
 }
 
-const MANUAL_KEY = "cashflow:manual-balances"
-function loadManualBalances(): Record<string, { balance: string; date: string }> {
-  try {
-    const raw = localStorage.getItem(MANUAL_KEY)
-    return raw ? JSON.parse(raw) : {}
-  } catch { return {} }
-}
-function saveManualBalance(proc: string, balance: string) {
-  try {
-    const all = loadManualBalances()
-    all[proc] = { balance, date: new Date().toISOString().slice(0, 10) }
-    localStorage.setItem(MANUAL_KEY, JSON.stringify(all))
-  } catch { /* optional */ }
-}
+// Hand-entered balances (PayPal, Whale Checkout, Other), saved in the database for everyone.
+type Manual = Record<string, { balance: number; date: string }>
+const OLD_MANUAL_KEY = "cashflow:manual-balances" // older browser-only copy, moved to the database once
 
-function ManualBalanceCell({ processor }: { processor: string }) {
+function ManualBalanceCell({ processor, saved, onSave }: { processor: string; saved?: { balance: number; date: string }; onSave: (proc: string, v: number) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
-  const [saved, setSaved] = useState<{ balance: string; date: string } | null>(null)
   const [input, setInput] = useState("")
-
-  useEffect(() => {
-    const all = loadManualBalances()
-    if (all[processor]) setSaved(all[processor])
-  }, [processor])
+  const commit = async () => {
+    const v = Number(input.replace(",", "."))
+    setEditing(false)
+    if (input !== "" && Number.isFinite(v)) await onSave(processor, v)
+  }
 
   if (editing) {
     return (
@@ -55,38 +48,31 @@ function ManualBalanceCell({ processor }: { processor: string }) {
           style={{ borderColor: "rgba(255,255,255,0.15)", color: "var(--text)" }}
           placeholder="0.00"
           value={input}
-          onChange={(e) => setInput(e.target.value.replace(/[^0-9.,]/g, ""))}
+          onChange={(e) => setInput(e.target.value.replace(/[^0-9.,-]/g, ""))}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const val = input.replace(",", ".")
-              if (val) { saveManualBalance(processor, val); setSaved({ balance: val, date: new Date().toISOString().slice(0, 10) }) }
-              setEditing(false)
-            }
+            if (e.key === "Enter") commit()
             if (e.key === "Escape") setEditing(false)
           }}
-          onBlur={() => {
-            const val = input.replace(",", ".")
-            if (val) { saveManualBalance(processor, val); setSaved({ balance: val, date: new Date().toISOString().slice(0, 10) }) }
-            setEditing(false)
-          }}
+          onBlur={commit}
         />
       </div>
     )
   }
 
   if (saved) {
+    const age = Math.round((Date.now() - Date.parse(saved.date + "T12:00:00")) / 86400000)
     return (
-      <button onClick={() => { setInput(saved.balance); setEditing(true) }} className="text-left group">
-        <span className="tabular-nums" style={{ color: "var(--green)" }}>€{Number(saved.balance).toLocaleString("en-IE", { maximumFractionDigits: 2 })}</span>
-        <span className="text-[9px] ml-1" style={{ color: "var(--text-dim)" }}>({saved.date})</span>
-        <span className="text-[9px] ml-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "var(--text-dim)" }}>edit</span>
+      <button onClick={() => { setInput(String(saved.balance)); setEditing(true) }} className="text-left group" title="Click to update">
+        <span className="tabular-nums" style={{ color: "var(--green)" }}>€{saved.balance.toLocaleString("en-IE", { maximumFractionDigits: 2 })}</span>
+        <span className="text-[9px] ml-1" style={{ color: age > 7 ? "var(--orange)" : "var(--text-dim)" }}>({age === 0 ? "today" : `${age}d ago`})</span>
+        <span className="text-[9px] ml-1 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "var(--text-dim)" }}>update</span>
       </button>
     )
   }
 
   return (
-    <button onClick={() => setEditing(true)} className="text-[10px] underline decoration-dotted underline-offset-2 hover:decoration-solid" style={{ color: "var(--text-dim)" }}>
-      Enter balance
+    <button onClick={() => setEditing(true)} className="text-[10px] underline decoration-dotted underline-offset-2 hover:decoration-solid" style={{ color: "var(--orange)" }}>
+      No API: enter the balance
     </button>
   )
 }
@@ -98,6 +84,39 @@ export default function CashflowPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [allDays, setAllDays] = useState(false)
+  const [manual, setManual] = useState<Manual>({})
+  const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    fetchEurRates(today, today).then(setRates).catch(() => {})
+    fetch("/api/processor-balances")
+      .then((r) => r.json())
+      .then(async (j) => {
+        const m: Manual = {}
+        for (const r of j.rows || []) m[r.processor] = { balance: Number(r.balance_eur), date: String(r.as_of).slice(0, 10) }
+        // Move balances typed in before (saved only in this browser) to the database once
+        try {
+          const old = JSON.parse(localStorage.getItem(OLD_MANUAL_KEY) || "{}") as Record<string, { balance: string; date: string }>
+          for (const [proc, v] of Object.entries(old)) {
+            if (!m[proc] && Number.isFinite(Number(v.balance))) {
+              await fetch("/api/processor-balances", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ processor: proc, balance_eur: Number(v.balance) }) })
+              m[proc] = { balance: Number(v.balance), date: v.date }
+            }
+          }
+          localStorage.removeItem(OLD_MANUAL_KEY)
+        } catch {
+          // nothing to move
+        }
+        setManual(m)
+      })
+      .catch(() => {})
+  }, [])
+
+  const saveManual = async (proc: string, v: number) => {
+    const r = await fetch("/api/processor-balances", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ processor: proc, balance_eur: v }) })
+    if (r.ok) setManual((m) => ({ ...m, [proc]: { balance: v, date: new Date().toISOString().slice(0, 10) } }))
+  }
 
   useEffect(() => {
     try {
@@ -125,6 +144,14 @@ export default function CashflowPage() {
   }, [])
 
   const t = data?.totals
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const whopEur = data?.whop_balance?.available ? toEur(data.whop_balance.balance_usd + data.whop_balance.pending_usd, "USD", todayIso, rates) : null
+  const manualProcs = (data?.processors || []).map((p) => p.processor).filter((p) => p !== "Shopify Payments" && p !== "Whop")
+  const manualTotal = manualProcs.reduce((a, p) => a + (manual[p]?.balance || 0), 0)
+  const missingBal = (data?.processors || [])
+    .filter((p) => p.incoming_30d > 0 && (p.processor === "Whop" ? whopEur == null : p.processor !== "Shopify Payments" && !manual[p.processor]))
+    .map((p) => p.processor)
+  const totalBalance = (t?.balance_known || 0) + (whopEur || 0) + manualTotal
   const days = data ? (allDays ? data.days : data.days.slice(0, 7)) : []
 
   return (
@@ -133,7 +160,11 @@ export default function CashflowPage() {
       breadcrumb="Finance → Cashflow & Balance"
       description="Money coming in per payment processor, money going out (ads, COGS, refunds, fees) and what's still waiting in Shopify Payments. All in EUR."
       stats={[
-        { label: "Shopify Payments balance", value: t ? eur(t.balance_known) : "—" },
+        {
+          label: "Balance, all processors",
+          value: t ? eur(totalBalance) : "—",
+          sub: t ? `Shopify ${eur(t.balance_known)}${whopEur != null ? ` · Whop ${eur(whopEur)}` : ""}${manualTotal ? ` · typed in ${eur(manualTotal)}` : ""}${missingBal.length ? ` · missing: ${missingBal.join(", ")}` : ""}` : undefined,
+        },
         { label: "Incoming (7d)", value: t ? eur(t.incoming_7d) : "—" },
         { label: "Outgoing (7d)", value: t ? eur(t.outgoing_7d) : "—" },
         { label: "Net flow (7d)", value: t ? eur(t.net_7d) : "—" },
@@ -171,7 +202,7 @@ export default function CashflowPage() {
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--green)" }}>{eur(s.paid_out_30d)}</td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{eur(s.fees_30d)}</td>
                     <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
-                      {s.last_payout ? `${eur(s.last_payout.amount)} · ${fmtDay(s.last_payout.date)}` : "none in 30 days"}
+                      {s.last_payout ? `${eur(s.last_payout.amount)} · ${fmtDay(s.last_payout.date)}` : s.pending + s.in_transit > 0 ? <span style={{ color: "var(--orange)" }} title="Money is waiting but Shopify paid nothing out in 30 days: check Shopify → Settings → Payments for a payout hold or missing bank details.">none in 30 days: check payout hold</span> : "none in 30 days"}
                     </td>
                   </tr>
                 ))}
@@ -239,7 +270,7 @@ export default function CashflowPage() {
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{share.toFixed(1)}%</td>
                       <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{p.stores.join(", ")}</td>
                       <td className={`${TD} text-[10px] max-w-[320px]`} style={{ color: st.connected ? "var(--green)" : "var(--orange)" }}>
-                        {st.how ? st.how : <ManualBalanceCell processor={p.processor} />}
+                        {st.how ? st.how : <ManualBalanceCell processor={p.processor} saved={manual[p.processor]} onSave={saveManual} />}
                       </td>
                     </tr>
                   )
