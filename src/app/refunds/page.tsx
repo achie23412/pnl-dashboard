@@ -14,6 +14,9 @@ import { SHOPIFY_STORES } from "@/lib/constants"
 import { STORE_CURRENCY } from "@/lib/currency"
 import { REFUND_REASONS, REFUND_TYPES, GOODWILL_LADDER, reasonLabel, money, type CsRefund, type OrderLookup, type OrderItem } from "@/lib/cs-log"
 import { RefundDetail } from "@/components/RefundDetail"
+import { RiskyBadge } from "@/components/RiskyBadge"
+import { useRefundRisk } from "@/lib/use-refund-risk"
+import type { RefundLoss } from "@/lib/refund-loss"
 
 type RType = CsRefund["refund_type"]
 const isFull = (t: string) => t !== "partial"
@@ -25,13 +28,26 @@ const APPROVAL = {
   approved: { tone: "green", label: "Approved" },
   rejected: { tone: "grey", label: "Rejected" },
 } as const
-const SHOPIFY = {
-  checking: { tone: "grey", label: "Checking…" },
-  refunded: { tone: "green", label: "Refunded" },
-  partial: { tone: "amber", label: "Partly refunded" },
-  not_refunded: { tone: "red", label: "Not refunded in Shopify" },
-  no_order: { tone: "grey", label: "No order link" },
-} as const
+
+// One status per refund: requested → approved → refunded (or rejected). Shopify is the truth for
+// "refunded": a refund made there by hand counts, also while it still waited for the Owner.
+function lifecycle(r: CsRefund): { tone: "green" | "amber" | "red" | "grey"; label: string; sub?: string } {
+  if (r.shopify_status === "refunded")
+    return { tone: "green", label: "Refunded", sub: [r.shopify_refunded_at ? fmtDay(r.shopify_refunded_at.slice(0, 10)) : null, r.shopify_refunded != null ? money(Number(r.shopify_refunded), r.currency) : null].filter(Boolean).join(" · ") }
+  if (r.approval_status === "rejected") return { tone: "grey", label: "Rejected" }
+  if (r.approval_status === "waiting") return { tone: "amber", label: "Requested", sub: "waiting for Owner" }
+  if (r.shopify_status === "partial") return { tone: "amber", label: "Partly refunded", sub: r.shopify_refunded != null ? `${money(Number(r.shopify_refunded), r.currency)} in Shopify` : undefined }
+  if (r.shopify_status === "not_refunded") return { tone: "red", label: "Approved", sub: "not refunded in Shopify yet" }
+  if (r.shopify_status === "no_order") return { tone: "grey", label: "Approved", sub: "no Shopify order linked" }
+  return { tone: r.approval_status === "flagged" ? "red" : "green", label: "Approved", sub: r.approval_status === "flagged" ? "threat case" : "checking Shopify…" }
+}
+const agoText = (iso: string) => {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000)
+  if (m < 1) return "just now"
+  if (m < 60) return `${m} min ago`
+  if (m < 48 * 60) return `${Math.round(m / 60)} h ago`
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+}
 
 const STORES = Object.keys(SHOPIFY_STORES)
 const inputCls = "w-full rounded-lg px-3 py-1.5 text-[11px] outline-none"
@@ -86,6 +102,10 @@ export default function RefundsPage() {
   const [fReason, setFReason] = useState<FilterValue>(EMPTY_FILTER)
   const [fType, setFType] = useState<FilterValue>(EMPTY_FILTER)
   const [openId, setOpenId] = useState<number | null>(null)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [loss, setLoss] = useState<Record<number, RefundLoss>>({})
+  const [lossError, setLossError] = useState<string | null>(null)
+  const { find: findRisk } = useRefundRisk()
 
   const currency = order?.currency || (store ? STORE_CURRENCY[store] : "EUR") || "EUR"
 
@@ -119,6 +139,7 @@ export default function RefundsPage() {
     const res = await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
     const j = res ? await res.json().catch(() => null) : null
     if (j?.sheets) setSheetSync(j.sheets)
+    if (j?.last?.ran_at) setLastSync(j.last.ran_at)
     try {
       localStorage.setItem("refunds:checked", String(Date.now()))
     } catch {
@@ -128,8 +149,21 @@ export default function RefundsPage() {
     load()
   }, [load])
 
+  // Each refund's ShipGoods order: COGS, shipping, net loss
+  const loadLoss = useCallback(() => {
+    fetch("/api/refund-orders?days=120", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        setLoss(j.byId || {})
+        setLossError(j.error || null)
+      })
+      .catch((e: unknown) => setLossError(e instanceof Error ? e.message : String(e)))
+  }, [])
+
   useEffect(() => {
     load()
+    loadLoss()
+    fetch("/api/refund-check").then((r) => r.json()).then((j) => j?.last?.ran_at && setLastSync(j.last.ran_at)).catch(() => {})
     fetch("/api/auth/me").then((r) => r.json()).then((j) => setRole(j.role)).catch(() => {})
     try {
       setLoggedBy(localStorage.getItem("cs:name") || "")
@@ -138,7 +172,7 @@ export default function RefundsPage() {
     } catch {
       runCheck()
     }
-  }, [load, runCheck])
+  }, [load, loadLoss, runCheck])
 
   const decide = async (r: CsRefund, action: "approve" | "reject") => {
     const res = await fetch(`/api/cs-log?kind=refund&id=${r.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, by: loggedBy || "Owner" }) })
@@ -280,14 +314,21 @@ export default function RefundsPage() {
         { label: "Full / partial (30d)", value: loading ? "—" : `${last30.filter((r) => isFull(r.refund_type)).length} / ${last30.filter((r) => r.refund_type === "partial").length}` },
         { label: "Top reason (30d)", value: loading ? "—" : topReason ? reasonLabel(topReason[0]) : "—", sub: topReason ? `${topReason[1]} refunds` : undefined },
       ]}
-      actions={<Button onClick={runCheck} disabled={checking}>{checking ? "Checking Shopify…" : "Check Shopify now"}</Button>}
+      actions={
+        <span className="inline-flex items-center gap-2">
+          <span className="text-[10px]" style={{ color: "var(--text-dim)" }} title={lastSync ? new Date(lastSync).toLocaleString("en-GB") : undefined}>
+            {lastSync ? `Last synced with Shopify ${agoText(lastSync)}` : "Not synced yet"}
+          </span>
+          <Button onClick={runCheck} disabled={checking}>{checking ? "Checking Shopify…" : "Check Shopify now"}</Button>
+        </span>
+      }
     >
       <FixBanner />
       <RefundSheetsBar result={sheetSync} syncing={checking} onSync={runCheck} />
       {loadError && <Notice tone="error">Couldn&apos;t load the refund log: {loadError}</Notice>}
 
       {(() => {
-        const queue = rows.filter((r) => r.approval_status === "waiting" || r.approval_status === "flagged")
+        const queue = rows.filter((r) => (r.approval_status === "waiting" || r.approval_status === "flagged") && r.shopify_status !== "refunded")
         const missing = rows.filter((r) => r.shopify_status === "not_refunded")
         return (
           <>
@@ -485,8 +526,9 @@ export default function RefundsPage() {
                 <th className={`${TH} text-left`}>Reason</th>
                 <th className={`${TH} text-right`}>%</th>
                 <th className={`${TH} text-right`}>Amount</th>
-                <th className={`${TH} text-left`}>Approval</th>
-                <th className={`${TH} text-left`}>Shopify</th>
+                <th className={`${TH} text-right`} title="What ShipGoods charged for the order (products + shipping), in EUR">COGS</th>
+                <th className={`${TH} text-right`} title="Full refund: refund + COGS not recovered. Partial refund: the refund itself.">Net loss</th>
+                <th className={`${TH} text-left`}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -497,7 +539,11 @@ export default function RefundsPage() {
                     <td className={`${TD} text-[10px]`} style={{ color: "var(--text-muted)" }}>{r.store}</td>
                     <td className={TD} style={{ color: "var(--text)" }}>{r.order_number}</td>
                     <td className={`${TD} max-w-[240px] truncate`} style={{ color: "var(--text-muted)" }}>
-                      {r.items.length ? r.items.map((i) => `${i.qty}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join(", ") : "—"}
+                      {r.items.length ? r.items.map((i) => `${i.qty}× ${i.title}${i.variant ? ` (${i.variant})` : ""}`).join(", ") : loss[r.id]?.items.length ? loss[r.id].items.map((i) => `${i.qty}× ${i.title}`).join(", ") : "—"}
+                      {(() => {
+                        const risk = r.items.map((i) => findRisk(r.store, [i.product_id], i.title)).find(Boolean) || null
+                        return <RiskyBadge risk={risk} />
+                      })()}
                     </td>
                     <td className={TD}><Badge tone={isFull(r.refund_type) ? "red" : "amber"}>{typeLabel(r.refund_type)}</Badge></td>
                     <td className={TD} style={{ color: "var(--text)" }}>{reasonLabel(r.reason)}</td>
@@ -506,15 +552,27 @@ export default function RefundsPage() {
                       {money(Number(r.amount), r.currency)}
                       {r.amount_eur != null && r.currency !== "EUR" && <span className="block text-[9px] font-normal" style={{ color: "var(--text-dim)" }}>€{Number(r.amount_eur).toFixed(2)}</span>}
                     </td>
-                    <td className={TD}>{APPROVAL[r.approval_status] ? <Badge tone={APPROVAL[r.approval_status]!.tone}>{APPROVAL[r.approval_status]!.label}</Badge> : <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>not needed</span>}</td>
+                    <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>
+                      {loss[r.id]?.matched ? `€${loss[r.id].cogs_eur.toFixed(2)}` : <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>{loss[r.id] ? "not in ShipGoods" : "—"}</span>}
+                    </td>
+                    <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: loss[r.id] ? "var(--red)" : "var(--text-dim)" }}>
+                      {loss[r.id] ? `€${loss[r.id].net_loss_eur.toFixed(2)}` : "—"}
+                    </td>
                     <td className={TD}>
-                      {SHOPIFY[r.shopify_status] && <Badge tone={SHOPIFY[r.shopify_status].tone}>{SHOPIFY[r.shopify_status].label}</Badge>}
-                      {r.shopify_status === "refunded" && r.shopify_refunded_at && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{fmtDay(r.shopify_refunded_at.slice(0, 10))}</span>}
+                      {(() => {
+                        const st = lifecycle(r)
+                        return (
+                          <>
+                            <Badge tone={st.tone}>{st.label}</Badge>
+                            {st.sub && <span className="block text-[9px] mt-0.5" style={{ color: st.tone === "red" && st.label === "Approved" ? "var(--red)" : "var(--text-dim)" }}>{st.sub}</span>}
+                          </>
+                        )
+                      })()}
                     </td>
                   </tr>
                   {openId === r.id && (
                     <tr>
-                      <td colSpan={10} className="px-3 pb-3" style={{ background: "rgba(255,255,255,0.015)" }}>
+                      <td colSpan={11} className="px-3 pb-3" style={{ background: "rgba(255,255,255,0.015)" }}>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] pt-2" style={{ color: "var(--text-muted)" }}>
                           {r.items.map((i, k) => (
                             <span key={k}>{i.qty}× {i.title}{i.variant ? ` · ${i.variant}` : ""} {i.price ? `@ ${money(i.price, r.currency)}` : ""}</span>
@@ -524,6 +582,30 @@ export default function RefundsPage() {
                           {r.logged_by && <span>Logged by {r.logged_by}</span>}
                           {r.conversation_url && <a href={r.conversation_url} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent)" }}>Conversation</a>}
                         </div>
+                        {loss[r.id] && (
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] pt-1.5" style={{ color: "var(--text-muted)" }}>
+                            {loss[r.id].matched ? (
+                              <>
+                                <span style={{ color: "var(--text-dim)" }}>ShipGoods order:</span>
+                                {loss[r.id].items.map((i, k) => (
+                                  <span key={k}>{i.qty}× {i.title} (${i.cost_usd.toFixed(2)})</span>
+                                ))}
+                                <span>COGS ${loss[r.id].cogs_usd.toFixed(2)} = €{loss[r.id].cogs_eur.toFixed(2)}</span>
+                                <span>Shipping ${loss[r.id].shipping_usd.toFixed(2)} = €{loss[r.id].shipping_eur.toFixed(2)}</span>
+                                {loss[r.id].recovered_usd > 0 && <span>Recovered from ShipGoods ${loss[r.id].recovered_usd.toFixed(2)}</span>}
+                              </>
+                            ) : (
+                              <span style={{ color: "var(--text-dim)" }}>No ShipGoods order for this refund (not shipped, or not synced yet)</span>
+                            )}
+                            <span className="font-medium" style={{ color: "var(--red)" }}>
+                              Net loss €{loss[r.id].net_loss_eur.toFixed(2)}
+                              <span className="font-normal" style={{ color: "var(--text-dim)" }}>
+                                {" "}= refund €{loss[r.id].refund_eur.toFixed(2)}
+                                {loss[r.id].cogs_counted ? ` + COGS not recovered` : isFull(r.refund_type) ? " (COGS counted on another refund of this order)" : " (partial: customer keeps the item, COGS not counted)"}
+                              </span>
+                            </span>
+                          </div>
+                        )}
                         <RefundDetail
                           row={r}
                           by={loggedBy}

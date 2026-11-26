@@ -8,6 +8,7 @@ import { FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { Panel, Badge, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { ProductLink } from "@/components/ProductLink"
+import { RefundRatePanel } from "@/components/RefundRatePanel"
 import { complaintEvents, riskyProducts, daysAgo, RISKY_COMPLAINTS, RISKY_DAYS, type ComplaintEvent } from "@/lib/product-complaints"
 import type { ProductFlag } from "@/app/api/product-flags/route"
 
@@ -73,7 +74,7 @@ export default function RiskyProductsPage() {
     <PageShell
       title="Risky Products"
       breadcrumb="Customer Service → Risky Products"
-      description={`Early warning: products with ${RISKY_COMPLAINTS}+ complaints in ${RISKY_DAYS} days, from the refund log and Inbox Queue tickets marked as a product complaint. Tell the supplier the same day.`}
+      description={`Products refunded too often (refund rate per product, net refund loss), and an early warning for products with ${RISKY_COMPLAINTS}+ complaints in ${RISKY_DAYS} days, from the refund log and Inbox Queue tickets marked as a product complaint. Tell the supplier the same day.`}
       stats={[
         { label: "Risky now", value: events ? String(riskyNow) : "—", color: riskyNow ? "var(--red)" : undefined },
         { label: "Supplier notified", value: String(told), sub: `of ${riskyNow} risky now` },
@@ -86,6 +87,8 @@ export default function RiskyProductsPage() {
       <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{shown.length} products</span>}>
         <FilterSelect label="Store" options={stores.map((s) => ({ value: s, count: risky.filter((r) => r.store === s).length }))} value={fStore} onChange={setFStore} />
       </FilterBar>
+
+      <RefundRatePanel fStore={fStore} />
 
       {!events && !error && <Loading>Loading complaints…</Loading>}
       {events && shown.length === 0 && (

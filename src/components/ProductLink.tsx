@@ -2,6 +2,9 @@
 // Clickable product name used everywhere a product is listed.
 // Name → the product page in the store. Small ↗ → the product in Shopify admin.
 // Clicks don't bubble, so rows that expand on click keep working.
+// A product refunded too often gets a red "Risky" badge (refund rate rule, Risky Products).
+import { RiskyBadge } from "@/components/RiskyBadge"
+import { useRefundRisk } from "@/lib/use-refund-risk"
 
 type Props = {
   store: string
@@ -10,6 +13,7 @@ type Props = {
   className?: string
   style?: React.CSSProperties
   maxWidth?: number
+  noRiskBadge?: boolean
 }
 
 export function productHref(store: string, name: string, productId?: string | number | null, admin = false) {
@@ -19,7 +23,9 @@ export function productHref(store: string, name: string, productId?: string | nu
   return `/api/product-link?${q.toString()}`
 }
 
-export function ProductLink({ store, name, productId, className, style, maxWidth = 260 }: Props) {
+export function ProductLink({ store, name, productId, className, style, maxWidth = 260, noRiskBadge }: Props) {
+  const { find } = useRefundRisk()
+  const risk = noRiskBadge ? null : find(store, [productId], name)
   const stop = (e: React.MouseEvent) => e.stopPropagation()
   return (
     <span className="inline-flex items-center gap-1 min-w-0" style={{ maxWidth }}>
@@ -46,6 +52,7 @@ export function ProductLink({ store, name, productId, className, style, maxWidth
       >
         ↗
       </a>
+      <RiskyBadge risk={risk} />
     </span>
   )
 }

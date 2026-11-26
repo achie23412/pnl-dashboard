@@ -25,6 +25,8 @@ interface CatalogProduct {
   roas: number | null
   be_roas: number | null
   product_ids?: string[]
+  refunds?: number // refunded on this product in the period, store currency
+  refunded_orders?: number
 }
 
 interface StoreSummary {
@@ -143,8 +145,8 @@ export default function ProductPerformancePage() {
     list = list.filter((p) => p.units_sold > 0 || (p.ad_spend || 0) > 0)
 
     return [...list].sort((a, b) => {
-      const profitA = a.cogs_usd != null ? a.sales_revenue - a.cogs_usd * a.units_sold : a.sales_revenue
-      const profitB = b.cogs_usd != null ? b.sales_revenue - b.cogs_usd * b.units_sold : b.sales_revenue
+      const profitA = (a.cogs_usd != null ? a.sales_revenue - a.cogs_usd * a.units_sold : a.sales_revenue) - (a.refunds || 0)
+      const profitB = (b.cogs_usd != null ? b.sales_revenue - b.cogs_usd * b.units_sold : b.sales_revenue) - (b.refunds || 0)
       const marginA = a.sales_revenue > 0 && a.cogs_usd != null ? (profitA / a.sales_revenue) * 100 : 0
       const marginB = b.sales_revenue > 0 && b.cogs_usd != null ? (profitB / b.sales_revenue) * 100 : 0
 
@@ -297,6 +299,7 @@ export default function ProductPerformancePage() {
                   <SortHeader label="ROAS" k="roas" />
                   <SortHeader label="BE ROAS" k="be" />
                   <SortHeader label="COGS/unit" k="cogs" />
+                  <th className={`${TH} text-right`} style={thStyle} title="Refunded on this product in the period (refund log), taken off profit">Refunds</th>
                   <SortHeader label="Profit" k="profit" />
                   <SortHeader label="Margin" k="margin" />
                   <th className={`${TH} text-right`} style={thStyle}>Source</th>
@@ -304,10 +307,10 @@ export default function ProductPerformancePage() {
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={11} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales or ad spend in this period. Pick a longer date range or another store.</td></tr>
+                  <tr><td colSpan={12} className="text-center py-12 text-[11px]" style={{ color: "var(--text-dim)" }}>No products with sales or ad spend in this period. Pick a longer date range or another store.</td></tr>
                 ) : filtered.map((p, i) => {
                   const totalCogs = p.cogs_usd != null ? p.cogs_usd * p.units_sold : null
-                  const profit = totalCogs != null ? p.sales_revenue - totalCogs : null
+                  const profit = totalCogs != null ? p.sales_revenue - totalCogs - (p.refunds || 0) : null
                   const margin = profit != null && p.sales_revenue > 0 ? (profit / p.sales_revenue) * 100 : null
                   const profitColor = profit != null ? (profit >= 0 ? "var(--green)" : "var(--red)") : "var(--text-dim)"
                   const marginColor = margin != null ? (margin >= 30 ? "var(--green)" : margin >= 0 ? "var(--orange)" : "var(--red)") : "var(--text-dim)"
@@ -335,6 +338,9 @@ export default function ProductPerformancePage() {
                       <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{fmtRoas(p.be_roas)}</td>
                       <td className={`${TD} text-right tabular-nums`} style={{ color: p.cogs_usd != null ? "var(--orange)" : "var(--text-dim)" }}>
                         {p.cogs_usd != null ? `$${p.cogs_usd.toFixed(2)}` : "—"}
+                      </td>
+                      <td className={`${TD} text-right tabular-nums`} style={{ color: p.refunds ? "var(--red)" : "var(--text-dim)" }} title={p.refunded_orders ? `${p.refunded_orders} refunded orders` : undefined}>
+                        {p.refunds ? "−" + sym(p.store) + fmt(p.refunds) : "—"}
                       </td>
                       <td className={`${TD} text-right tabular-nums font-medium`} style={{ color: profitColor }}>
                         {profit != null ? `${profit < 0 ? "-" : ""}$${fmt(Math.abs(profit))}` : "—"}

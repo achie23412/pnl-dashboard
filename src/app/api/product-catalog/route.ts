@@ -378,6 +378,9 @@ interface CatalogProduct {
   profit: number | null
   margin: number | null // profit ÷ revenue × 100
   margin_basis: "net" | "before_ads" | null
+  // Refunded on this product in the period (refund log, store currency), already taken off profit.
+  refunds?: number
+  refunded_orders?: number
 }
 
 interface StoreContext {
@@ -864,6 +867,46 @@ async function buildResponse(req: Request) {
     })
   })
 
+  // Refunds per product (refund log, refund date in the period) come off product profit. A refund
+  // is split over its refunded items by price; rejected refunds don't count.
+  try {
+    const { data: refundRows } = await db
+      .from("cs_refunds")
+      .select("store,shopify_order_id,amount,approval_status,items")
+      .gte("refund_date", dateFrom)
+      .lte("refund_date", dateTo)
+      .neq("approval_status", "rejected")
+      .limit(10000)
+    type RItem = { title: string; qty: number; price: number; product_id: string | null }
+    for (const r of (refundRows || []) as { store: string; shopify_order_id: string | null; amount: number; items: RItem[] | null }[]) {
+      const items = (r.items || []).filter((i) => i && i.title)
+      if (!items.length) continue
+      const w = items.map((i) => (Number(i.price) || 0) * (Number(i.qty) || 1))
+      const wSum = w.reduce((a, b) => a + b, 0)
+      const counted = new Set<CatalogProduct>()
+      items.forEach((i, k) => {
+        const t = i.title.trim().toLowerCase()
+        const p = allProducts.find((x) => x.store === r.store && ((i.product_id && x.product_ids.includes(String(i.product_id))) || x.product_name.trim().toLowerCase() === t))
+        if (!p) return
+        const share = (wSum > 0 ? w[k] / wSum : 1 / items.length) * (Number(r.amount) || 0)
+        p.refunds = Math.round(((p.refunds || 0) + share) * 100) / 100
+        if (!counted.has(p)) {
+          p.refunded_orders = (p.refunded_orders || 0) + 1
+          counted.add(p)
+        }
+      })
+    }
+    for (const p of allProducts) {
+      if (!p.refunds) continue
+      if (p.profit != null) {
+        p.profit = Math.round((p.profit - p.refunds) * 100) / 100
+        p.margin = p.sales_revenue > 0 ? Math.round((p.profit / p.sales_revenue) * 1000) / 10 : p.margin
+      }
+    }
+  } catch (e: unknown) {
+    errors.push(`Refunds per product: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
   allProducts.sort((a, b) => b.units_sold - a.units_sold)
 
   const totalSold = allProducts.reduce((s, p) => s + p.units_sold, 0)
@@ -916,7 +959,7 @@ const cachedCatalog = unstable_cache(
     if (res.status !== 200) throw new NotCached(res.status, body)
     return body
   },
-  ["product-catalog-v2"],
+  ["product-catalog-v3"],
   { revalidate: 900 },
 )
 

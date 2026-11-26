@@ -76,52 +76,76 @@ type RefundRow = {
 }
 
 // Compare logged refunds with Shopify. All logged refunds on the same order are added up,
-// so two partial refunds on one order are checked together. Waiting/rejected ones are skipped:
-// the money should NOT have gone out yet.
-export async function checkRefunds(limit = 40): Promise<{ checked: number; notRefunded: number }> {
+// so two partial refunds on one order are checked together.
+// Shopify is the truth: when an order was refunded there (also by hand, also while the refund
+// still waited for the Owner), the refund becomes "refunded" with Shopify's date and amount.
+// A waiting refund with nothing refunded yet stays waiting (the money shouldn't have gone out).
+export async function checkRefunds(limit = 40): Promise<{ checked: number; notRefunded: number; refunded: number }> {
   const db = getServiceClient()
-  const since = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10)
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
   const { data } = await db
     .from("cs_refunds")
     .select("id,store,shopify_order_id,amount,approval_status,shopify_status,created_at,refund_date")
     .gte("refund_date", since)
     .neq("shopify_status", "refunded")
-    .order("refund_date", { ascending: false })
+    .order("shopify_checked_at", { ascending: true, nullsFirst: true }) // least recently checked first
     .limit(limit)
   const rows = (data || []) as RefundRow[]
   let notRefunded = 0
+  let refunded = 0
+  const now = () => new Date().toISOString()
   const byOrder = new Map<string, RefundRow[]>()
   for (const r of rows) {
     if (!r.shopify_order_id) {
-      await db.from("cs_refunds").update({ shopify_status: "no_order", shopify_checked_at: new Date().toISOString() }).eq("id", r.id)
+      await db.from("cs_refunds").update({ shopify_status: "no_order", shopify_checked_at: now() }).eq("id", r.id)
       continue
     }
     const k = `${r.store}::${r.shopify_order_id}`
     byOrder.set(k, [...(byOrder.get(k) || []), r])
   }
-  for (const [k, list] of Array.from(byOrder.entries())) {
-    const [store, orderId] = k.split("::")
-    const s = await refundedInShopify(store, orderId)
-    if (!s) continue
-    // all refunds logged on this order that should have gone out
-    const { data: all } = await db.from("cs_refunds").select("amount,approval_status").eq("store", store).eq("shopify_order_id", orderId)
-    const due = (all || [])
-      .filter((x: { approval_status: string }) => x.approval_status !== "waiting" && x.approval_status !== "rejected")
-      .reduce((a: number, x: { amount: number }) => a + (Number(x.amount) || 0), 0)
-    for (const r of list) {
-      if (r.approval_status === "waiting" || r.approval_status === "rejected") {
-        await db.from("cs_refunds").update({ shopify_status: "checking", shopify_refunded: s.total, shopify_checked_at: new Date().toISOString() }).eq("id", r.id)
-        continue
+  const entries = Array.from(byOrder.entries())
+  // 6 orders at a time keeps Shopify's rate limit happy and the page check under a minute
+  for (let i = 0; i < entries.length; i += 6) {
+    await Promise.all(entries.slice(i, i + 6).map(async ([k, list]) => {
+      const [store, orderId] = k.split("::")
+      const s = await refundedInShopify(store, orderId)
+      if (!s) return
+      // everything logged on this order except rejected refunds
+      const { data: all } = await db.from("cs_refunds").select("amount,approval_status").eq("store", store).eq("shopify_order_id", orderId)
+      const due = (all || [])
+        .filter((x: { approval_status: string }) => x.approval_status !== "rejected")
+        .reduce((a: number, x: { amount: number }) => a + (Number(x.amount) || 0), 0)
+      for (const r of list) {
+        const base = { shopify_refunded: s.total, shopify_refunded_at: s.lastAt, shopify_checked_at: now() }
+        const waiting = r.approval_status === "waiting" || r.approval_status === "rejected"
+        let status: string
+        if (s.total > 0 && s.total >= due - 0.01) status = "refunded"
+        else if (s.total > 0) status = "partial"
+        else if (waiting) status = "checking" // not refunded, and not supposed to be yet
+        else status = Date.now() - Date.parse(r.created_at) < 2 * 3600000 ? "checking" : "not_refunded" // 2h for CS
+        const upd: Record<string, unknown> = { ...base, shopify_status: status }
+        // Refunded in Shopify while still waiting for the Owner: the decision was made in Shopify.
+        if (status === "refunded" && r.approval_status === "waiting") {
+          upd.approval_status = "approved"
+          upd.approved_by = "Refunded in Shopify"
+          upd.approved_at = s.lastAt || now()
+        }
+        if (status === "refunded") refunded++
+        if (status === "not_refunded") notRefunded++
+        await db.from("cs_refunds").update(upd).eq("id", r.id)
+        if (upd.approval_status) {
+          await db.from("cs_refund_history").insert({ refund_id: r.id, changed_by: "Shopify check", action: "approved", changes: { approval_status: ["waiting", "approved"], note: "Refunded in Shopify" } })
+        }
       }
-      // Give CS two hours after logging before calling it "not refunded".
-      const fresh = Date.now() - Date.parse(r.created_at) < 2 * 3600000
-      const status = s.total >= due - 0.01 && due > 0 ? "refunded" : s.total > 0 ? "partial" : fresh ? "checking" : "not_refunded"
-      if (status === "not_refunded") notRefunded++
-      await db
-        .from("cs_refunds")
-        .update({ shopify_status: status, shopify_refunded: s.total, shopify_refunded_at: s.lastAt, shopify_checked_at: new Date().toISOString() })
-        .eq("id", r.id)
-    }
+    }))
   }
-  return { checked: rows.length, notRefunded }
+  const result = { checked: rows.length, notRefunded, refunded }
+  await db.from("sync_status").upsert({ key: "refund-check", ran_at: now(), ok: true, result }, { onConflict: "key" })
+  return result
+}
+
+// When the Shopify check last ran (null before the first run or without the table).
+export async function lastRefundSync(): Promise<{ ran_at: string; result: Record<string, unknown> } | null> {
+  const { data } = await getServiceClient().from("sync_status").select("ran_at,result").eq("key", "refund-check").maybeSingle()
+  return (data as { ran_at: string; result: Record<string, unknown> } | null) || null
 }
