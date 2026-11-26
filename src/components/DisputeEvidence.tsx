@@ -87,7 +87,7 @@ export function DisputeEvidence({ store, disputeId }: { store: string; disputeId
         <Button size="sm" onClick={copyAll}>Copy texts</Button>
         <Button size="sm" variant="ghost" onClick={build} disabled={busy}>Rebuild</Button>
         {pack.adminDisputeUrl && <a href={pack.adminDisputeUrl} target="_blank" rel="noreferrer" className="underline text-[10px]" style={{ color: "#a5b4fc" }}>Open order in Shopify to submit</a>}
-        {pack.open && !pack.shopifyEvidence && <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>Saving straight to Shopify needs the dispute-evidence scopes on the store&apos;s app; until then copy the texts.</span>}
+        {pack.open && !pack.shopifyEvidence && <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>Shopify&apos;s evidence form couldn&apos;t be read for this dispute (see the note above), so copy the texts into Shopify.</span>}
       </div>
       {msg && <div className="mt-2"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
     </div>

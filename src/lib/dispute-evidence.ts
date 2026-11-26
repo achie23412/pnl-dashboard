@@ -113,7 +113,7 @@ export async function buildEvidencePack(store: string, disputeId: string): Promi
   const refunds = (r.data?.order?.refunds || []) as Json[]
   const shop = (sh.data?.shop || {}) as Json
   const evidence = (ev.data?.dispute?.disputeEvidence || null) as Json | null
-  if (ev.error) missing.push("Shopify's evidence form (the app needs read/write_shopify_payments_dispute_evidences)")
+  if (ev.error) missing.push(`Shopify's evidence form (${ev.error})`)
 
   const reason = (dispute.reasonDetails?.reason as string) || null
   const status = (dispute.status as string) || null
@@ -224,7 +224,7 @@ export async function saveEvidence(store: string, disputeId: string, fields: Evi
   if (/\[CS:/.test(text)) return { ok: false, error: "Fill in or delete every [CS: …] line first." }
   const pack = await buildEvidencePack(store, disputeId)
   if (!pack.open) return { ok: false, error: "This dispute no longer needs a response." }
-  if (!pack.shopifyEvidence) return { ok: false, error: "The store's Shopify app needs the read_ and write_shopify_payments_dispute_evidences scopes." }
+  if (!pack.shopifyEvidence) return { ok: false, error: `Shopify's evidence form couldn't be read${pack.missing.length ? `: ${pack.missing.join("; ")}` : ""}. Copy the texts into Shopify instead.` }
   if (pack.shopifyEvidence.submitted) return { ok: false, error: "Evidence was already submitted in Shopify." }
   const cfg = SHOPIFY_STORES[store]
   const token = await getShopifyToken(cfg.domain, cfg.envKey)
