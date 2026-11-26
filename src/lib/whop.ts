@@ -19,12 +19,8 @@ async function whopFetch<T>(path: string, params?: Record<string, string>): Prom
   return res.json() as Promise<T>
 }
 
-interface FinancialReport {
-  total_income: string
-  total_balance: string
-  total_pending_balance: string
-  total_withdrawals: string
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyJson = Record<string, any>
 
 interface Payout {
   id: string
@@ -52,21 +48,37 @@ export function whopConfigured(): boolean {
   return API_KEY.length > 0
 }
 
+function numFromJson(v: unknown): number {
+  if (typeof v === "number") return v
+  if (typeof v === "string") return parseFloat(v) || 0
+  if (v && typeof v === "object" && "amount" in v) return numFromJson((v as AnyJson).amount)
+  return 0
+}
+
 export async function fetchWhopBalance(): Promise<WhopBalance> {
   if (!API_KEY) return { available: false, balance_usd: 0, pending_usd: 0, withdrawn_usd: 0, income_usd: 0, recent_payouts: [] }
 
   const acct: Record<string, string> = ACCOUNT_ID ? { account_id: ACCOUNT_ID } : {}
   const [report, payoutsRes] = await Promise.all([
-    whopFetch<FinancialReport>("/financial_reports", acct),
+    whopFetch<AnyJson>("/financial_reports", { report_type: "balance_summary", ...acct }),
     whopFetch<PagedResponse<Payout>>("/payouts", { per_page: "10", ...acct }),
   ])
 
+  // The balance_summary response may use the new format (ending_balance,
+  // beginning_balance, rows) or the legacy flat fields. Parse both.
+  const balance = numFromJson(report.ending_balance) || numFromJson(report.total_balance) || numFromJson(report.total)
+  const pending = numFromJson(report.pending_balance) || numFromJson(report.total_pending_balance)
+  const withdrawn = numFromJson(report.total_withdrawals)
+  const income = numFromJson(report.total_income)
+
+  console.log("[whop] balance_summary keys:", Object.keys(report).join(", "), "| balance:", balance, "| pending:", pending)
+
   return {
     available: true,
-    balance_usd: parseFloat(report.total_balance) || 0,
-    pending_usd: parseFloat(report.total_pending_balance) || 0,
-    withdrawn_usd: parseFloat(report.total_withdrawals) || 0,
-    income_usd: parseFloat(report.total_income) || 0,
+    balance_usd: balance,
+    pending_usd: pending,
+    withdrawn_usd: withdrawn,
+    income_usd: income,
     recent_payouts: (payoutsRes.data || []).map((p) => ({
       id: p.id,
       amount_usd: parseFloat(p.usd_amount) || parseFloat(p.amount) || 0,
