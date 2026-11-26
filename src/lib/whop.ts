@@ -7,7 +7,7 @@ async function whopFetch<T>(path: string, params?: Record<string, string>): Prom
   const res = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${API_KEY}`,
-      "Api-Version-Date": "2025-09-01",
+      "Api-Version-Date": "2026-07-18",
       Accept: "application/json",
     },
   })
