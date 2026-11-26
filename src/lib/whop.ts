@@ -1,6 +1,6 @@
 const BASE = "https://api.whop.com/api/v1"
-const API_KEY = process.env.WHOP_API_KEY || ""
-const ACCOUNT_ID = process.env.WHOP_ACCOUNT_ID || ""
+const API_KEY = process.env.WHOP_API_KEY ?? ""
+const ACCOUNT_ID = process.env.WHOP_ACCOUNT_ID ?? ""
 
 async function whopFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE}${path}`)
