@@ -248,6 +248,16 @@ async function fetchHourlySpend(
     rows = (await fetchWindsor(connector, ["date", "account_name", "spend"], dateFrom, dateTo)).map((r) => ({ ...r, [hourField]: null, __daily: 1 }))
   }
   const sums = new Map<string, SpendOut>()
+  const add = (day: string, account: string, store: string, spend: number) => {
+    if (day < dateFrom || day > dateTo) return
+    const k = `${day}|${account}`
+    const cur = sums.get(k) || { date: day, channel, account, store, spend: 0 }
+    cur.spend += spend
+    sums.set(k, cur)
+  }
+  // Hourly spend per ad-account day, to compare with the daily totals below
+  const hourlyByAdDay = new Map<string, { spend: number; adTz: string }>()
+  const hourly = !rows.some((r) => r.__daily)
   for (const r of rows) {
     const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
     if (mapping?.channel !== channel) continue // /all can return other connectors' accounts too
@@ -256,12 +266,37 @@ async function fetchHourlySpend(
     const hv = r[hourField]
     const adTz = (tzField && r[tzField] ? String(r[tzField]) : "") || DEFAULT_AD_TZ
     const storeTz = STORE_TIMEZONE[mapping.store] || adTz
-    const day = r.__daily || hv == null || hv === "" ? String(r.date).slice(0, 10) : dayIn(storeTz, zonedToUtc(String(r.date).slice(0, 10), parseHour(String(hv)), adTz))
-    if (day < dateFrom || day > dateTo) continue
-    const k = `${day}|${r.account_name}`
-    const cur = sums.get(k) || { date: day, channel, account: r.account_name, store: mapping.store, spend: 0 }
-    cur.spend += spend
-    sums.set(k, cur)
+    const adDay = String(r.date).slice(0, 10)
+    const day = r.__daily || hv == null || hv === "" ? adDay : dayIn(storeTz, zonedToUtc(adDay, parseHour(String(hv)), adTz))
+    if (hourly) {
+      const h = hourlyByAdDay.get(`${adDay}|${r.account_name}`) || { spend: 0, adTz }
+      h.spend += spend
+      hourlyByAdDay.set(`${adDay}|${r.account_name}`, h)
+    }
+    add(day, r.account_name, mapping.store, spend)
+  }
+  // Windsor's hourly report runs 1–2 hours behind its daily totals (Google: today's last hours
+  // missing). Where an ad-account day's daily total is higher than its hours add up to, the
+  // difference is spend from the latest hours: book it on the store day of that day's last
+  // hour so far (now, for today).
+  if (hourly) {
+    const daily = await fetchWindsor(connector, ["date", "account_name", "spend"], shiftDay(dateFrom, -1), shiftDay(dateTo, 1)).catch(() => [] as WindsorRow[])
+    const seen = new Set<string>()
+    for (const r of daily) {
+      const mapping = WINDSOR_ACCOUNT_MAP[r.account_name]
+      if (mapping?.channel !== channel) continue
+      const adDay = String(r.date).slice(0, 10)
+      const k = `${adDay}|${r.account_name}`
+      if (seen.has(k)) continue // /all can repeat rows
+      seen.add(k)
+      const h = hourlyByAdDay.get(k)
+      const missing = (Number(r.spend) || 0) - (h?.spend || 0)
+      if (missing < 0.5) continue
+      const adTz = h?.adTz || DEFAULT_AD_TZ
+      const storeTz = STORE_TIMEZONE[mapping.store] || adTz
+      const last = Math.min(Date.now(), zonedToUtc(shiftDay(adDay, 1), 0, adTz)) - 1
+      add(dayIn(storeTz, last), r.account_name, mapping.store, missing)
+    }
   }
   return Array.from(sums.values()).map((x) => ({ ...x, spend: Math.round(x.spend * 100) / 100 }))
 }
