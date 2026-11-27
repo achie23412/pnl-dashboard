@@ -133,6 +133,7 @@ function ProductTable({ rows, show14 = false }: { rows: ProductRow[]; show14?: b
 
 function StoreView({ s, th, today }: { s: StoreScaling; th: ScalingData["thresholds"]; today: string }) {
   const [showHow, setShowHow] = useState(false)
+  const trackingBad = s.actions.some((a) => a.level === "warn" && a.rule.startsWith("SOP 1:"))
   return (
     <div className="space-y-4">
       {/* 1. What to do today */}
@@ -155,11 +156,13 @@ function StoreView({ s, th, today }: { s: StoreScaling; th: ScalingData["thresho
       <Panel title="Where you are in the SOP">
         <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
           {STEPS.map((st) => {
+            // Step 1 is only done when the tracking check passes, whatever stage the campaigns are in
+            const failing = st.n === 1 && trackingBad
             const current = st.n === s.stageStep
-            const done = st.n < s.stageStep
+            const done = st.n < s.stageStep && !failing
             return (
-              <div key={st.n} className="rounded-lg p-2.5" style={{ border: `1px solid ${current ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.06)"}`, background: current ? "rgba(99,102,241,0.12)" : "transparent", opacity: done ? 0.6 : 1 }}>
-                <div className="text-[10px] font-semibold" style={{ color: current ? "#c7d2fe" : "var(--text)" }}>{done ? "✓ " : ""}{st.n}. {st.title}</div>
+              <div key={st.n} className="rounded-lg p-2.5" style={{ border: `1px solid ${failing ? "rgba(239,68,68,0.5)" : current ? "rgba(99,102,241,0.6)" : "rgba(255,255,255,0.06)"}`, background: failing ? "rgba(239,68,68,0.1)" : current ? "rgba(99,102,241,0.12)" : "transparent", opacity: done ? 0.6 : 1 }}>
+                <div className="text-[10px] font-semibold" style={{ color: failing ? "#f87171" : current ? "#c7d2fe" : "var(--text)" }}>{failing ? "! " : done ? "✓ " : ""}{st.n}. {st.title}{failing ? ": not confirmed" : ""}</div>
                 <div className="text-[9px] mt-1" style={{ color: "var(--text-dim)" }}>{st.text}</div>
                 {st.video && <a href={st.video} target="_blank" rel="noreferrer" className="text-[9px] underline mt-1 inline-block" style={{ color: "var(--text-muted)" }}>Video ▶</a>}
               </div>
