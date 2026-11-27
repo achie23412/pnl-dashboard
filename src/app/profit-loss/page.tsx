@@ -209,6 +209,7 @@ export default function ProfitLossPage() {
 
   const t = monthTotal
   const isGoogle = storeF.mode === "include" && storeF.values.length === SHEET_STORES.length && SHEET_STORES.every((s) => storeF.values.includes(s))
+  const scopeKey = `${storeF.mode}:${storesInScope.join(",")}:${month}`
   const scopeLabel = !storeF.values.length ? "all stores" : isGoogle ? "Google stores" : storesInScope.length <= 2 ? storesInScope.join(" + ") : `${storesInScope.length} stores`
 
   return (
@@ -246,11 +247,12 @@ export default function ProfitLossPage() {
 
       {raw && (
         <>
-          <Panel title={`${monthLabel(month)} by store`} sub="In EUR" className="mb-4">
+          <Panel key={`store-${scopeKey}`} title={`${monthLabel(month)} by store`} sub="In EUR" className="mb-4">
             {table("Store", storeLines.map((s) => ({ label: s.store, line: s.line, dim: s.line.gross === 0 && s.line.ad === 0 })), { label: "Month total", line: monthTotal })}
           </Panel>
 
-          <Panel title={`Day by day: ${scopeLabel}`} className="mb-4">
+          {/* key: redraw fully when the store selection changes, so no stale title or rows stay behind */}
+          <Panel key={`day-${scopeKey}`} title={`Day by day: ${scopeLabel}`} className="mb-4">
             {table("Date", dayLines.slice().sort((a, b) => a.date.localeCompare(b.date)).map((d) => ({
               label: new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }),
               line: d.line,
