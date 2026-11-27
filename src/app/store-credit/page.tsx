@@ -1,16 +1,15 @@
 "use client"
 // Customer Service → Store Credit: a log of store credits given instead of a refund.
 // Issue the credit (gift card / code) in Shopify, then log it here.
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { PageShell } from "@/components/PageShell"
-import { RefundSheetsBar, type SheetSync } from "@/components/RefundSheetsBar"
 import { PillSelect, FilterBar } from "@/components/PillSelect"
 import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
 import { SingleDatePicker } from "@/components/SingleDatePicker"
 import { Panel, Button, Notice, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 import { SHOPIFY_STORES } from "@/lib/constants"
 import { STORE_CURRENCY } from "@/lib/currency"
-import { REFUND_REASONS, GOODWILL_LADDER, reasonLabel, money, type CsStoreCredit } from "@/lib/cs-log"
+import { REFUND_REASONS, GOODWILL_LADDER, reasonLabel, money, type CsStoreCredit, type OrderLookup } from "@/lib/cs-log"
 
 const STORES = Object.keys(SHOPIFY_STORES)
 const inputCls = "w-full rounded-lg px-3 py-1.5 text-[11px] outline-none"
@@ -18,29 +17,17 @@ const inputStyle = { background: "rgba(255,255,255,0.04)", border: "1px solid rg
 const today = () => new Date().toISOString().slice(0, 10)
 const fmtDay = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({ label, children, hint, hintError }: { label: string; children: React.ReactNode; hint?: string; hintError?: boolean }) {
   return (
     <div>
       <span className="block text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>{label}</span>
       {children}
-      {hint && <span className="block text-[9px] mt-1" style={{ color: "var(--text-dim)" }}>{hint}</span>}
+      {hint && <span className="block text-[9px] mt-1" style={{ color: hintError ? "var(--red)" : "var(--text-dim)" }}>{hint}</span>}
     </div>
   )
 }
 
 export default function StoreCreditPage() {
-  // Store credits CS writes in the refund sheets (reason "Store credit") come in with the sheet sync
-  const [sheetSync, setSheetSync] = useState<SheetSync>(null)
-  const [syncing, setSyncing] = useState(false)
-  const syncSheets = async () => {
-    setSyncing(true)
-    const res = await fetch("/api/refund-check", { method: "POST" }).catch(() => null)
-    const j = res ? await res.json().catch(() => null) : null
-    if (j?.sheets) setSheetSync(j.sheets)
-    setSyncing(false)
-    reloadRef.current?.()
-  }
-  const reloadRef = useRef<(() => void) | null>(null)
   const [rows, setRows] = useState<CsStoreCredit[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -57,12 +44,46 @@ export default function StoreCreditPage() {
   const [convo, setConvo] = useState("")
   const [loggedBy, setLoggedBy] = useState("")
   const [saving, setSaving] = useState(false)
+  // The Shopify order: fills in the email, the order total and the currency, so the
+  // credit amount follows from the percentage (still editable).
+  const [order, setOrder] = useState<OrderLookup | null>(null)
+  const [finding, setFinding] = useState(false)
+  const [findError, setFindError] = useState<string | null>(null)
+  const [amountTouched, setAmountTouched] = useState(false)
   const [saveMsg, setSaveMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null)
 
   const [fStore, setFStore] = useState<FilterValue>(EMPTY_FILTER)
   const [fStatus, setFStatus] = useState<FilterValue>(EMPTY_FILTER)
 
-  const currency = (store && STORE_CURRENCY[store]) || "EUR"
+  const currency = order?.currency || (store && STORE_CURRENCY[store]) || "EUR"
+
+  const findOrder = async () => {
+    setFindError(null)
+    setOrder(null)
+    if (!store) return setFindError("Pick the store first.")
+    if (!orderNo.trim()) return setFindError("Enter the order number first.")
+    setFinding(true)
+    try {
+      const r = await fetch(`/api/shopify-order?store=${encodeURIComponent(store)}&order=${encodeURIComponent(orderNo.trim())}`)
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+      const o = j as OrderLookup
+      setOrder(o)
+      setOrderNo(o.order_number)
+      if (o.customer_email) setEmail(o.customer_email)
+    } catch (e: unknown) {
+      setFindError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFinding(false)
+    }
+  }
+
+  // Credit amount = order total × percentage, until someone types an amount themselves
+  useEffect(() => {
+    if (amountTouched || !order) return
+    const p = parseFloat(pct)
+    setAmount(p > 0 ? String(Math.round(order.total * p) / 100) : "")
+  }, [order, pct, amountTouched])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -76,7 +97,6 @@ export default function StoreCreditPage() {
       .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [])
-  reloadRef.current = load
 
   useEffect(() => {
     load()
@@ -88,6 +108,9 @@ export default function StoreCreditPage() {
   }, [load])
 
   const reset = () => {
+    setOrder(null)
+    setFindError(null)
+    setAmountTouched(false)
     setOrderNo("")
     setEmail("")
     setAmount("")
@@ -155,19 +178,32 @@ export default function StoreCreditPage() {
         { label: "Used", value: loading ? "—" : String(rows.filter((r) => r.status === "used").length) },
       ]}
     >
-      <RefundSheetsBar result={sheetSync} syncing={syncing} onSync={syncSheets} />
       {loadError && <Notice tone="error">Couldn&apos;t load the store credit log: {loadError}</Notice>}
 
       <Panel title="Log a store credit" sub="Goodwill ladder: 60% → 80% → 100% store credit (or 10 / 20 / 30% refund). The customer picks one per stage." className="mb-4">
         <div className="grid gap-3 md:grid-cols-4 mb-3">
           <Field label="Store">
-            <PillSelect fullWidth value={store} onChange={setStore} options={STORES} placeholder="Pick store" />
+            <PillSelect fullWidth value={store} onChange={(v) => { setStore(v); setOrder(null) }} options={STORES} placeholder="Pick store" />
           </Field>
           <Field label="Date">
             <SingleDatePicker value={date} onChange={setDate} allowEmpty={false} fullWidth align="left" />
           </Field>
-          <Field label="Order number">
-            <input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} className={inputCls} style={inputStyle} placeholder="#1042" />
+          <Field
+            label="Order number"
+            hintError={!!findError}
+            hint={findError || (order ? `${order.order_number} · total ${money(order.total, order.currency)}${order.refunded ? ` · already refunded ${money(order.refunded, order.currency)}` : ""}` : "Find fills in the email and the amount")}
+          >
+            <div className="flex gap-1.5">
+              <input
+                value={orderNo}
+                onChange={(e) => { setOrderNo(e.target.value); setOrder(null) }}
+                onKeyDown={(e) => { if (e.key === "Enter") findOrder() }}
+                className={inputCls}
+                style={inputStyle}
+                placeholder="#1042"
+              />
+              <Button size="sm" variant="secondary" onClick={findOrder} disabled={finding}>{finding ? "…" : "Find"}</Button>
+            </div>
           </Field>
           <Field label="Customer email">
             <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} style={inputStyle} placeholder="name@email.com" />
@@ -188,7 +224,7 @@ export default function StoreCreditPage() {
             </div>
           </Field>
           <Field label={`Credit amount (${currency})`}>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls} style={inputStyle} inputMode="decimal" />
+            <input value={amount} onChange={(e) => { setAmount(e.target.value); setAmountTouched(true) }} className={inputCls} style={inputStyle} inputMode="decimal" placeholder={order ? "Pick a percentage" : ""} />
           </Field>
           <Field label="Gift card / code">
             <input value={code} onChange={(e) => setCode(e.target.value)} className={inputCls} style={inputStyle} placeholder="Optional" />
