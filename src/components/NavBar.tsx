@@ -235,6 +235,7 @@ interface NavSection {
 const SEARCH_WORDS: Record<string, string> = {
   "/": "home overview pnl profit roas revenue spend kpi alerts today",
   "/daily-report": "day yesterday coach report profit %",
+  "/coach-report": "coach slack daily post screenshot day by day profit loss kevin ascend",
   "/calendar": "events todo to-do tasks must do season holiday black friday shipping cutoff",
   "/product-performance": "products roas breakeven be roas margin cogs winners date",
   "/opportunities": "competitor products launch season approve research trends new products",
@@ -250,7 +251,7 @@ const SEARCH_WORDS: Record<string, string> = {
   "/google-scaling": "google ads scaling scale budget pmax test campaign exclude exclusions winners winner campaign brand search roas cpc oak ascend sop",
 }
 
-const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/price-ladder", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker", "/drafting-system", "/store-settings", "/gmc-health", "/google-scaling"])
+const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/price-ladder", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker", "/drafting-system", "/store-settings", "/gmc-health", "/google-scaling", "/coach-report"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -258,6 +259,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/", label: "Main Hub", icon: <BriefingIcon /> },
       { href: "/daily-report", label: "Daily Report", icon: <ReportIcon /> },
+      { href: "/coach-report", label: "Coach Report", icon: <ReportIcon /> },
       { href: "/calendar", label: "Calendar", icon: <CalendarIcon /> },
     ],
   },
