@@ -9,7 +9,7 @@ import type { EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow, RefundRow } from "@/lib/types"
 import { FixBanner } from "@/components/FixBanner"
 import { PageShell } from "@/components/PageShell"
-import { SingleDatePicker } from "@/components/SingleDatePicker"
+import { DayPicker } from "@/components/DayPicker"
 import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 // Database reads go through our logged-in server (/api/db), not the public Supabase key
@@ -233,7 +233,7 @@ export default function DailyReportPage() {
       actions={
         <>
           <Button size="sm" onClick={() => shiftDay(-1)} title="Previous day">←</Button>
-          <SingleDatePicker value={date} onChange={(v) => v && setDate(v)} allowEmpty={false} />
+          <DayPicker value={date} onChange={setDate} />
           <Button size="sm" onClick={() => shiftDay(1)} title="Next day">→</Button>
           <Button size="sm" onClick={() => setDate(toInputDate(new Date()))}>Today</Button>
         </>
