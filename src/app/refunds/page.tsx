@@ -29,18 +29,28 @@ const APPROVAL = {
   rejected: { tone: "grey", label: "Rejected" },
 } as const
 
-// One status per refund: requested → approved → refunded (or rejected). Shopify is the truth for
-// "refunded": a refund made there by hand counts, also while it still waited for the Owner.
-function lifecycle(r: CsRefund): { tone: "green" | "amber" | "red" | "grey"; label: string; sub?: string } {
+// One status per refund, answering one question first: has the money gone back to the customer?
+// Shopify is the truth for "refunded": a refund made there by hand counts, also while it still waited
+// for the Owner. done = refunded in Shopify; todo = still has to be refunded; check = not known yet.
+type Stage = "done" | "partial" | "todo" | "check" | "unknown" | "rejected"
+function lifecycle(r: CsRefund): { stage: Stage; tone: "green" | "amber" | "red" | "grey"; label: string; sub?: string } {
   if (r.shopify_status === "refunded")
-    return { tone: "green", label: "Refunded", sub: [r.shopify_refunded_at ? fmtDay(r.shopify_refunded_at.slice(0, 10)) : null, r.shopify_refunded != null ? money(Number(r.shopify_refunded), r.currency) : null].filter(Boolean).join(" · ") }
-  if (r.approval_status === "rejected") return { tone: "grey", label: "Rejected" }
-  if (r.approval_status === "waiting") return { tone: "amber", label: "Requested", sub: "waiting for Owner" }
-  if (r.shopify_status === "partial") return { tone: "amber", label: "Partly refunded", sub: r.shopify_refunded != null ? `${money(Number(r.shopify_refunded), r.currency)} in Shopify` : undefined }
-  if (r.shopify_status === "not_refunded") return { tone: "red", label: "Approved", sub: "not refunded in Shopify yet" }
-  if (r.shopify_status === "no_order") return { tone: "grey", label: "Approved", sub: "no Shopify order linked" }
-  return { tone: r.approval_status === "flagged" ? "red" : "green", label: "Approved", sub: r.approval_status === "flagged" ? "threat case" : "checking Shopify…" }
+    return { stage: "done", tone: "green", label: "✓ Refunded", sub: [r.shopify_refunded_at ? fmtDay(r.shopify_refunded_at.slice(0, 10)) : null, r.shopify_refunded != null ? money(Number(r.shopify_refunded), r.currency) : null].filter(Boolean).join(" · ") + " in Shopify" }
+  if (r.approval_status === "rejected") return { stage: "rejected", tone: "grey", label: "Rejected", sub: "no refund" }
+  if (r.shopify_status === "partial") return { stage: "partial", tone: "amber", label: "◐ Partly refunded", sub: r.shopify_refunded != null ? `only ${money(Number(r.shopify_refunded), r.currency)} in Shopify` : undefined }
+  if (r.approval_status === "waiting") return { stage: "todo", tone: "amber", label: "✗ Not refunded yet", sub: "waiting for Owner approval" }
+  if (r.shopify_status === "not_refunded") return { stage: "todo", tone: "red", label: "✗ Not refunded yet", sub: "approved: refund it in Shopify" }
+  if (r.shopify_status === "no_order") return { stage: "unknown", tone: "grey", label: "? Can't check", sub: "order not found in Shopify: check by hand" }
+  return { stage: "check", tone: r.approval_status === "flagged" ? "red" : "grey", label: "… Checking Shopify", sub: r.approval_status === "flagged" ? "threat case: refund in full" : "approved, result within the hour" }
 }
+const STAGES: { value: Stage; label: string }[] = [
+  { value: "done", label: "Refunded" },
+  { value: "todo", label: "Not refunded yet" },
+  { value: "partial", label: "Partly refunded" },
+  { value: "check", label: "Checking Shopify" },
+  { value: "unknown", label: "Can't check" },
+  { value: "rejected", label: "Rejected" },
+]
 const agoText = (iso: string) => {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000)
   if (m < 1) return "just now"
@@ -101,6 +111,7 @@ export default function RefundsPage() {
   const [fStore, setFStore] = useState<FilterValue>(EMPTY_FILTER)
   const [fReason, setFReason] = useState<FilterValue>(EMPTY_FILTER)
   const [fType, setFType] = useState<FilterValue>(EMPTY_FILTER)
+  const [fStage, setFStage] = useState<FilterValue>(EMPTY_FILTER)
   const [openId, setOpenId] = useState<number | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [loss, setLoss] = useState<Record<number, RefundLoss>>({})
@@ -295,7 +306,7 @@ export default function RefundsPage() {
     if (r.ok) setRows((x) => x.filter((y) => y.id !== id))
   }
 
-  const filtered = rows.filter((r) => passes(fStore, r.store) && passes(fReason, r.reason) && passes(fType, r.refund_type))
+  const filtered = rows.filter((r) => passes(fStore, r.store) && passes(fReason, r.reason) && passes(fType, r.refund_type) && passes(fStage, lifecycle(r).stage))
   const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
   const last30 = rows.filter((r) => r.refund_date >= since)
   const byCur = last30.reduce<Record<string, number>>((a, r) => ({ ...a, [r.currency]: (a[r.currency] || 0) + Number(r.amount) }), {})
@@ -501,10 +512,27 @@ export default function RefundsPage() {
         </div>
       </Panel>
 
-      <FilterBar right={<span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{filtered.length} refunds</span>}>
+      <FilterBar
+        right={(() => {
+          const n = (st: Stage) => filtered.filter((r) => lifecycle(r).stage === st).length
+          const parts: [string, number, string][] = [
+            ["refunded", n("done"), "var(--green)"],
+            ["not refunded yet", n("todo") + n("partial"), "var(--red)"],
+            ["checking", n("check"), "var(--text-muted)"],
+            ["can't check", n("unknown"), "var(--text-muted)"],
+          ]
+          return (
+            <span className="text-[10px] flex flex-wrap gap-x-2" style={{ color: "var(--text-dim)" }}>
+              <span>{filtered.length} refunds</span>
+              {parts.filter(([, c]) => c > 0).map(([l, c, col]) => <span key={l}>· <b style={{ color: col }}>{c}</b> {l}</span>)}
+            </span>
+          )
+        })()}
+      >
         <FilterSelect label="Store" options={STORES} value={fStore} onChange={setFStore} />
         <FilterSelect label="Reason" options={REFUND_REASONS.map((r) => ({ value: r.value, label: r.label }))} value={fReason} onChange={setFReason} />
         <FilterSelect label="Type" options={REFUND_TYPES.map((t) => ({ value: t.value, label: t.label }))} value={fType} onChange={setFType} />
+        <FilterSelect label="Refunded?" options={STAGES} value={fStage} onChange={setFStage} />
       </FilterBar>
 
       {loading && rows.length === 0 ? (
@@ -564,7 +592,7 @@ export default function RefundsPage() {
                         return (
                           <>
                             <Badge tone={st.tone}>{st.label}</Badge>
-                            {st.sub && <span className="block text-[9px] mt-0.5" style={{ color: st.tone === "red" && st.label === "Approved" ? "var(--red)" : "var(--text-dim)" }}>{st.sub}</span>}
+                            {st.sub && <span className="block text-[9px] mt-0.5" style={{ color: st.stage === "todo" ? (st.tone === "red" ? "var(--red)" : "var(--amber, #f59e0b)") : "var(--text-dim)" }}>{st.sub}</span>}
                           </>
                         )
                       })()}
