@@ -43,7 +43,7 @@ export type Level = "do" | "wait" | "warn" | "ok"
 export interface Action { level: Level; title: string; detail: string; rule: string }
 
 export interface DayRow { date: string; budget: number | null; spend: number; clicks: number; conversions: number; value: number; roas: number | null; cpc: number | null; onTarget: boolean }
-export interface CampaignInfo { name: string; type: string; status: string; kind: "test" | "main" | "winner" | "brand" | "other"; firstDay: string; budget: number | null; spend7: number; roas7: number | null }
+export interface CampaignInfo { name: string; type: string; status: string; kind: "test" | "main" | "winner" | "brand" | "other"; namedTest?: boolean; firstDay: string; budget: number | null; spend7: number; roas7: number | null }
 export interface ProductRow {
   itemId: string // as Google shows it, e.g. shopify_US_<product>_<variant>
   productId: string
@@ -168,6 +168,15 @@ export async function buildScaling(): Promise<ScalingData> {
       const latest = allDates[allDates.length - 1]
       return { name, type: c.type, status: c.status, kind: kindOf(name, c.type), firstDay: dates[0] || latest, budget: latest ? c.days[latest].budget : null, spend7: round2(sp7), roas7: roasOf(v7, sp7) }
     }).sort((a, b) => b.spend7 - a.spend7)
+    // A "TEST" campaign that is the only PMax and has run past the 2 test days is the store's
+    // main campaign (kept running instead of launching a separate PMax).
+    if (!campaigns.some((c) => c.status === "ENABLED" && c.kind === "main")) {
+      for (const c of campaigns) {
+        if (c.status !== "ENABLED" || c.kind !== "test") continue
+        const full = Object.keys(byCamp[c.name].days).filter((d) => d <= yesterday && byCamp[c.name].days[d].spend > 0).length
+        if (full > SOP.testDays) { c.kind = "main"; c.namedTest = true }
+      }
+    }
     const enabled = campaigns.filter((c) => c.status === "ENABLED")
     const mainC = enabled.find((c) => c.kind === "main") || null
     const testC = enabled.find((c) => c.kind === "test") || null
@@ -240,7 +249,7 @@ export async function buildScaling(): Promise<ScalingData> {
         actions.push({
           level: gmcOk ? "do" : "warn",
           title: gmcOk ? "Launch your PMax campaign today" : "Check Merchant Center before launching PMax",
-          detail: `"${testC.name}" has spent on ${tDays} full days${gmcOk ? ` and Merchant Center is connected (${gmcInfo.disapproved} disapproved item(s), see GMC Health)` : `, but the last Merchant Center sync failed`}. The SOP says: if the ads keep spending and GMC is still live, launch the real PMax campaign on day 3. Name it without "TEST" so this page picks it up as the main campaign.`,
+          detail: `"${testC.name}" has spent on ${tDays} full days${gmcOk ? ` and Merchant Center is connected (${gmcInfo.disapproved} disapproved item(s), see GMC Health)` : `, but the last Merchant Center sync failed`}. The SOP says: if the ads keep spending and GMC is still live, launch the real PMax campaign on day 3. If you keep this campaign running as your main one instead, this page treats it as the main campaign from tomorrow.`,
           rule: "SOP 2–3: PMax on day 3",
         })
       }

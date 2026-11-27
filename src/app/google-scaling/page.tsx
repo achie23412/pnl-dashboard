@@ -210,7 +210,7 @@ function StoreView({ s, th, today }: { s: StoreScaling; th: ScalingData["thresho
       </Panel>
 
       {/* 4. Campaigns */}
-      <Panel title="Campaigns" sub='Names with "TEST" count as the test campaign, "WINNER" as the winner campaign, "BRAND" or Search as brand search; the other PMax is the main campaign' pad={false}>
+      <Panel title="Campaigns" sub='Names with "TEST" count as the test campaign, unless it is the only PMax and has run more than 2 full days: then it is the main campaign. "WINNER" = winner campaign, "BRAND" or Search = brand search, any other PMax = main campaign' pad={false}>
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
             <thead>
@@ -224,7 +224,7 @@ function StoreView({ s, th, today }: { s: StoreScaling; th: ScalingData["thresho
               {s.campaigns.map((c) => (
                 <tr key={c.name} style={ROW_BORDER}>
                   <td className={TD} style={{ color: "var(--text)" }}>{c.name}</td>
-                  <td className={TD}><Badge tone={c.kind === "main" ? "accent" : c.kind === "test" ? "amber" : c.kind === "winner" ? "green" : "grey"}>{c.kind}</Badge></td>
+                  <td className={TD}><Badge tone={c.kind === "main" ? "accent" : c.kind === "test" ? "amber" : c.kind === "winner" ? "green" : "grey"}>{c.kind}</Badge>{c.namedTest && <span className="ml-1 text-[9px]" style={{ color: "var(--text-dim)" }}>(named TEST, running as main)</span>}</td>
                   <td className={TD} style={{ color: c.status === "ENABLED" ? "var(--green)" : "var(--text-dim)" }}>{c.status.toLowerCase()}</td>
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{c.firstDay}</td>
                   <td className={`${TD} text-right tabular-nums`} style={{ color: "var(--text-muted)" }}>{c.budget != null ? `€${Math.round(c.budget)}` : "—"}</td>
