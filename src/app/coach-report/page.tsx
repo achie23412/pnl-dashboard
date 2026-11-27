@@ -44,7 +44,7 @@ export default function CoachReportPage() {
     <PageShell
       title="Coach Report"
       breadcrumb="Finance → Coach Report"
-      description="Every day at 09:00 (Amsterdam) the dashboard posts one message per Google store to the coach's Slack channel: “27 November | Walsh & Farley”, yesterday's numbers, and the Profit & Loss Day by day table for the month up to and including yesterday."
+      description="Every day at 09:00 (Amsterdam) the dashboard posts to the coach's Slack channel: first the Main Hub (all stores, last 30 days up to yesterday), then per Google store “27 November | Walsh & Farley” with the Profit & Loss Day by day table for the month up to and including yesterday."
       actions={<Button variant="primary" onClick={sendNow} disabled={!ready || sending}>{sending ? "Sending…" : "Send to Slack now"}</Button>}
     >
       {error && <Notice tone="error">Couldn&apos;t build the report: {error}</Notice>}
@@ -57,7 +57,7 @@ export default function CoachReportPage() {
       )}
       {!data && !error && <Loading>Building today&apos;s report…</Loading>}
       {data?.messages.map((m) => (
-        <Panel key={m.store} title={m.text.split("\n")[0]} sub={m.text.split("\n")[1]} className="mb-4">
+        <Panel key={m.store} title={m.text} className="mb-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`/api/coach-report/image?store=${encodeURIComponent(m.store)}&t=${stamp}`} alt={`Day by day: ${m.store}`} className="w-full rounded-lg" />
         </Panel>

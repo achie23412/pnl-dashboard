@@ -10,6 +10,8 @@ import { STORE_CURRENCY, COGS_CURRENCY, AD_SPEND_CURRENCY, fetchEurRates, toEur 
 
 // Order of the posts in the channel (as posted by hand)
 export const COACH_STORES = ["Walsh & Farley", "Carter & Collins", "Susan & Allen"]
+// The Main Hub (all stores) image goes first; this is its name in the title and preview URL
+export const HUB_KEY = "Main Hub"
 const TXN_RATE = 0.06 // Google stores: transaction fee 6% of gross revenue (sheet Setup tab)
 
 export type PnlLine = {
@@ -110,14 +112,11 @@ export const xr = (n: number | null) => (n === null ? "" : `${n.toFixed(2)}x`)
 export const pct = (n: number | null) => (n === null ? "" : `${n.toFixed(1)}%`)
 export const longDate = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" })
 export const shortDate = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+export const eur0 = (n: number) => `${n < 0 ? "−" : ""}€${Math.abs(Math.round(n)).toLocaleString("en-IE")}`
 
-// "27 November | Walsh & Farley" + one line with yesterday's numbers
-export function messageText(r: CoachReport, s: StoreReport): string {
-  const l = s.last
-  const yesterday = l.gross === 0 && l.ad === 0
-    ? `${shortDate(r.lastDay)}: no revenue or ad spend`
-    : `${shortDate(r.lastDay)}: revenue ${eur(l.gross)} · ad spend ${eur(l.ad)} · ROAS ${xr(l.roas) || "–"} · COGS ${pct(l.cogPct) || "–"} · profit ${eur(l.profit)} (${l.orders} order${l.orders === 1 ? "" : "s"})`
-  return `${longDate(r.reportDate)} | ${s.store}\n${yesterday}`
+// "27 November | Walsh & Farley" — only the title; the numbers are in the image
+export function messageText(reportDate: string, name: string): string {
+  return `${longDate(reportDate)} | ${name}`
 }
 
 // ---- Slack ----
