@@ -84,6 +84,10 @@ export interface DailyBriefingRow {
   cogs: number
   profit: number
   isToday: boolean
+  sessions?: number | null
+  cvr?: number | null // orders ÷ human sessions, %
+  fees?: number // transaction + media buyer fee
+  beRoas?: number | null
 }
 
 export interface ProductTest {

@@ -140,10 +140,27 @@ export default function Dashboard() {
     () => spend.map((r) => ({ ...r, spend: toEur(r.spend, AD_SPEND_CURRENCY, r.date, rates) })),
     [spend, rates],
   )
-  const cogsEur = useMemo(
-    () => cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) })),
-    [cogs, rates],
-  )
+  // COGS like the Daily Report: what ShipGoods charged for the orders placed that day (per store,
+  // store's local day), orders it hasn't priced at the store's average. Read for the last 31 days of
+  // the selected range; older days keep the saved daily COGS.
+  const [orderCogsDay, setOrderCogsDay] = useState<{ store: string; date: string; cogs_usd: number; priced: number; pending: number }[]>([])
+  const cogsEur = useMemo(() => {
+    const base = cogs.map((r) => ({ ...r, cogs: toEur(r.cogs, COGS_CURRENCY, r.date, rates) }))
+    if (!orderCogsDay.length) return base
+    const ordersAt = new Map<string, number>()
+    for (const r of revenue) ordersAt.set(`${r.store}|${r.date}`, (ordersAt.get(`${r.store}|${r.date}`) || 0) + r.orders)
+    const shipgoods = new Map<string, number>()
+    for (const o of orderCogsDay) {
+      const n = o.priced + o.pending
+      if (n <= 0) continue
+      const notInShipgoods = Math.max(0, (ordersAt.get(`${o.store}|${o.date}`) || 0) - n)
+      shipgoods.set(`${o.store}|${o.date}`, toEur(o.cogs_usd + notInShipgoods * (o.cogs_usd / n), COGS_CURRENCY, o.date, rates))
+    }
+    return [
+      ...base.filter((r) => !shipgoods.has(`${r.store}|${r.date}`)),
+      ...Array.from(shipgoods.entries()).map(([k, v]) => ({ store: k.split("|")[0], date: k.split("|")[1], cogs: v })),
+    ]
+  }, [cogs, rates, orderCogsDay, revenue])
   const refundsEur = useMemo(
     () => refunds.map((r) => ({ ...r, amount: toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", r.date, rates) })),
     [refunds, rates],
@@ -155,6 +172,20 @@ export default function Dashboard() {
   const [prevFrom, prevTo] = getPreviousRange(dateFrom, dateTo)
   const todayStr = new Date().toISOString().slice(0, 10)
   const showComparison = dateTo < todayStr || preset === "yesterday" || preset === "last_month"
+
+  // ShipGoods order costs per store per day for the last 31 days of the range (same source as Daily Report)
+  useEffect(() => {
+    const from31 = new Date(Date.parse(dateTo) - 30 * 86400000).toISOString().slice(0, 10)
+    const from = dateFrom > from31 ? dateFrom : from31
+    let live = true
+    fetch(`/api/order-cogs?from=${from}&to=${dateTo}&by=day`)
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((d) => live && setOrderCogsDay(d.rows || []))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [dateFrom, dateTo])
 
   const filtered = useMemo(() => {
     const inRange = (d: string) => d >= dateFrom && d <= dateTo
@@ -334,6 +365,9 @@ export default function Dashboard() {
     const refundByDate = new Map<string, number>()
     for (const r of filtered.refunds) refundByDate.set(r.date, (refundByDate.get(r.date) || 0) + r.amount)
 
+    const sessionsByDate = new Map<string, number>()
+    for (const r of filtered.sessions) sessionsByDate.set(r.date, (sessionsByDate.get(r.date) || 0) + r.sessions)
+
     return Array.from(dates)
       .sort()
       .map((date) => {
@@ -350,15 +384,19 @@ export default function Dashboard() {
         }
         const totalCog = actualCog + est
 
-        let dayTxn = 0
+        let txnOnly = 0
+        let mbOnly = 0
         if (includeTxnFees) {
           for (const r of filtered.revenue.filter((x) => x.date === date)) {
-            dayTxn += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
+            txnOnly += r.revenue * (TRANSACTION_FEE_RATE[r.store] || 0.035)
           }
           for (const r of filtered.spend.filter((x) => x.date === date)) {
-            dayTxn += r.spend * mbOn(r.store, r.date)
+            mbOnly += r.spend * mbOn(r.store, r.date)
           }
         }
+        const dayTxn = txnOnly + mbOnly
+        const ses = sessionsByDate.get(date)
+        const be = rev.revenue > 0 ? breakEvenRoas(totalCog / rev.revenue, txnOnly / rev.revenue, sp > 0 ? mbOnly / sp : 0) : NaN
 
         return {
           date,
@@ -371,6 +409,10 @@ export default function Dashboard() {
           cogs: Math.round(totalCog),
           profit: Math.round(rev.revenue - refAmt - sp - totalCog - dayTxn),
           isToday: date === todayStr,
+          sessions: ses ?? null,
+          cvr: ses && ses > 0 ? (rev.orders / ses) * 100 : null,
+          fees: Math.round(dayTxn),
+          beRoas: Number.isFinite(be) ? be : null,
         }
       })
   }, [filtered, includeTxnFees, rates, todayStr, feeSettings])

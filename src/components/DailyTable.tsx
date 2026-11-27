@@ -69,15 +69,19 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
 
   const maxProfit = Math.max(...data.map((r) => Math.abs(r.profit)), 1)
 
+  // Same columns as the Daily Report
   const COLS = [
     { key: "date", label: "Date", align: "left" as const },
     { key: "revenue", label: "Revenue", align: "right" as const },
     { key: "orders", label: "Orders", align: "right" as const },
-    { key: "spend", label: "Ad Spend", align: "right" as const },
+    { key: "cvr", label: "CVR", align: "right" as const },
     { key: "roas", label: "ROAS", align: "right" as const },
-    { key: "refund", label: "Refund", align: "right" as const },
+    { key: "be", label: "BE ROAS", align: "right" as const },
+    { key: "spend", label: "Ad Spend", align: "right" as const },
     { key: "cogs", label: "COGS", align: "right" as const },
     { key: "cogsPct", label: "COGS %", align: "right" as const },
+    { key: "refund", label: "Refunds", align: "right" as const },
+    { key: "fees", label: "Fees", align: "right" as const },
     { key: "profit", label: "Net Profit", align: "right" as const },
   ]
 
@@ -127,13 +131,29 @@ export function DailyTable({ data }: { data: DailyBriefingRow[] }) {
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>€{fmt(row.revenue)}</td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{row.orders}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>€{fmt(row.spend)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text)" }}>
+                    {row.cvr != null ? `${row.cvr.toFixed(2)}%` : "—"}
+                    {row.sessions != null && <span className="block text-[9px]" style={{ color: "var(--text-dim)" }}>{fmt(row.sessions)} sess.</span>}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums font-medium"><RoasCell roas={row.roas} /></td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium"><RefundCell rate={row.refundRate} /></td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {row.beRoas != null ? (
+                      <>
+                        <span style={{ color: "var(--text)" }}>{row.beRoas.toFixed(2)}x</span>
+                        {row.spend > 0 && <span className="block text-[9px]" style={{ color: row.roas >= row.beRoas ? "var(--green)" : "var(--red)" }}>{row.roas >= row.beRoas ? "above" : "below"} ({row.roas >= row.beRoas ? "+" : ""}{((row.roas / row.beRoas - 1) * 100).toFixed(0)}%)</span>}
+                      </>
+                    ) : <span style={{ color: "var(--text-dim)" }}>—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium" style={{ color: "var(--text)" }}>€{fmt(row.spend)}</td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--orange)" }}>€{fmt(row.cogs)}</td>
                   <td className="px-3 py-2 text-right tabular-nums" style={{ color: row.revenue > 0 ? (row.cogs / row.revenue * 100 > 35 ? "var(--red)" : row.cogs / row.revenue * 100 > 25 ? "var(--orange)" : "var(--text-muted)") : "var(--text-dim)" }}>
                     {row.revenue > 0 ? `${(row.cogs / row.revenue * 100).toFixed(1)}%` : "—"}
                   </td>
+                  <td className="px-3 py-2 text-right tabular-nums" style={{ color: row.refundAmount > 0 ? "var(--red)" : "var(--text-dim)" }}>
+                    €{fmt(row.refundAmount)}
+                    {row.refundAmount > 0 && <span className="block text-[9px]"><RefundCell rate={row.refundRate} /></span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>€{fmt(row.fees ?? 0)}</td>
                   <td className="px-3 py-2 text-right">
                     <ProfitBar profit={row.profit} maxProfit={maxProfit} revenue={row.revenue} />
                   </td>

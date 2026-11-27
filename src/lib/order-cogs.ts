@@ -27,11 +27,20 @@ export async function orderCogsForDay(date: string): Promise<OrderCogsRow[]> {
 
 // Same for every order placed from `from` to `to` (store's local days), added up per store.
 export async function orderCogsForRange(from: string, to: string): Promise<OrderCogsRow[]> {
+  return (await collect(from, to, false)).map(({ store, cogs_usd, priced, pending }) => ({ store, cogs_usd, priced, pending }))
+}
+
+// Same, per store per local day (Main Hub per-day breakdown).
+export async function orderCogsByDay(from: string, to: string): Promise<(OrderCogsRow & { date: string })[]> {
+  return collect(from, to, true)
+}
+
+async function collect(from: string, to: string, perDay: boolean): Promise<(OrderCogsRow & { date: string })[]> {
   // An order placed on `from` was last updated on or after that day; one day earlier covers timezones.
   const since = new Date(Date.parse(from + "T00:00:00Z") - 86400000).toISOString()
   const orders = await fetchOrders(since)
 
-  const byStore = new Map<string, { priced: number[]; pending: number }>()
+  const groups = new Map<string, { store: string; date: string; priced: number[]; pending: number }>()
   const avgPool = new Map<string, number[]>() // all priced orders in the pull, for the average
   for (const o of orders) {
     const store = SHIPGOODS_SHOP_MAP[o.shop_admin_id]
@@ -40,16 +49,17 @@ export async function orderCogsForRange(from: string, to: string): Promise<Order
     if (p != null) avgPool.set(store, [...(avgPool.get(store) || []), p])
     const day = localDay(o.created_at, STORE_TIMEZONE[store] || "UTC")
     if (day < from || day > to) continue
-    const cur = byStore.get(store) || { priced: [], pending: 0 }
+    const key = perDay ? `${store}|${day}` : store
+    const cur = groups.get(key) || { store, date: perDay ? day : to, priced: [], pending: 0 }
     if (p != null) cur.priced.push(p)
     else cur.pending++
-    byStore.set(store, cur)
+    groups.set(key, cur)
   }
 
-  return Array.from(byStore.entries()).map(([store, v]) => {
-    const pool = avgPool.get(store) || []
+  return Array.from(groups.values()).map((v) => {
+    const pool = avgPool.get(v.store) || []
     const avg = pool.length ? pool.reduce((a, b) => a + b, 0) / pool.length : 0
     const sum = v.priced.reduce((a, b) => a + b, 0) + v.pending * avg
-    return { store, cogs_usd: Math.round(sum * 100) / 100, priced: v.priced.length, pending: v.pending }
+    return { store: v.store, date: v.date, cogs_usd: Math.round(sum * 100) / 100, priced: v.priced.length, pending: v.pending }
   })
 }
