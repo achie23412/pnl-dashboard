@@ -247,9 +247,10 @@ const SEARCH_WORDS: Record<string, string> = {
   "/season-board": "season seasonal calendar trends",
   "/drafting-system": "draft drafting sop rules kill remove offline adgain roas threshold aov weekly cleanup",
   "/gmc-health": "gmc merchant center disapproved disapproval counterfeit feed limit price suggestion google health",
+  "/google-scaling": "google ads scaling scale budget pmax test campaign exclude exclusions winners winner campaign brand search roas cpc oak ascend sop",
 }
 
-const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/price-ladder", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker", "/drafting-system", "/store-settings", "/gmc-health"])
+const DONE_PAGES = new Set(["/", "/inbox-queue", "/quality-checks", "/risky-products", "/price-deductions", "/disputes", "/workflows", "/cs-reports", "/cashflow", "/daily-report", "/calendar", "/competitors", "/advisor", "/product-performance", "/opportunities", "/product-importer", "/product-alerts", "/supplier-costs", "/price-suggestions", "/price-ladder", "/listings", "/product-rules", "/gmc-scanner", "/season-board", "/profit-loss", "/cogs-invoices", "/refunds", "/store-credit", "/refund-report", "/order-issues", "/supplier-cases", "/shipments", "/fulfillment-risks", "/team-hub", "/keyword-maker", "/drafting-system", "/store-settings", "/gmc-health", "/google-scaling"])
 
 const NAV_SECTIONS: NavSection[] = [
   {
@@ -278,6 +279,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/product-rules", label: "Product Rules", icon: <RulesIcon /> },
       { href: "/drafting-system", label: "Drafting System", icon: <RulesIcon /> },
       { href: "/gmc-health", label: "GMC Health", icon: <AlertIcon /> },
+      { href: "/google-scaling", label: "Google Ads Scaling", icon: <PerfIcon /> },
       { href: "/price-suggestions", label: "Price Suggestions", icon: <PriceIcon /> },
       { href: "/price-ladder", label: "Price Ladder", icon: <PriceIcon /> },
     ],
