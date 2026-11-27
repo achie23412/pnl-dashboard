@@ -321,7 +321,7 @@ export default function DailyReportPage() {
       ) : (
         <div className="space-y-4">
           {storeRows.length === 0 ? (
-            <EmptyState title={`No data for ${rangeLabel}`}>Data may not have been imported for this date yet. The daily refresh runs around 07:00 Amsterdam time.</EmptyState>
+            <EmptyState title={`No data for ${rangeLabel}`}>Data may not have been imported for this date yet. The data refreshes every hour.</EmptyState>
           ) : (
             <Panel pad={false}>
               <div className="overflow-x-auto">

@@ -44,9 +44,9 @@ export default function WorkflowsPage() {
 
   const rows: { name: string; what: string; when: string; status: [string, Tone]; result: string; href?: string }[] = data ? [
     {
-      name: "Daily data refresh",
+      name: "Hourly data refresh",
       what: "Pulls Shopify revenue and orders, ad spend (Windsor), COGS (ShipGoods), sessions and refunds into the dashboard.",
-      when: "Daily 06:00 UTC (07:00 Amsterdam) · Vercel cron",
+      when: "Every hour (within the hour), ShipGoods costs and catalogues 20 min later · Vercel cron",
       status: [last ? (last.status === "success" ? "Ran OK" : last.status === "running" ? "Running" : last.status === "partial" ? "Partly failed" : "Failed") : "No runs", lastTone],
       result: last ? `${when(last.started_at)} · ${last.revenue_rows ?? 0} revenue, ${last.spend_rows ?? 0} spend, ${last.cogs_rows ?? 0} COGS rows${last.error ? ` · ${last.error.slice(0, 120)}` : ""}` : "—",
       href: "/daily-report",

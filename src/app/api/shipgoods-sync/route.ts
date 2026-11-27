@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
 // POST {from, to} (Owner): copy ShipGoods order costs for up to 31 days into shipgoods_orders.
-// Used to fill older months; the last 7 days sync on their own twice a day (/api/cron/warm).
+// Used to fill older months; the last 7 days sync on their own every hour (/api/cron/warm).
 // If `complete` is false, run it again: pages already saved are simply overwritten.
 export async function POST(req: NextRequest) {
   if ((await getRole()) !== "owner") return NextResponse.json({ error: "Owner only" }, { status: 403 })

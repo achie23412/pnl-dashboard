@@ -241,7 +241,7 @@ async function fetchShipgoodsData(dateFrom: string, dateTo: string): Promise<Shi
     }
   }
 
-  // Saved copy first (table shipgoods_orders, filled twice a day): well under a second. Only when
+  // Saved copy first (table shipgoods_orders, filled every hour): well under a second. Only when
   // it doesn't hold the whole range yet does the catalog read the ShipGoods API itself.
   const pages: ShipgoodsResponse[] = []
   const stored = await readStoredShipgoods(dateFrom, dateTo).catch(() => null)

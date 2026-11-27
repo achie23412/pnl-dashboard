@@ -205,16 +205,16 @@ export function buildAutoTodos(input: TodoInput): AutoTodo[] {
         title: lr.status === "error" ? "Data refresh failed" : "Data refresh had errors",
         why: (lr.error || "No error text").slice(0, 220),
         source: "refresh_log (last run)",
-        fix: "Read the error: a missing/expired token or API key must be renewed in Vercel → Settings → Environment Variables, then redeploy. Data fills in on the next 07:00 run.",
+        fix: "Read the error: a missing/expired token or API key must be renewed in Vercel → Settings → Environment Variables, then redeploy. Data fills in on the next hourly run.",
         href: null,
       })
-    } else if (ageH > 26) {
+    } else if (ageH > 3) {
       todos.push({
         key: `refresh-stale:${today}`,
         priority: "high",
-        title: "Data refresh stale (26h+)",
+        title: "Data refresh stale (3h+)",
         why: lr.completed_at ? `Last completed run: ${lr.completed_at.slice(0, 16).replace("T", " ")} UTC.` : "No completed run found.",
-        source: "refresh_log (daily cron ~07:00 Amsterdam)",
+        source: "refresh_log (hourly cron)",
         fix: "In Vercel → the project → Cron Jobs, check the last run of /api/cron/refresh and run it again. If it times out, tell Claude to look at the logs.",
         href: null,
       })
