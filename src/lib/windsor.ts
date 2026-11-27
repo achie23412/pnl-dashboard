@@ -9,13 +9,32 @@ export interface WindsorRow {
 }
 
 // revalidateSec: cache the response in Next's data cache for that long. Only
-// used by read-only dashboard routes; the nightly refresh always fetches fresh.
+// used by read-only dashboard routes; the refresh skips Next's cache (Windsor's own cache: see freshDateTo).
+// Windsor answers a query it has seen before from its own cached copy, and on our plan that copy
+// can stay hours old (today's Google spend stuck at the morning's number). A query that reaches
+// yesterday or today therefore gets an end date 1–24 days in the future that changes every hour
+// (Amsterdam): future days have no rows, but the new query makes Windsor read fresh data. Rows
+// after the real end date are dropped, so callers get exactly what they asked for.
+function freshDateTo(dateTo: string): string {
+  const now = new Date()
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+      .formatToParts(now).map((x) => [x.type, x.value]),
+  )
+  const today = `${p.year}-${p.month}-${p.day}`
+  const yesterday = new Date(Date.parse(today + "T00:00:00Z") - 86400000).toISOString().slice(0, 10)
+  if (dateTo < yesterday) return dateTo
+  const end = dateTo > today ? dateTo : today
+  return new Date(Date.parse(end + "T00:00:00Z") + (1 + (Number(p.hour) || 0)) * 86400000).toISOString().slice(0, 10)
+}
+
 export async function fetchWindsor(connector: string, fields: string[], dateFrom: string, dateTo: string, revalidateSec?: number): Promise<WindsorRow[]> {
+  const askTo = fields.includes("date") ? freshDateTo(dateTo) : dateTo
   const params = new URLSearchParams({
     api_key: process.env.WINDSOR_API_KEY!,
     connector,
     date_from: dateFrom,
-    date_to: dateTo,
+    date_to: askTo,
     fields: fields.join(","),
   })
   const res = await fetch(
@@ -24,7 +43,8 @@ export async function fetchWindsor(connector: string, fields: string[], dateFrom
   )
   if (!res.ok) throw new Error(`Windsor ${connector}: ${res.status} ${await res.text()}`)
   const json = await res.json()
-  return Array.isArray(json.data) ? json.data : []
+  const rows: WindsorRow[] = Array.isArray(json.data) ? json.data : []
+  return askTo === dateTo ? rows : rows.filter((r) => String(r.date).slice(0, 10) <= dateTo)
 }
 
 export interface ShopifyRevenueRow {
