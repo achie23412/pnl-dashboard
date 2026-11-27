@@ -1,8 +1,8 @@
 // Main Hub summary for the daily coach post: the Overall view of the Main Hub (KPI cards, store
 // comparison, per-day breakdown of the last 7 days) for the last 30 full days, fees on (as the hub's
-// default). Same formulas as the Main Hub; COGS from the saved daily COGS (the hub page can also
-// swap in live ShipGoods order costs, so its COGS can differ by a few euros).
+// default). Same formulas and COGS source as the Main Hub (ShipGoods order costs per day).
 import { getServiceClient } from "@/lib/supabase"
+import { orderCogsByDay } from "@/lib/order-cogs"
 import { AVG_COGS_PER_ORDER, TRANSACTION_FEE_RATE, STORES, breakEvenRoas, dropStopped, stoppedWithData } from "@/lib/constants"
 import { mediaBuyerRate } from "@/lib/fee-settings"
 import { loadFeeSettings } from "@/lib/fee-settings-server"
@@ -42,7 +42,26 @@ export async function buildHub(): Promise<HubReport> {
   const d10 = (d: string) => String(d).slice(0, 10)
   const rev: Rev[] = dropStopped(r1.data as unknown as Rev[]).map((r) => ({ ...r, date: d10(r.date), orders: Number(r.orders) || 0, revenue: toEur(Number(r.revenue) || 0, STORE_CURRENCY[r.store] || "EUR", d10(r.date), rates) }))
   const sp: Sp[] = dropStopped(r2.data as unknown as Sp[]).map((r) => ({ ...r, date: d10(r.date), spend: toEur(Number(r.spend) || 0, AD_SPEND_CURRENCY, d10(r.date), rates) }))
-  const cg: Cg[] = dropStopped(r3.data as unknown as Cg[]).map((r) => ({ ...r, date: d10(r.date), cogs: toEur(Number(r.cogs) || 0, COGS_CURRENCY, d10(r.date), rates) }))
+  const savedCg: Cg[] = dropStopped(r3.data as unknown as Cg[]).map((r) => ({ ...r, date: d10(r.date), cogs: toEur(Number(r.cogs) || 0, COGS_CURRENCY, d10(r.date), rates) }))
+  // As the Main Hub page: what ShipGoods charged for the orders placed that day replaces the saved
+  // daily COGS (orders ShipGoods doesn't have yet at that day's average). If ShipGoods fails: saved COGS.
+  const shipgoods = new Map<string, number>()
+  try {
+    const ordersAt = new Map<string, number>()
+    for (const r of rev) ordersAt.set(`${r.store}|${r.date}`, (ordersAt.get(`${r.store}|${r.date}`) || 0) + r.orders)
+    for (const o of await orderCogsByDay(from, to)) {
+      const n = o.priced + o.pending
+      if (n <= 0) continue
+      const missing = Math.max(0, (ordersAt.get(`${o.store}|${o.date}`) || 0) - n)
+      shipgoods.set(`${o.store}|${o.date}`, toEur(o.cogs_usd + missing * (o.cogs_usd / n), COGS_CURRENCY, o.date, rates))
+    }
+  } catch {
+    shipgoods.clear()
+  }
+  const cg: Cg[] = [
+    ...savedCg.filter((r) => !shipgoods.has(`${r.store}|${r.date}`)),
+    ...Array.from(shipgoods.entries()).map(([k, v]) => ({ store: k.split("|")[0], date: k.split("|")[1], cogs: v })),
+  ]
   const ses: Ses[] = dropStopped(r4.data as unknown as Ses[]).map((r) => ({ ...r, date: d10(r.date), sessions: Number(r.sessions) || 0 }))
   const ref: Ref[] = dropStopped(r5.data as unknown as Ref[]).map((r) => ({ ...r, date: d10(r.date), amount: toEur(Number(r.amount) || 0, STORE_CURRENCY[r.store] || "EUR", d10(r.date), rates) }))
 
