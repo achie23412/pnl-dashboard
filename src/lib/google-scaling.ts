@@ -67,7 +67,7 @@ export interface StoreScaling {
   avgSpend3: number
   avgSpend7: number
   cpc3: number | null
-  tracking: { googleConv7: number; shopifyOrders7: number; convOverClicks: number }
+  tracking: { googleConv: number; shopifyOrders: number; convOverClicks: number } // last 3 full days
   gmc: { lastSync: string | null; error: string | null; disapproved: number }
   exclude: ProductRow[]
   optimise: ProductRow[]
@@ -131,12 +131,12 @@ export async function buildScaling(): Promise<ScalingData> {
 
   const sb = getServiceClient()
   const [ordersRes, gmcSetRes, gmcIssRes] = await Promise.all([
-    sb.from("daily_revenue").select("store,date,orders").in("store", GMC_STORES).gte("date", addDays(today, -7)).lte("date", yesterday),
+    sb.from("daily_revenue").select("store,date,orders").in("store", GMC_STORES).gte("date", addDays(today, -3)).lte("date", yesterday),
     sb.from("gmc_settings").select("store,last_sync_at,last_sync_error"),
     sb.from("gmc_issues").select("store").eq("severity", "DISAPPROVED").is("resolved_on", null),
   ])
-  const orders7: Record<string, number> = {}
-  for (const r of (ordersRes.data || []) as { store: string; orders: number }[]) orders7[r.store] = (orders7[r.store] || 0) + num(r.orders)
+  const ordersRecent: Record<string, number> = {} // Shopify orders, last 3 full days
+  for (const r of (ordersRes.data || []) as { store: string; orders: number }[]) ordersRecent[r.store] = (ordersRecent[r.store] || 0) + num(r.orders)
   const gmcSet: Record<string, { last_sync_at: string | null; last_sync_error: string | null }> = {}
   for (const r of (gmcSetRes.data || []) as { store: string; last_sync_at: string | null; last_sync_error: string | null }[]) gmcSet[r.store] = r
   const disapproved: Record<string, number> = {}
@@ -208,14 +208,16 @@ export async function buildScaling(): Promise<ScalingData> {
     const cpcTooHigh = cpc3 != null && cpc3 > th.cpcMax
 
     // ---- tracking check (SOP step 1) ----
-    const googleConv7 = Math.round(sum(last7, "conversions"))
-    const shopifyOrders7 = orders7[store] || 0
-    const convOverClicks = prodRows.filter((r) => WINDSOR_ACCOUNT_MAP[r.account_name]?.store === store && num(r.conversions) > Math.max(1, num(r.clicks))).length
-    if (rows.length > 0 && (googleConv7 > shopifyOrders7 * 1.5 + 2 || convOverClicks > 0)) {
+    // Only the last 3 full days, so a tracking fix shows up here within 3 days
+    // (older days keep the old conversions in Google's data for good).
+    const googleConv = Math.round(sum(last3, "conversions"))
+    const shopifyOrders = ordersRecent[store] || 0
+    const convOverClicks = prodRows.filter((r) => WINDSOR_ACCOUNT_MAP[r.account_name]?.store === store && String(r.date).slice(0, 10) >= addDays(today, -3) && num(r.conversions) > Math.max(1, num(r.clicks))).length
+    if (rows.length > 0 && (googleConv > shopifyOrders * 1.5 + 2 || convOverClicks > 0)) {
       actions.push({
         level: "warn",
         title: "Check your tracking first",
-        detail: `Google counted ${googleConv7} conversions in the last 7 days, Shopify has ${shopifyOrders7} orders${convOverClicks ? `, and ${convOverClicks} product(s) show more conversions than clicks` : ""}. The primary conversion is probably not only the WeTracked purchase, so ROAS here is too high. In Google Ads → Goals → Conversions, keep only the WeTracked purchase as primary, then place a test order with a 99% discount code. Until then, trust Shopify orders over Google's ROAS.`,
+        detail: `Google counted ${googleConv} conversions in the last 3 full days, Shopify has ${shopifyOrders} orders${convOverClicks ? `, and ${convOverClicks} product(s) show more conversions than clicks` : ""}. The primary conversion is probably not only the WeTracked purchase, so Google's conversion count (and its ROAS, if those extra conversions carry a value) is too high. In Google Ads → Goals → Conversions, keep only the WeTracked purchase as primary, then place a test order with a 99% discount code. Until then, trust Shopify orders over Google's numbers.`,
         rule: "SOP 1: WeTracked purchase = primary conversion, confirm with a 99% test order",
       })
     }
@@ -399,7 +401,7 @@ export async function buildScaling(): Promise<ScalingData> {
     return {
       store, url: urls[si], stage, stageStep, actions, main, campaigns, days,
       avgSpend3: round2(avgSpend3), avgSpend7: round2(avgSpend7), cpc3,
-      tracking: { googleConv7, shopifyOrders7, convOverClicks }, gmc: gmcInfo,
+      tracking: { googleConv, shopifyOrders, convOverClicks }, gmc: gmcInfo,
       exclude, optimise: optimise.slice(0, 50), recheck: recheck.slice(0, 50), winners: winners.slice(0, 50), winnerReady, brandReady,
     }
   })

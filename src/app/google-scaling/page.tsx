@@ -170,7 +170,7 @@ function StoreView({ s, th, today }: { s: StoreScaling; th: ScalingData["thresho
           })}
         </div>
         <div className="text-[10px] mt-3" style={{ color: "var(--text-dim)" }}>
-          Tracking check: Google counted {s.tracking.googleConv7} conversions in the last 7 days, Shopify has {s.tracking.shopifyOrders7} orders. Merchant Center: {s.gmc.error ? "last sync failed" : s.gmc.lastSync ? `synced ${new Date(s.gmc.lastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "not synced"} · {s.gmc.disapproved} disapproved item(s) (<Link href="/gmc-health" className="underline">GMC Health</Link>).
+          Tracking check (last 3 full days): Google counted {s.tracking.googleConv} conversions, Shopify has {s.tracking.shopifyOrders} orders. Merchant Center: {s.gmc.error ? "last sync failed" : s.gmc.lastSync ? `synced ${new Date(s.gmc.lastSync).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "not synced"} · {s.gmc.disapproved} disapproved item(s) (<Link href="/gmc-health" className="underline">GMC Health</Link>).
         </div>
       </Panel>
 
