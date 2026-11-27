@@ -36,8 +36,10 @@ export async function orderCogsByDay(from: string, to: string): Promise<(OrderCo
 }
 
 async function collect(from: string, to: string, perDay: boolean): Promise<(OrderCogsRow & { date: string })[]> {
-  // An order placed on `from` was last updated on or after that day; one day earlier covers timezones.
-  const since = new Date(Date.parse(from + "T00:00:00Z") - 86400000).toISOString()
+  // Always read 30 days more than asked: the same orders end up in the "average priced order" for
+  // unpriced orders whether one day (Daily Report) or a month (Main Hub) is asked, so both pages
+  // give the same COGS for the same day. (An order placed on `from` was updated on or after it.)
+  const since = new Date(Date.parse(from + "T00:00:00Z") - 31 * 86400000).toISOString()
   const orders = await fetchOrders(since)
 
   const groups = new Map<string, { store: string; date: string; priced: number[]; pending: number }>()
