@@ -11,6 +11,8 @@ import { FixBanner } from "@/components/FixBanner"
 import { PageShell } from "@/components/PageShell"
 import { DatePicker } from "@/components/DatePicker"
 import { getDateRange } from "@/lib/date-range"
+import { FilterSelect, EMPTY_FILTER, passes, type FilterValue } from "@/components/FilterSelect"
+import { FilterBar } from "@/components/PillSelect"
 import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 // Database reads go through our logged-in server (/api/db), not the public Supabase key
@@ -82,6 +84,25 @@ export default function DailyReportPage() {
   const [refunds, setRefunds] = useState<RefundRow[]>([])
   const [sessions, setSessions] = useState<{ store: string; sessions: number }[]>([])
   const [adPerf, setAdPerf] = useState<AdPerfRow[]>([])
+  // Include or exclude stores: the table, the totals and Ad Performance only count these
+  const [fStore, setFStoreState] = useState<FilterValue>(EMPTY_FILTER)
+  // remembered in this browser
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("daily-report:stores")
+      if (v) setFStoreState(JSON.parse(v) as FilterValue)
+    } catch {
+      // optional
+    }
+  }, [])
+  const setFStore = (f: FilterValue) => {
+    setFStoreState(f)
+    try {
+      localStorage.setItem("daily-report:stores", JSON.stringify(f))
+    } catch {
+      // optional
+    }
+  }
   const [orderCogs, setOrderCogs] = useState<OrderCogsRow[] | null>(null)
   const feeSettings = useFeeSettings()
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
@@ -182,8 +203,8 @@ export default function DailyReportPage() {
       }
 
       return { store: s, revenue: totalRevEur, orders: totalOrders, sessions: storeSessions, cvr, spend: totalSpend, roas, cogs: totalCogs, refunds: Math.round(totalRefund), profit, txnFee, mbFee, cogsPending, spendByChannel }
-    }).filter((s) => s.revenue > 0 || s.spend > 0)
-  }, [revenue, spend, cogs, refunds, sessions, rates, date, orderCogs, feeSettings])
+    }).filter((s) => (s.revenue > 0 || s.spend > 0) && passes(fStore, s.store))
+  }, [revenue, spend, cogs, refunds, sessions, rates, date, orderCogs, feeSettings, fStore])
 
   const totals = useMemo(() => {
     const r = storeRows.reduce((acc, s) => ({
@@ -241,6 +262,8 @@ export default function DailyReportPage() {
   }
   const rangeLabel = oneDay ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)} (${nDays} days)`
   const hasData = !loading && storeRows.length > 0
+  const adRows = adPerf.filter((r) => passes(fStore, r.store))
+  const storeOptions = Array.from(new Set([...STORES.filter((x) => x !== "Overall"), ...revenue.map((r) => r.store), ...spend.map((r) => r.store)]))
 
   return (
     <PageShell
@@ -265,9 +288,13 @@ export default function DailyReportPage() {
     >
       <FixBanner />
 
+      <FilterBar right={fStore.values.length ? <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>{fStore.mode === "include" ? "Only" : "Without"} {fStore.values.join(", ")}</span> : undefined}>
+        <FilterSelect label="Store" options={storeOptions} value={fStore} onChange={setFStore} />
+      </FilterBar>
+
       {/* Store timezone clocks */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {STORES.filter(s => s !== "Overall").map((s) => {
+        {STORES.filter(s => s !== "Overall" && passes(fStore, s)).map((s) => {
           const tz = STORE_TIMEZONE[s] || "UTC"
           const market = STORE_MARKET[s] || ""
           const localDate = getLocalDate(tz)
@@ -389,7 +416,7 @@ export default function DailyReportPage() {
           )}
 
           {/* Ad Performance breakdown */}
-          {adPerf.length > 0 && (
+          {adRows.length > 0 && (
             <Panel title="Ad Performance" pad={false}>
               <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
@@ -405,7 +432,7 @@ export default function DailyReportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {adPerf
+                    {adRows
                       .sort((a, b) => b.spend - a.spend)
                       .map((r) => (
                         <tr key={`${r.store}|${r.channel}`} style={ROW_BORDER} className="hover:bg-white/[0.02] transition-colors">
@@ -428,9 +455,9 @@ export default function DailyReportPage() {
                       ))}
                     {/* Totals row */}
                     {(() => {
-                      const totalSpend = adPerf.reduce((s, r) => s + r.spend, 0)
-                      const totalClicks = adPerf.reduce((s, r) => s + r.clicks, 0)
-                      const totalImpressions = adPerf.reduce((s, r) => s + r.impressions, 0)
+                      const totalSpend = adRows.reduce((s, r) => s + r.spend, 0)
+                      const totalClicks = adRows.reduce((s, r) => s + r.clicks, 0)
+                      const totalImpressions = adRows.reduce((s, r) => s + r.impressions, 0)
                       const totalCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
                       const totalCpc = totalClicks > 0 ? totalSpend / totalClicks : 0
                       return (
