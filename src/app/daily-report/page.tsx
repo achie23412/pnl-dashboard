@@ -9,7 +9,8 @@ import type { EurRates } from "@/lib/currency"
 import type { RevenueRow, SpendRow, CogsRow, RefundRow } from "@/lib/types"
 import { FixBanner } from "@/components/FixBanner"
 import { PageShell } from "@/components/PageShell"
-import { DayPicker } from "@/components/DayPicker"
+import { DatePicker } from "@/components/DatePicker"
+import { getDateRange } from "@/lib/date-range"
 import { Panel, Badge, Button, Loading, EmptyState, TH, TD, ROW_BORDER } from "@/components/ui"
 
 // Database reads go through our logged-in server (/api/db), not the public Supabase key
@@ -62,7 +63,19 @@ interface AdPerfRow {
 }
 
 export default function DailyReportPage() {
-  const [date, setDate] = useState(toInputDate(new Date()))
+  // Date range, same picker and presets as the Main Hub (one day = from and to the same day)
+  const [preset, setPreset] = useState("today")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
+  const [from, to] = getDateRange(preset, customFrom, customTo)
+  const date = to // the range's last day (rates, single-day labels)
+  const oneDay = from === to
+  const nDays = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
+  const setRange = (f: string, t: string) => {
+    setPreset("custom")
+    setCustomFrom(f)
+    setCustomTo(t)
+  }
   const [revenue, setRevenue] = useState<RevenueRow[]>([])
   const [spend, setSpend] = useState<SpendRow[]>([])
   const [cogs, setCogs] = useState<CogsRow[]>([])
@@ -84,34 +97,39 @@ export default function DailyReportPage() {
     async function load() {
       setLoading(true)
       const [{ data: rev }, { data: sp }, { data: cg }, { data: ref }, { data: ses }] = await Promise.all([
-        supabase.from("daily_revenue").select("*").eq("date", date),
-        supabase.from("daily_spend").select("*").eq("date", date),
-        supabase.from("daily_cogs").select("*").eq("date", date),
-        supabase.from("refunds").select("*").eq("date", date),
-        supabase.from("daily_sessions").select("store,sessions").eq("date", date),
+        supabase.from("daily_revenue").select("*").gte("date", from).lte("date", to).limit(20000),
+        supabase.from("daily_spend").select("*").gte("date", from).lte("date", to).limit(20000),
+        supabase.from("daily_cogs").select("*").gte("date", from).lte("date", to).limit(20000),
+        supabase.from("refunds").select("*").gte("date", from).lte("date", to).limit(20000),
+        supabase.from("daily_sessions").select("store,sessions,date").gte("date", from).lte("date", to).limit(20000),
       ])
       // Stopped stores (Blinky) only show for days before their stop date
       setRevenue(dropStopped(rev as RevenueRow[]))
       setSpend(dropStopped(sp as SpendRow[]))
       setCogs(dropStopped(cg as CogsRow[]))
       setRefunds(dropStopped(ref as RefundRow[]))
-      setSessions(dropStopped(((ses as { store: string; sessions: number }[]) || []).map((x) => ({ ...x, date }))))
-      setRates(await fetchEurRates(date, date))
-      // Actual supplier cost of the orders placed this day (ShipGoods, per order)
+      setSessions(dropStopped(((ses as { store: string; sessions: number; date: string }[]) || [])))
+      setRates(await fetchEurRates(from, to))
+      // Actual supplier cost of the orders placed in these days (ShipGoods, per order). Longer than
+      // 31 days: the saved daily COGS is used instead (ShipGoods would take too long).
       setOrderCogs(null)
-      fetch(`/api/order-cogs?date=${date}`)
-        .then((r) => (r.ok ? r.json() : { rows: [] }))
-        .then((d) => setOrderCogs(d.rows || []))
-        .catch(() => setOrderCogs([]))
-      // Fetch ad performance (clicks, impressions, CTR, CPC) from Windsor
-      fetch(`/api/ad-performance?date=${date}`)
+      if (nDays <= 31) {
+        fetch(`/api/order-cogs?from=${from}&to=${to}`)
+          .then((r) => (r.ok ? r.json() : { rows: [] }))
+          .then((d) => setOrderCogs(d.rows || []))
+          .catch(() => setOrderCogs([]))
+      } else setOrderCogs([])
+      // Ad performance (clicks, impressions, CTR, CPC) from Windsor, up to the last 92 days
+      const adFrom = nDays > 92 ? new Date(Date.parse(to) - 91 * 86400000).toISOString().slice(0, 10) : from
+      fetch(`/api/ad-performance?from=${adFrom}&to=${to}`)
         .then((r) => r.ok ? r.json() : { rows: [] })
         .then((d) => setAdPerf(d.rows || []))
         .catch(() => setAdPerf([]))
       setLoading(false)
     }
     load()
-  }, [date])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to])
 
   const storeRows = useMemo((): StoreRow[] => {
     const storeNames: string[] = [...STORES.filter((s) => s !== "Overall"), ...stoppedWithData(revenue, spend)]
@@ -147,7 +165,8 @@ export default function DailyReportPage() {
       // Revenue is gross (order rows only); refunds are subtracted here.
       // Same as the profit sheet: minus transaction fee (% of gross) and media buyer fee (% of ad spend)
       const txnFee = totalRevEur * (TRANSACTION_FEE_RATE[s] ?? 0.035)
-      const mbFee = totalSpend * mediaBuyerRate(feeSettings, s, date) // 0 until its start date (Store Settings)
+      // 0 before its start date (Store Settings), per day so a range can straddle the start date
+      const mbFee = sp.reduce((sum, r) => sum + r.spend * mediaBuyerRate(feeSettings, s, r.date), 0)
       const profit = totalRevEur - totalRefund - totalSpend - totalCogs - txnFee - mbFee
       const roas = totalSpend > 0 ? totalRevEur / totalSpend : 0
 
@@ -215,14 +234,19 @@ export default function DailyReportPage() {
   const totalBe = beRoas(totals)
   // Profit margin: profit as a share of revenue
   const profitPct = (profit: number, revenue: number) => (revenue > 0 ? `${((profit / revenue) * 100).toFixed(1)}%` : "—")
-  const shiftDay = (n: number) => { const d = new Date(date + "T00:00:00"); d.setDate(d.getDate() + n); setDate(toInputDate(d)) }
+  // ← / → move the whole range by its own length (one day for a single day)
+  const shiftDay = (n: number) => {
+    const move = (iso: string) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n * nDays); return toInputDate(d) }
+    setRange(move(from), move(to))
+  }
+  const rangeLabel = oneDay ? formatDate(from) : `${formatDate(from)} – ${formatDate(to)} (${nDays} days)`
   const hasData = !loading && storeRows.length > 0
 
   return (
     <PageShell
       title="Daily Report"
       breadcrumb="Home → Daily Report"
-      description={`Revenue, ad spend, COGS, refunds and profit per store for ${formatDate(date)}. All in EUR.`}
+      description={`Revenue, ad spend, COGS, refunds and profit per store for ${rangeLabel}. All in EUR.`}
       stats={[
         { label: "Revenue", value: hasData ? fmt(totals.revenue) : "—", color: "var(--green)" },
         { label: "Orders", value: hasData ? String(totals.orders) : "—" },
@@ -232,10 +256,10 @@ export default function DailyReportPage() {
       ]}
       actions={
         <>
-          <Button size="sm" onClick={() => shiftDay(-1)} title="Previous day">←</Button>
-          <DayPicker value={date} onChange={setDate} />
-          <Button size="sm" onClick={() => shiftDay(1)} title="Next day">→</Button>
-          <Button size="sm" onClick={() => setDate(toInputDate(new Date()))}>Today</Button>
+          <Button size="sm" onClick={() => shiftDay(-1)} title={oneDay ? "Previous day" : `Previous ${nDays} days`}>←</Button>
+          <DatePicker preset={preset} customFrom={customFrom} customTo={customTo} onChange={(p, f, t) => { setPreset(p); setCustomFrom(f); setCustomTo(t) }} />
+          <Button size="sm" onClick={() => shiftDay(1)} title={oneDay ? "Next day" : `Next ${nDays} days`}>→</Button>
+          <Button size="sm" onClick={() => setPreset("today")}>Today</Button>
         </>
       }
     >
@@ -248,8 +272,8 @@ export default function DailyReportPage() {
           const market = STORE_MARKET[s] || ""
           const localDate = getLocalDate(tz)
           const localTime = getLocalTime(tz)
-          const isSelectedDate = localDate === date
-          const isFuture = date > localDate
+          const isSelectedDate = localDate >= from && localDate <= to
+          const isFuture = from > localDate
           return (
             <div
               key={s}
@@ -259,7 +283,7 @@ export default function DailyReportPage() {
               <span style={{ color: "var(--text-dim)" }}>{market}</span>
               <span className="font-mono tabular-nums" style={{ color: "var(--text)" }} suppressHydrationWarning>{localTime}</span>
               {isFuture && <Badge tone="amber">Still {localDate.slice(5)}</Badge>}
-              {isSelectedDate && <Badge tone="green">Today</Badge>}
+              {isSelectedDate && <Badge tone="green">{oneDay ? "Today" : "Incl. today"}</Badge>}
             </div>
           )
         })}
@@ -270,7 +294,7 @@ export default function DailyReportPage() {
       ) : (
         <div className="space-y-4">
           {storeRows.length === 0 ? (
-            <EmptyState title={`No data for ${formatDate(date)}`}>Data may not have been imported for this date yet. The daily refresh runs around 07:00 Amsterdam time.</EmptyState>
+            <EmptyState title={`No data for ${rangeLabel}`}>Data may not have been imported for this date yet. The daily refresh runs around 07:00 Amsterdam time.</EmptyState>
           ) : (
             <Panel pad={false}>
               <div className="overflow-x-auto">
@@ -297,7 +321,7 @@ export default function DailyReportPage() {
                     {storeRows.map((s) => {
                       const tz = STORE_TIMEZONE[s.store] || "UTC"
                       const localDate = getLocalDate(tz)
-                      const isFuture = date > localDate
+                      const isFuture = from > localDate
                       return (
                         <tr key={s.store} style={{ ...ROW_BORDER, opacity: isFuture ? 0.5 : 1 }}>
                           <td className={`${TD} font-medium`} style={{ color: "var(--text)" }}>{s.store}</td>
@@ -359,7 +383,7 @@ export default function DailyReportPage() {
                 </table>
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone · Profit = revenue − refunds − ad spend − COGS (ShipGoods price of the day&apos;s orders) − transaction fee − media buyer fee (from its start date in Store Settings) · BE ROAS = the day&apos;s break-even ROAS from its COGS % and fees{orderCogs == null ? " · Loading ShipGoods costs…" : totals.cogsPending > 0 ? ` · * ${totals.cogsPending} order(s) not priced by ShipGoods yet, store average used` : ""}
+                All amounts in EUR · Revenue converted at ECB daily rate{rates.fallback ? " (fallback rates)" : ""} · Times shown in each store&apos;s market timezone · Profit = revenue − refunds − ad spend − COGS ({nDays <= 31 ? "ShipGoods price of the orders placed in these days" : "saved daily COGS; ranges over 31 days don't read ShipGoods per order"}) − transaction fee − media buyer fee (from its start date in Store Settings) · BE ROAS = break-even ROAS of the period from its COGS % and fees{orderCogs == null ? " · Loading ShipGoods costs…" : totals.cogsPending > 0 ? ` · * ${totals.cogsPending} order(s) not priced by ShipGoods yet, store average used` : ""}
               </div>
             </Panel>
           )}
@@ -429,7 +453,7 @@ export default function DailyReportPage() {
                 </table>
               </div>
               <div className="px-3 py-2 text-[9px]" style={{ color: "var(--text-dim)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                Clicks, impressions, CTR and CPC from Windsor.ai, per ad account day (NL; Meta LUMEGLASSES: Los Angeles), so spend here can differ a little from the store-day spend above · All ad spend in EUR · Data cached for 5 min
+                Clicks, impressions, CTR and CPC from Windsor.ai, per ad account day (NL; Meta LUMEGLASSES: Los Angeles), so spend here can differ a little from the store-day spend above · All ad spend in EUR · Data cached for 5 min{nDays > 92 ? " · Ad performance shows the last 92 days of this range" : ""}
               </div>
             </Panel>
           )}

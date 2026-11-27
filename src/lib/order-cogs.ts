@@ -22,8 +22,13 @@ const priceOf = (o: SGOrder): number | null => {
 }
 
 export async function orderCogsForDay(date: string): Promise<OrderCogsRow[]> {
-  // An order placed on `date` was last updated on or after that day; one day earlier covers timezones.
-  const since = new Date(Date.parse(date + "T00:00:00Z") - 86400000).toISOString()
+  return orderCogsForRange(date, date)
+}
+
+// Same for every order placed from `from` to `to` (store's local days), added up per store.
+export async function orderCogsForRange(from: string, to: string): Promise<OrderCogsRow[]> {
+  // An order placed on `from` was last updated on or after that day; one day earlier covers timezones.
+  const since = new Date(Date.parse(from + "T00:00:00Z") - 86400000).toISOString()
   const orders = await fetchOrders(since)
 
   const byStore = new Map<string, { priced: number[]; pending: number }>()
@@ -33,7 +38,8 @@ export async function orderCogsForDay(date: string): Promise<OrderCogsRow[]> {
     if (!store || String(o.status).toLowerCase().includes("cancel")) continue
     const p = priceOf(o)
     if (p != null) avgPool.set(store, [...(avgPool.get(store) || []), p])
-    if (localDay(o.created_at, STORE_TIMEZONE[store] || "UTC") !== date) continue
+    const day = localDay(o.created_at, STORE_TIMEZONE[store] || "UTC")
+    if (day < from || day > to) continue
     const cur = byStore.get(store) || { priced: [], pending: 0 }
     if (p != null) cur.priced.push(p)
     else cur.pending++

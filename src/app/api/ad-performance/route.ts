@@ -13,11 +13,11 @@ interface AdPerfRow {
   cpc: number
 }
 
-async function buildAdPerformance(date: string): Promise<AdPerfRow[]> {
+async function buildAdPerformance(from: string, to: string = from): Promise<AdPerfRow[]> {
   const [google, meta, tiktok] = await Promise.all([
-    fetchWindsor("google_ads", ["date", "account_name", "spend", "clicks", "impressions"], date, date).catch(() => []),
-    fetchWindsor("facebook", ["date", "account_name", "spend", "clicks", "impressions"], date, date).catch(() => []),
-    fetchWindsor("tiktok", ["date", "account_name", "spend", "clicks", "impressions"], date, date).catch(() => []),
+    fetchWindsor("google_ads", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
+    fetchWindsor("facebook", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
+    fetchWindsor("tiktok", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
   ])
 
   const byKey = new Map<string, { spend: number; clicks: number; impressions: number; store: string; channel: string }>()
@@ -54,9 +54,12 @@ async function buildAdPerformance(date: string): Promise<AdPerfRow[]> {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get("date") || new Date().toISOString().slice(0, 10)
+  // ?from=&to= for a range (Daily Report with several days); ?date= for one day
+  const from = searchParams.get("from") || date
+  const to = searchParams.get("to") || from
 
   try {
-    const cached = unstable_cache(() => buildAdPerformance(date), [`ad-perf-v2-${date}`], { revalidate: 300 })
+    const cached = unstable_cache(() => buildAdPerformance(from, to), [`ad-perf-v2-${from}-${to}`], { revalidate: 300 })
     const rows = await cached()
     return NextResponse.json({ date, rows })
   } catch (e) {
