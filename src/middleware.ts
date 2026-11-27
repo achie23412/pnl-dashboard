@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { SESSION_COOKIE, verifySession } from "@/lib/session"
+import { CS_HOME, csCanOpen } from "@/lib/cs-access"
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
@@ -26,6 +27,12 @@ export async function middleware(req: NextRequest) {
   if (!role) {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not logged in" }, { status: 401 })
     return NextResponse.redirect(new URL("/login", req.url))
+  }
+
+  // Customer service only gets the CS pages and the API routes behind them
+  if (role === "cs" && !csCanOpen(pathname)) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not available for the customer service login" }, { status: 403 })
+    return NextResponse.redirect(new URL(CS_HOME, req.url))
   }
 
   return NextResponse.next()

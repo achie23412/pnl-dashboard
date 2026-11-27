@@ -1,4 +1,5 @@
-// Who is logged in: "owner" (DASHBOARD_USER) or "coach" (COACH_USER). The role is part of the
+// Who is logged in: "owner" (DASHBOARD_USER), "coach" (COACH_USER) or "cs" (CS_USER, customer
+// service: only the pages in src/lib/cs-access.ts). The role is part of the
 // signed pnl_session cookie (src/lib/session.ts), so the server can check it (e.g. only the Owner
 // approves refunds).
 import { cookies } from "next/headers"

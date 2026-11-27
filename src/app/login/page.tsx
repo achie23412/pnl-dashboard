@@ -21,7 +21,9 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
-      router.push("/")
+      // Customer service starts on its own home page; the others on the overview
+      const { role } = await res.json().catch(() => ({ role: null }))
+      router.push(role === "cs" ? "/inbox-queue" : "/")
     } else {
       setError("Invalid username or password")
     }

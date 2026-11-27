@@ -2,6 +2,8 @@
 // Only the tables and actions below are allowed; middleware already requires a valid session.
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
+import { getRole } from "@/lib/auth-role"
+import { CS_DB_TABLES } from "@/lib/cs-access"
 
 export const dynamic = "force-dynamic"
 
@@ -35,6 +37,10 @@ type Body = {
 export async function POST(req: NextRequest) {
   const b = (await req.json().catch(() => null)) as Body | null
   if (!b || !ALLOWED[b.table]?.includes(b.op)) return NextResponse.json({ data: null, error: { message: "Not allowed" } }, { status: 403 })
+  // The customer service login only reads the tables its pages need (no revenue, spend or COGS)
+  if ((await getRole()) === "cs" && (b.op !== "select" || !CS_DB_TABLES.includes(b.table))) {
+    return NextResponse.json({ data: null, error: { message: "Not allowed" } }, { status: 403 })
+  }
   const filters = b.filters || []
   if (!filters.every((f) => Array.isArray(f) && FILTERS.includes(f[0]) && COLUMN.test(String(f[1])))) {
     return NextResponse.json({ data: null, error: { message: "Bad filter" } }, { status: 400 })

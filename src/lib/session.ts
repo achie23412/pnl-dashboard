@@ -1,7 +1,10 @@
 // Signed login session: "<role>.<expires ms>.<HMAC-SHA256 of role.expires>" in the httpOnly
 // pnl_session cookie. Only the server knows the secret, so a made-up or edited cookie fails the
 // check in middleware. Uses Web Crypto so the same code runs in middleware (Edge) and API routes.
-export type Role = "owner" | "coach"
+// owner = DASHBOARD_USER, coach = COACH_USER, cs = CS_USER (customer service: only the pages in
+// src/lib/cs-access.ts)
+export type Role = "owner" | "coach" | "cs"
+const ROLES: readonly string[] = ["owner", "coach", "cs"]
 export const SESSION_COOKIE = "pnl_session"
 export const SESSION_DAYS = 30
 
@@ -40,7 +43,7 @@ export async function verifySession(value: string | undefined | null): Promise<R
   const parts = value.split(".")
   if (parts.length !== 3) return null
   const [role, expires, sig] = parts
-  if (role !== "owner" && role !== "coach") return null
+  if (!ROLES.includes(role)) return null
   if (!/^\d+$/.test(expires) || Number(expires) < Date.now()) return null
-  return sameString(sig, await hmac(`${role}.${expires}`, key)) ? role : null
+  return sameString(sig, await hmac(`${role}.${expires}`, key)) ? (role as Role) : null
 }

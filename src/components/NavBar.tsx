@@ -3,6 +3,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { db } from "@/lib/db-client"
+import { CS_PAGES } from "@/lib/cs-access"
 
 function Icon({ d, size = 14 }: { d: string; size?: number }) {
   return (
@@ -366,8 +367,28 @@ export function NavBar() {
   const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [supplierBadge, setSupplierBadge] = useState(0)
+  // undefined = not known yet; "cs" sees only the customer service pages
+  const [role, setRole] = useState<string | null | undefined>(undefined)
+  const loaded = useRef(false)
 
+  // The menu is mounted on /login before anyone is logged in, so load once on the first page after it
   useEffect(() => {
+    if (pathname === "/login" || loaded.current) return
+    loaded.current = true
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => {
+        const r: string | null = j.role ?? null
+        setRole(r)
+        if (r === "cs") return
+        fetch("/api/supplier-data")
+          .then((res) => res.json())
+          .then((d) => {
+            if (d.summary?.cogs_out_of_range) setSupplierBadge(d.summary.cogs_out_of_range)
+          })
+          .catch(() => {})
+      })
+      .catch(() => setRole(null))
     db.from("refresh_log")
       .select("completed_at")
       .order("completed_at", { ascending: false })
@@ -375,13 +396,7 @@ export function NavBar() {
       .then(({ data }) => {
         if (data?.[0]?.completed_at) setLastRefresh(data[0].completed_at)
       })
-    fetch("/api/supplier-data")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.summary?.cogs_out_of_range) setSupplierBadge(d.summary.cogs_out_of_range)
-      })
-      .catch(() => {})
-  }, [])
+  }, [pathname])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -407,9 +422,12 @@ export function NavBar() {
   }
   const badgeMap: Record<string, number> = {}
   if (supplierBadge > 0) badgeMap["/supplier-costs"] = supplierBadge
+  // Customer service only sees its own pages (middleware blocks the rest anyway); nothing until the role is known
+  const csPages: readonly string[] = CS_PAGES
+  const allowed = (href: string) => (role === undefined ? false : role === "cs" ? csPages.includes(href) : true)
   const visibleSections = NAV_SECTIONS.map((section) => ({
     section,
-    items: section.items.filter((i) => matches(section, i)).map((i) => badgeMap[i.href] ? { ...i, badge: badgeMap[i.href] } : i),
+    items: section.items.filter((i) => allowed(i.href) && matches(section, i)).map((i) => badgeMap[i.href] ? { ...i, badge: badgeMap[i.href] } : i),
   })).filter((x) => x.items.length > 0)
   const firstHit = visibleSections[0]?.items[0]
 
@@ -496,7 +514,7 @@ export function NavBar() {
 
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}>
-        {visibleSections.length === 0 && (
+        {visibleSections.length === 0 && role !== undefined && (
           <div className="text-[10px] px-2.5 py-2" style={{ color: "var(--text-dim)" }}>No page matches “{query}”.</div>
         )}
         {visibleSections.map(({ section, items }) => {

@@ -21,16 +21,21 @@ export async function POST(req: NextRequest) {
   const coachUser = process.env.COACH_USER || (process.env.coach ? "coach" : undefined)
   const coachPass = process.env.COACH_PASS || process.env.coach || undefined
 
+  // Customer service: only the CS pages (src/lib/cs-access.ts). No login until both are set in Vercel.
+  const csUser = process.env.CS_USER
+  const csPass = process.env.CS_PASS
+
   const isOwner = same(username, ownerUser) && same(password, ownerPass)
   const isCoach = !isOwner && same(username, coachUser) && same(password, coachPass)
+  const isCs = !isOwner && !isCoach && same(username, csUser) && same(password, csPass)
 
-  if (!isOwner && !isCoach) {
+  if (!isOwner && !isCoach && !isCs) {
     // Slow down password guessing
     await new Promise((r) => setTimeout(r, 1000))
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
   }
 
-  const role = isOwner ? "owner" : "coach"
+  const role = isOwner ? "owner" : isCoach ? "coach" : "cs"
   const cookieStore = await cookies()
   cookieStore.set(SESSION_COOKIE, await createSession(role), {
     httpOnly: true,
