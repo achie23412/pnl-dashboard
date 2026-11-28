@@ -107,6 +107,7 @@ export default function DailyReportPage() {
   const feeSettings = useFeeSettings()
   const [rates, setRates] = useState<EurRates>(FALLBACK_RATES)
   const [loading, setLoading] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState<string | null>(null)
   const [now, setNow] = useState(new Date())
 
   useEffect(() => {
@@ -146,6 +147,12 @@ export default function DailyReportPage() {
         .then((r) => r.ok ? r.json() : { rows: [] })
         .then((d) => setAdPerf(d.rows || []))
         .catch(() => setAdPerf([]))
+      supabase.from("refresh_log")
+        .select("completed_at")
+        .in("status", ["success", "partial"])
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => { if (data?.[0]?.completed_at) setLastRefresh(data[0].completed_at) })
       setLoading(false)
     }
     load()
@@ -269,7 +276,7 @@ export default function DailyReportPage() {
     <PageShell
       title="Daily Report"
       breadcrumb="Home → Daily Report"
-      description={`Revenue, ad spend, COGS, refunds and profit per store for ${rangeLabel}. All in EUR.`}
+      description={`Revenue, ad spend, COGS, refunds and profit per store for ${rangeLabel}. All in EUR.${lastRefresh ? ` · Last refresh: ${new Date(lastRefresh).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}` : ""}`}
       stats={[
         { label: "Revenue", value: hasData ? fmt(totals.revenue) : "—", color: "var(--green)" },
         { label: "Orders", value: hasData ? String(totals.orders) : "—" },
