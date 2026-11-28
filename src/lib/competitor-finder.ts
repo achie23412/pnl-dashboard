@@ -53,7 +53,7 @@ export function phrasesFromTitle(title: string, vendor?: string | null): string[
 }
 
 // Segments the Google fashion stores don't sell: keep these out of the generic keyword list.
-const OFF_NICHE = /\b(wedding|bridal|bride|bridesmaid|prom|quinceanera|homecoming|graduation|communion|christening|running|basketball|football|soccer|golf|tennis|hiking|climbing|ski|snowboard|cycling|bike|gym|yoga|workout|nursing|maternity|kids|kid|baby|toddler|girls|boys|child|children|school|uniform|scrubs|costume|cosplay|halloween|lingerie|underwear|bra|bras|panties|swimsuit|bikini|wig|wigs|jewelry|jewellery|ring|rings|necklace|earrings|watch|watches|nike|adidas|puma|reebok|vans|converse|crocs|ugg|uggs|skechers|asics|hoka|birkenstock|timberland|dr|martens|zara|shein|primark|levis|gucci|prada|on)\b/
+const OFF_NICHE = /\b(wedding|bridal|bride|bridesmaid|prom|quinceanera|homecoming|graduation|communion|christening|running|basketball|football|soccer|golf|tennis|hiking|climbing|ski|snowboard|cycling|bike|gym|yoga|workout|nursing|maternity|kids|kid|baby|toddler|girls|boys|child|children|school|uniform|scrubs|costume|cosplay|halloween|lingerie|underwear|bra|bras|panties|swimsuit|bikini|wig|wigs|jewelry|jewellery|ring|rings|necklace|earrings|watch|watches|nike|adidas|puma|reebok|vans|converse|crocs|ugg|uggs|skechers|asics|hoka|birkenstock|timberland|dr|martens|zara|shein|primark|levis|gucci|prada|on|hochzeit|braut|brautjungfer|kinder|bruiloft|bruid|bruidsmeisje|kinderen|matrimonio|sposa|damigella|bambini|neonato)\b/
 
 const host = (d: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "")
 // Word forms for matching only: "men's"/"mens" → men, "ladies"/"womens" → women, plurals → singular.
