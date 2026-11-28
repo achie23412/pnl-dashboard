@@ -40,7 +40,7 @@ export function phrasesFromTitle(title: string, vendor?: string | null): string[
   if (vendor) t = t.replace(vendor.toLowerCase(), " ")
   const words = t
     .replace(/[’`]/g, "'")
-    .replace(/[^\p{L}' ]+/gu, " ")
+    .replace(/[^a-zA-Z\u00C0-\u024F' ]+/g, " ") // letters incl. accented Latin (no /u flag: tsconfig targets ES5)
     .split(/\s+/)
     .filter((w) => w && !COLOURS.has(w) && !STOP.has(w) && !SIZES.test(w))
   if (words.length < 2) return []
@@ -67,7 +67,7 @@ function stem(w: string): string {
 }
 const stemAll = (s: string) => s.split(" ").filter(Boolean).map(stem)
 
-const norm = (s: string) => s.toLowerCase().replace(/[‘’]s\b/g, "").replace(/[^\p{L} ]+/gu, " ").replace(/\s+/g, " ").trim()
+const norm = (s: string) => s.toLowerCase().replace(/[‘’]s\b/g, "").replace(/[^a-zA-Z\u00C0-\u024F ]+/g, " ").replace(/\s+/g, " ").trim()
 
 export async function buildKeywords(market: MarketCode): Promise<{ keywords: FinderKeyword[]; competitorsInMarket: number; plannerCount: number; productsScanned: number; productsInMarket: number }> {
   const db = getServiceClient()
