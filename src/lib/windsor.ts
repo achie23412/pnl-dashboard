@@ -218,16 +218,16 @@ function tzOffsetMs(tz: string, utcMs: number): number {
   return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - utcMs
 }
 // Local date + hour in a timezone -> UTC milliseconds
-function zonedToUtc(date: string, hour: number, tz: string): number {
+export function zonedToUtc(date: string, hour: number, tz: string): number {
   const guess = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), hour)
   let utc = guess - tzOffsetMs(tz, guess)
   utc = guess - tzOffsetMs(tz, utc)
   return utc
 }
-function dayIn(tz: string, utcMs: number): string {
+export function dayIn(tz: string, utcMs: number): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(utcMs))
 }
-const shiftDay = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10)
+export const shiftDay = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10)
 
 type SpendOut = { date: string; channel: string; account: string; store: string; spend: number }
 

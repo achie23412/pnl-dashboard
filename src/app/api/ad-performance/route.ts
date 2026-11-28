@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { fetchWindsor } from "@/lib/windsor"
+import { metaDirectConfigured, fetchMetaPerformanceDirect } from "@/lib/meta-direct"
 import { WINDSOR_ACCOUNT_MAP } from "@/lib/constants"
 
 interface AdPerfRow {
@@ -16,7 +17,11 @@ interface AdPerfRow {
 async function buildAdPerformance(from: string, to: string = from): Promise<AdPerfRow[]> {
   const [google, meta, tiktok] = await Promise.all([
     fetchWindsor("google_ads", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
-    fetchWindsor("facebook", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
+    // Meta from the Marketing API when configured (Windsor if that fails)
+    (metaDirectConfigured()
+      ? fetchMetaPerformanceDirect(from, to).then((rows) => rows as unknown as Awaited<ReturnType<typeof fetchWindsor>>).catch(() => fetchWindsor("facebook", ["date", "account_name", "spend", "clicks", "impressions"], from, to))
+      : fetchWindsor("facebook", ["date", "account_name", "spend", "clicks", "impressions"], from, to)
+    ).catch(() => []),
     fetchWindsor("tiktok", ["date", "account_name", "spend", "clicks", "impressions"], from, to).catch(() => []),
   ])
 

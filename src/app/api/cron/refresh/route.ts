@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceClient } from "@/lib/supabase"
 import { fetchShopifyRevenueAndRefunds, fetchMetaSpend, fetchTikTokSpend, fetchGoogleAdsSpend } from "@/lib/windsor"
+import { metaDirectConfigured, fetchMetaSpendDirect } from "@/lib/meta-direct"
 import { fetchShopifyDirect } from "@/lib/shopify-direct"
 import { fetchShopifySessions, hasAnySessionsCredentials } from "@/lib/shopify-sessions"
 import { fetchCogs } from "@/lib/shipgoods"
@@ -58,7 +59,13 @@ export async function GET(req: NextRequest) {
 
     const [revenueResult, metaResult, tiktokResult, googleResult, cogsResult, sessionsResult] = await Promise.allSettled([
       revenueFetcher(from, today),
-      fetchMetaSpend(from, today),
+      // Meta straight from the Marketing API when META_ACCESS_TOKEN is set; Windsor if that fails
+      metaDirectConfigured()
+        ? fetchMetaSpendDirect(from, today).catch((e) => {
+            errors.push(`Meta direct failed, Windsor used: ${e instanceof Error ? e.message : String(e)}`)
+            return fetchMetaSpend(from, today)
+          })
+        : fetchMetaSpend(from, today),
       fetchTikTokSpend(from, today),
       fetchGoogleAdsSpend(from, today),
       fetchCogs(from, today),
