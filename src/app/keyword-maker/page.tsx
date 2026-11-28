@@ -15,7 +15,11 @@ const MARKETS = [
   { code: "US", label: "United States", gl: "us", google: "www.google.com", ads: "US" },
   { code: "UK", label: "United Kingdom", gl: "uk", google: "www.google.co.uk", ads: "GB" },
   { code: "IE", label: "Ireland", gl: "ie", google: "www.google.ie", ads: "IE" },
+  { code: "DE", label: "Germany", gl: "de", google: "www.google.de", ads: "DE" },
+  { code: "NL", label: "Netherlands", gl: "nl", google: "www.google.nl", ads: "NL" },
+  { code: "IT", label: "Italy", gl: "it", google: "www.google.it", ads: "IT" },
 ]
+const HL: Record<string, string> = { US: "en", UK: "en", IE: "en", DE: "de", NL: "nl", IT: "it" }
 const SOURCE_LABEL: Record<string, string> = { planner: "Keyword Planner", competitors: "Competitor products", base: "Keyword list" }
 const NICHES = ["mix clothing", "womens clothing", "mens clothing", "niche"]
 const inputCls = "rounded-lg px-3 py-1.5 text-[11px] outline-none"
@@ -26,8 +30,8 @@ function searchLinks(kw: string, code: string) {
   const m = MARKETS.find((x) => x.code === code) || MARKETS[0]
   const q = encodeURIComponent(kw)
   return {
-    shopping: `https://${m.google}/search?q=${q}&tbm=shop&gl=${m.gl}&hl=en`,
-    shopify: `https://${m.google}/search?q=${encodeURIComponent(`${kw} inurl:/products/`)}&gl=${m.gl}&hl=en`,
+    shopping: `https://${m.google}/search?q=${q}&tbm=shop&gl=${m.gl}&hl=${HL[code] || "en"}`,
+    shopify: `https://${m.google}/search?q=${encodeURIComponent(`${kw} inurl:/products/`)}&gl=${m.gl}&hl=${HL[code] || "en"}`,
     meta: `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${m.ads}&q=${q}&search_type=keyword_unordered&media_type=all`,
     google: `https://adstransparency.google.com/?region=${m.ads}`,
   }

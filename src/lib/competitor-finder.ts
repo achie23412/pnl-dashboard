@@ -13,8 +13,12 @@ export const MARKETS = [
   { code: "US", label: "United States", gl: "us", google: "www.google.com", ads: "US", competitorCodes: ["US"] },
   { code: "UK", label: "United Kingdom", gl: "uk", google: "www.google.co.uk", ads: "GB", competitorCodes: ["GB", "UK"] },
   { code: "IE", label: "Ireland", gl: "ie", google: "www.google.ie", ads: "IE", competitorCodes: ["IE"] },
+  { code: "DE", label: "Germany", gl: "de", google: "www.google.de", ads: "DE", competitorCodes: ["DE"] },
+  { code: "NL", label: "Netherlands", gl: "nl", google: "www.google.nl", ads: "NL", competitorCodes: ["NL"] },
+  { code: "IT", label: "Italy", gl: "it", google: "www.google.it", ads: "IT", competitorCodes: ["IT"] },
 ] as const
 export type MarketCode = (typeof MARKETS)[number]["code"]
+const LOCAL_KW_FILE: Partial<Record<MarketCode, string>> = { DE: "keywords-de.json", NL: "keywords-nl.json", IT: "keywords-it.json" }
 
 export interface FinderKeyword {
   keyword: string
@@ -36,7 +40,7 @@ export function phrasesFromTitle(title: string, vendor?: string | null): string[
   if (vendor) t = t.replace(vendor.toLowerCase(), " ")
   const words = t
     .replace(/[’`]/g, "'")
-    .replace(/[^a-z' ]+/g, " ")
+    .replace(/[^\p{L}' ]+/gu, " ")
     .split(/\s+/)
     .filter((w) => w && !COLOURS.has(w) && !STOP.has(w) && !SIZES.test(w))
   if (words.length < 2) return []
@@ -63,7 +67,7 @@ function stem(w: string): string {
 }
 const stemAll = (s: string) => s.split(" ").filter(Boolean).map(stem)
 
-const norm = (s: string) => s.toLowerCase().replace(/['’]s\b/g, "").replace(/[^a-z ]+/g, " ").replace(/\s+/g, " ").trim()
+const norm = (s: string) => s.toLowerCase().replace(/[‘’]s\b/g, "").replace(/[^\p{L} ]+/gu, " ").replace(/\s+/g, " ").trim()
 
 export async function buildKeywords(market: MarketCode): Promise<{ keywords: FinderKeyword[]; competitorsInMarket: number; plannerCount: number; productsScanned: number; productsInMarket: number }> {
   const db = getServiceClient()
@@ -79,8 +83,8 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
       (q) => q.gte("last_seen", since),
     ).catch(() => []),
     selectAll<{ domain: string; markets: string[] | null; status: string }>(db, "competitors", "domain,markets,status").catch(() => []),
-    readFile(path.join(process.cwd(), "public", "keywords.json"), "utf8")
-      .then((t) => JSON.parse(t) as { k: string; uk: number; us: number }[])
+    readFile(path.join(process.cwd(), "public", LOCAL_KW_FILE[market] || "keywords.json"), "utf8")
+      .then((t) => JSON.parse(t) as { k: string; uk?: number; us?: number; vol?: number }[])
       .catch(() => []),
   ])
 
@@ -136,7 +140,10 @@ export async function buildKeywords(market: MarketCode): Promise<{ keywords: Fin
     if (OFF_NICHE.test(k)) return false
     return nouns.size === 0 || (nouns.get(stem(k.split(" ").pop() || "")) || 0) >= 3
   }
-  const baseVol = (b: { uk: number; us: number }) => (market === "US" ? b.us : market === "UK" ? b.uk : Math.round(b.uk / 12)) // IE ≈ 1/12 of UK
+  const baseVol = (b: { uk?: number; us?: number; vol?: number }): number => {
+    if (b.vol != null) return b.vol
+    return market === "US" ? (b.us || 0) : market === "UK" ? (b.uk || 0) : Math.round((b.uk || 0) / 12)
+  }
   for (const b of base) {
     const v = baseVol(b)
     if (!v) continue
