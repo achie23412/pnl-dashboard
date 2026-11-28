@@ -34,7 +34,12 @@ interface Competitor {
   last_full_month_visits: number | null
   prior_month_visits: number | null
   visits_month: string | null
+  css_partners: string[] | null // CSS on their Shopping ads, as Google shows it ("By OAK", "Van MerchantFly")
 }
+
+// Stores whose CSS we haven't found yet show (and filter) as this
+const CSS_UNKNOWN = "Not known"
+const cssOf = (c: Competitor) => (Array.isArray(c.css_partners) && c.css_partners.length ? c.css_partners : [CSS_UNKNOWN])
 
 interface CoverageSum { total: number; covered: number; partly: number }
 interface CpProduct {
@@ -77,6 +82,7 @@ export default function CompetitorsPage() {
   const [statusFilter, setStatusFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [countryFilter, setCountryFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [nicheFilter, setNicheFilter] = useState<FilterValue>(EMPTY_FILTER)
+  const [cssFilter, setCssFilter] = useState<FilterValue>(EMPTY_FILTER)
   const [search, setSearch] = useState("")
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
@@ -95,12 +101,22 @@ export default function CompetitorsPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from("competitors")
-      .select("*")
-      .order("monthly_visits", { ascending: false, nullsFirst: false })
-      .limit(200)
-    setCompetitors((data as Competitor[]) || [])
+    // All competitors, in pages of 1000 by id (the database returns at most 1000 rows per request).
+    // The table sorts them itself.
+    const all: Competitor[] = []
+    for (let fromId = 0; ; ) {
+      const { data } = await supabase
+        .from("competitors")
+        .select("*")
+        .gte("id", fromId)
+        .order("id", { ascending: true })
+        .limit(1000)
+      const page = (data as Competitor[]) || []
+      all.push(...page)
+      if (page.length < 1000) break
+      fromId = (page[page.length - 1].id || 0) + 1
+    }
+    setCompetitors(all)
     setLoading(false)
     loadCoverageSummary()
   }
@@ -204,11 +220,16 @@ export default function CompetitorsPage() {
 
   const allCountries = Array.from(new Set(competitors.flatMap((c) => Array.isArray(c.markets) ? c.markets.map((m) => m.toUpperCase()) : []))).sort()
   const allNiches = Array.from(new Set(competitors.map((c) => c.niche).filter(Boolean))).sort()
+  // CSS options with their store counts, most used first; "Not known" last
+  const cssCounts = new Map<string, number>()
+  competitors.forEach((c) => cssOf(c).forEach((x) => cssCounts.set(x, (cssCounts.get(x) || 0) + 1)))
+  const allCss = Array.from(cssCounts.keys()).sort((a, b) => (a === CSS_UNKNOWN ? 1 : b === CSS_UNKNOWN ? -1 : (cssCounts.get(b) || 0) - (cssCounts.get(a) || 0)))
 
   const filtered = competitors
     .filter((c) => passes(statusFilter, c.status))
     .filter((c) => passesAny(countryFilter, Array.isArray(c.markets) ? c.markets.map((m) => m.toUpperCase()) : []))
     .filter((c) => passes(nicheFilter, c.niche))
+    .filter((c) => passesAny(cssFilter, cssOf(c)))
     .filter((c) => !search || c.domain.toLowerCase().includes(search.toLowerCase()) || (c.store_name || "").toLowerCase().includes(search.toLowerCase()) || (c.niche || "").toLowerCase().includes(search.toLowerCase()))
 
   const sorted = [...filtered].sort((a, b) => {
@@ -249,7 +270,7 @@ export default function CompetitorsPage() {
     <PageShell
       title="Competitor Tracker"
       breadcrumb="Front End → Competitor Tracker"
-      description={`Google dropshipping competitors with visits, ads, products and Trustpilot reviews from TrendTrack. Revenue estimates are USD, shown in EUR at today's ECB rate.${lastSynced ? ` Last TrendTrack sync: ${new Date(lastSynced).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.` : ""} Re-checked automatically on the 1st of every month: Last month = the month that just ended, MoM % = vs the month before.`}
+      description={`Google dropshipping competitors with visits, ads, products and Trustpilot reviews from TrendTrack. CSS = the comparison shopping partner on their Shopping ads ("By OAK", "Van MerchantFly"), found on the CSS sites' own store lists; "Not known" = not found on any CSS site we checked. Revenue estimates are USD, shown in EUR at today's ECB rate.${lastSynced ? ` Last TrendTrack sync: ${new Date(lastSynced).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.` : ""} Re-checked automatically on the 1st of every month: Last month = the month that just ended, MoM % = vs the month before.`}
       stats={[
         { label: "Tracked", value: String(competitors.length) },
         { label: "Scaling", value: String(scalingCount), color: "var(--green)" },
@@ -273,6 +294,7 @@ export default function CompetitorsPage() {
         <FilterSelect label="Status" options={["new", "watching", "scaling", "dead"]} value={statusFilter} onChange={setStatusFilter} />
         <FilterSelect label="Country" options={allCountries} value={countryFilter} onChange={setCountryFilter} />
         <FilterSelect label="Niche" options={allNiches.map((n) => String(n))} value={nicheFilter} onChange={setNicheFilter} />
+        <FilterSelect label="CSS" options={allCss} value={cssFilter} onChange={setCssFilter} />
         <PillSelect
           label="Sort"
           value={`${sortBy}:${sortDir}`}
@@ -298,8 +320,8 @@ export default function CompetitorsPage() {
             { value: "tp_rating:asc", label: "TP rating: low → high" },
           ]}
         />
-        {(statusFilter.values.length > 0 || countryFilter.values.length > 0 || nicheFilter.values.length > 0 || search) && (
-          <Button variant="ghost" size="sm" onClick={() => { setStatusFilter(EMPTY_FILTER); setCountryFilter(EMPTY_FILTER); setNicheFilter(EMPTY_FILTER); setSearch("") }}>
+        {(statusFilter.values.length > 0 || countryFilter.values.length > 0 || nicheFilter.values.length > 0 || cssFilter.values.length > 0 || search) && (
+          <Button variant="ghost" size="sm" onClick={() => { setStatusFilter(EMPTY_FILTER); setCountryFilter(EMPTY_FILTER); setNicheFilter(EMPTY_FILTER); setCssFilter(EMPTY_FILTER); setSearch("") }}>
             Clear filters
           </Button>
         )}
@@ -339,6 +361,7 @@ export default function CompetitorsPage() {
                 <ThSort label="MoM %" field="mom_pct" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="30d growth" field="growth_30d" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <th className={`${TH} text-center`}>Markets</th>
+                <th className={`${TH} text-left`} title="CSS partner on their Google Shopping ads (the name after 'By' / 'Van')">CSS</th>
                 <ThSort label="Ads" field="active_ads" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="Products" field="products_count" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
                 <ThSort label="TP" field="tp_reviews" sortBy={sortBy} setSortBy={setSortBy} sortDir={sortDir} setSortDir={setSortDir} />
@@ -431,6 +454,9 @@ function CompetitorRow({
             ? c.markets.slice(0, 4).map((m) => m.toUpperCase()).join(" ")
             : "—"}
         </td>
+        <td className={`${TD} whitespace-nowrap`} style={{ color: c.css_partners?.length ? "var(--text)" : "var(--text-muted)" }}>
+          {c.css_partners?.length ? c.css_partners.join(", ") : "—"}
+        </td>
         <td className={`${TD} text-right tabular-nums`}>{c.active_ads != null ? fmt(c.active_ads) : "—"}</td>
         <td className={`${TD} text-right tabular-nums`}>{fmt(c.products_count)}</td>
         <td className={`${TD} text-right tabular-nums`}>
@@ -488,7 +514,7 @@ function CompetitorRow({
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={12} style={{ padding: 0, background: "rgba(255,255,255,0.02)" }}>
+          <td colSpan={13} style={{ padding: 0, background: "rgba(255,255,255,0.02)" }}>
             <CoverageDetail
               domain={c.domain}
               products={covProducts}
